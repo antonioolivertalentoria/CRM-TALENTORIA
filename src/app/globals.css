@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  /* Colores de marca Talentoría */
+  --color-brand-cyan: #00aeef;
+  --color-brand-cyan-dark: #0089c4;
+  --color-brand-magenta: #e6007e;
+  --color-brand-magenta-dark: #c2006b;
+  --color-brand-navy: #16345f;
+  --color-brand-sky: #4db8e8;
+}
+
+body {
+  background: #f4f6fb;
+  color: #1e293b;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+::selection {
+  background: #00aeef33;
+}

@@ -1,0 +1,322 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient as createSupabase } from "@/lib/supabase/server";
+
+export type FormState = { error: string } | null;
+
+function str(formData: FormData, key: string): string {
+  return String(formData.get(key) ?? "").trim();
+}
+function intOrNull(formData: FormData, key: string): number | null {
+  const v = str(formData, key);
+  if (!v) return null;
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? null : n;
+}
+
+// ---------------- Clientes ----------------
+
+export async function createClientAction(
+  _prev: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const company = str(formData, "company");
+  if (!company) return { error: "El nombre de la compañía es obligatorio." };
+
+  const supabase = await createSupabase();
+  const { data, error } = await supabase
+    .from("clients")
+    .insert({
+      company,
+      contact_name: str(formData, "contact_name"),
+      email: str(formData, "email"),
+      whatsapp: str(formData, "whatsapp"),
+      notes: str(formData, "notes"),
+    })
+    .select("id")
+    .single();
+
+  if (error) return { error: `No se pudo crear el cliente: ${error.message}` };
+  revalidatePath("/clientes");
+  redirect(`/clientes/${data.id}`);
+}
+
+export async function updateClientAction(
+  _prev: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const id = str(formData, "id");
+  const company = str(formData, "company");
+  if (!id || !company) return { error: "Datos incompletos." };
+
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("clients")
+    .update({
+      company,
+      contact_name: str(formData, "contact_name"),
+      email: str(formData, "email"),
+      whatsapp: str(formData, "whatsapp"),
+      notes: str(formData, "notes"),
+    })
+    .eq("id", id);
+
+  if (error) return { error: `No se pudo actualizar: ${error.message}` };
+  revalidatePath(`/clientes/${id}`);
+  revalidatePath("/clientes");
+  return null;
+}
+
+export async function deleteClientAction(id: string) {
+  const supabase = await createSupabase();
+  await supabase.from("clients").delete().eq("id", id);
+  revalidatePath("/clientes");
+  redirect("/clientes");
+}
+
+// ---------------- Capacitaciones ----------------
+
+export async function createTrainingAction(
+  _prev: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const clientId = str(formData, "client_id");
+  const shortName = str(formData, "short_name");
+  if (!clientId || !shortName)
+    return { error: "El nombre corto de la capacitación es obligatorio." };
+
+  const supabase = await createSupabase();
+
+  // Datos del cliente para prellenar contacto del proyecto
+  const { data: client } = await supabase
+    .from("clients")
+    .select("contact_name, email, whatsapp")
+    .eq("id", clientId)
+    .single();
+
+  const totalSessions = intOrNull(formData, "total_sessions");
+
+  const { data, error } = await supabase
+    .from("trainings")
+    .insert({
+      client_id: clientId,
+      short_name: shortName,
+      official_name: str(formData, "official_name") || shortName,
+      status: str(formData, "status") || "Propuesta",
+      total_sessions: totalSessions,
+      internal_owner: str(formData, "internal_owner"),
+      client_contact: client?.contact_name ?? "",
+      client_email: client?.email ?? "",
+    })
+    .select("id")
+    .single();
+
+  if (error) return { error: `No se pudo crear la capacitación: ${error.message}` };
+
+  // Pre-crea las sesiones numeradas si se indicó el total
+  if (totalSessions && totalSessions > 0 && totalSessions <= 30) {
+    const sessions = Array.from({ length: totalSessions }, (_, i) => ({
+      training_id: data.id,
+      session_number: i + 1,
+      status: "Pendiente",
+    }));
+    await supabase.from("sessions").insert(sessions);
+  }
+
+  revalidatePath("/");
+  redirect(`/capacitaciones/${data.id}`);
+}
+
+const TRAINING_FIELDS = new Set([
+  "short_name",
+  "official_name",
+  "status",
+  "total_sessions",
+  "internal_owner",
+  "client_contact",
+  "client_email",
+  "whatsapp_group",
+  "temario_url",
+  "drive_folder_url",
+  "participants_url",
+  "materials_deadline",
+  "priority",
+  "envio_manual",
+  "envio_constancias",
+  "envio_insignias",
+  "envio_dc3",
+  "envio_leads",
+  "encuesta_final",
+  "factura",
+  "seguimiento_20",
+  "seguimiento_30",
+  "notes",
+  "internal_notes",
+  "questions",
+]);
+
+export async function updateTrainingField(
+  id: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!TRAINING_FIELDS.has(field)) return { error: "Campo no permitido." };
+
+  let parsed: string | number | null = value;
+  if (field === "total_sessions") {
+    parsed = value ? parseInt(value, 10) : null;
+    if (parsed !== null && Number.isNaN(parsed)) parsed = null;
+  }
+  if (field === "materials_deadline" && !value) parsed = null;
+
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("trainings")
+    .update({ [field]: parsed })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/capacitaciones/${id}`);
+  revalidatePath("/");
+  return null;
+}
+
+export async function deleteTrainingAction(id: string, clientId: string) {
+  const supabase = await createSupabase();
+  await supabase.from("trainings").delete().eq("id", id);
+  revalidatePath("/");
+  redirect(`/clientes/${clientId}`);
+}
+
+// ---------------- Sesiones ----------------
+
+export async function addSessionAction(trainingId: string) {
+  const supabase = await createSupabase();
+  const { data: last } = await supabase
+    .from("sessions")
+    .select("session_number")
+    .eq("training_id", trainingId)
+    .order("session_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  await supabase.from("sessions").insert({
+    training_id: trainingId,
+    session_number: (last?.session_number ?? 0) + 1,
+    status: "Pendiente",
+  });
+  revalidatePath(`/capacitaciones/${trainingId}`);
+}
+
+const SESSION_FIELDS = new Set([
+  "session_number",
+  "module",
+  "status",
+  "session_date",
+  "start_time",
+  "end_time",
+  "duration_hours",
+  "facilitator",
+  "modality",
+  "platform",
+  "session_link",
+  "enrolled",
+  "attended",
+  "survey_status",
+  "survey_url",
+  "survey_results_status",
+  "survey_results_url",
+  "notes",
+]);
+
+export async function updateSessionField(
+  id: string,
+  trainingId: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!SESSION_FIELDS.has(field)) return { error: "Campo no permitido." };
+
+  let parsed: string | number | null = value;
+  const numeric = new Set(["session_number", "enrolled", "attended", "duration_hours"]);
+  const nullableWhenEmpty = new Set([
+    "session_date",
+    "start_time",
+    "end_time",
+    ...numeric,
+  ]);
+  if (numeric.has(field) && value) {
+    parsed = Number(value);
+    if (Number.isNaN(parsed)) parsed = null;
+  }
+  if (nullableWhenEmpty.has(field) && !value) parsed = null;
+
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("sessions")
+    .update({ [field]: parsed })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/capacitaciones/${trainingId}`);
+  revalidatePath("/");
+  return null;
+}
+
+export async function deleteSessionAction(id: string, trainingId: string) {
+  const supabase = await createSupabase();
+  await supabase.from("sessions").delete().eq("id", id);
+  revalidatePath(`/capacitaciones/${trainingId}`);
+}
+
+// ---------------- Materiales ----------------
+
+export async function createMaterialAction(
+  _prev: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const trainingId = str(formData, "training_id");
+  const name = str(formData, "name");
+  if (!trainingId || !name) return { error: "El nombre del material es obligatorio." };
+
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("materials").insert({
+    training_id: trainingId,
+    type: str(formData, "type") || "Otro",
+    name,
+    url: str(formData, "url"),
+    status: str(formData, "status") || "Pendiente",
+  });
+
+  if (error) return { error: error.message };
+  revalidatePath(`/capacitaciones/${trainingId}`);
+  return null;
+}
+
+export async function updateMaterialField(
+  id: string,
+  trainingId: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!new Set(["type", "name", "url", "status"]).has(field))
+    return { error: "Campo no permitido." };
+
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("materials")
+    .update({ [field]: value })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/capacitaciones/${trainingId}`);
+  return null;
+}
+
+export async function deleteMaterialAction(id: string, trainingId: string) {
+  const supabase = await createSupabase();
+  await supabase.from("materials").delete().eq("id", id);
+  revalidatePath(`/capacitaciones/${trainingId}`);
+}

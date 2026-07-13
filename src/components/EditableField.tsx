@@ -1,0 +1,63 @@
+"use client";
+
+import { useState, useTransition } from "react";
+
+/**
+ * Campo editable inline: guarda al salir del campo (blur) o con Enter.
+ */
+export function EditableField({
+  value,
+  onSave,
+  type = "text",
+  placeholder = "—",
+  className = "",
+  multiline = false,
+}: {
+  value: string;
+  onSave: (value: string) => Promise<unknown>;
+  type?: "text" | "date" | "time" | "number" | "url";
+  placeholder?: string;
+  className?: string;
+  multiline?: boolean;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [pending, startTransition] = useTransition();
+
+  const save = () => {
+    if (draft === value) return;
+    startTransition(async () => {
+      await onSave(draft);
+    });
+  };
+
+  const base = `w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition hover:border-slate-300 focus:border-brand-cyan focus:bg-white focus:ring-2 focus:ring-brand-cyan/20 ${
+    pending ? "opacity-50" : ""
+  } ${className}`;
+
+  if (multiline) {
+    return (
+      <textarea
+        value={draft}
+        placeholder={placeholder}
+        rows={3}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        className={base + " resize-y"}
+      />
+    );
+  }
+
+  return (
+    <input
+      type={type}
+      value={draft}
+      placeholder={placeholder}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className={base}
+    />
+  );
+}
