@@ -16,6 +16,7 @@ checklist de entregas post-capacitación (48h) y seguimiento a 20/30 días, seg�
 1. Entra a [supabase.com](https://supabase.com) y crea una cuenta (puede ser con el Google de talentoria.herramientas@gmail.com).
 2. **New project** → nombre `talentoria-crm`, región `Central US` (la más cercana a México), y una contraseña de base de datos (guárdala).
 3. Cuando el proyecto esté listo, ve a **SQL Editor → New query**, pega TODO el contenido de [`supabase/schema.sql`](supabase/schema.sql) y pulsa **Run**. Esto crea las tablas (clientes, capacitaciones, sesiones, materiales) con seguridad activada (RLS: solo usuarios autenticados pueden ver o editar).
+   - **Opcional pero recomendado:** en otra query corre [`supabase/seed-data.sql`](supabase/seed-data.sql) para cargar los clientes, capacitaciones y sesiones reales de la *Matriz Capacitaciones Talentoría 2026* (corte 13-jul-2026) y arrancar con el CRM lleno. Córrelo una sola vez.
 4. Ve a **Project Settings → API** y copia:
    - `Project URL`
    - `anon public` key
