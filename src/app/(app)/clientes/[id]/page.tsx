@@ -16,13 +16,14 @@ export default async function ClientDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: client } = await supabase
+  const { data } = await supabase
     .from("clients")
     .select("*")
     .eq("id", id)
-    .single<Client>();
+    .single();
 
-  if (!client) notFound();
+  if (!data) notFound();
+  const client = data as unknown as Client;
 
   const { data: trainingsData } = await supabase
     .from("trainings")

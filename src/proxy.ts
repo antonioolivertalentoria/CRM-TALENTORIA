@@ -2,6 +2,18 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
+  // Modo demostración: sin Supabase configurado no hay login;
+  // se entra directo con datos de ejemplo.
+  const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  if (!supaUrl || supaUrl.includes("placeholder")) {
+    if (request.nextUrl.pathname.startsWith("/login")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

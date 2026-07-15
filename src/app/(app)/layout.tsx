@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { isDemoMode } from "@/lib/demo/mock";
 import { logout } from "@/app/login/actions";
 import { NavLinks } from "@/components/NavLinks";
 
@@ -61,7 +62,15 @@ export default async function AppLayout({
       </aside>
 
       {/* Contenido */}
-      <main className="ml-60 flex-1 p-6 lg:p-8">{children}</main>
+      <div className="ml-60 flex flex-1 flex-col">
+        {isDemoMode() && (
+          <div className="bg-amber-400 px-4 py-2 text-center text-xs font-semibold text-amber-950">
+            Modo demostración — datos de ejemplo en memoria, sin base de datos.
+            Conecta Supabase en .env.local para usarlo de verdad (los cambios de esta vista se pierden al reiniciar).
+          </div>
+        )}
+        <main className="flex-1 p-6 lg:p-8">{children}</main>
+      </div>
     </div>
   );
 }
