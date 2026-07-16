@@ -43,10 +43,20 @@ export async function GET(request: Request) {
     auth: { persistSession: false },
   });
 
-  const [{ data: trainingsData }, { data: profilesData }] = await Promise.all([
+  const [
+    { data: trainingsData, error: trainingsError },
+    { data: profilesData, error: profilesError },
+  ] = await Promise.all([
     supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
   ]);
+
+  if (trainingsError || profilesError) {
+    return NextResponse.json({
+      sent: 0,
+      error: trainingsError?.message ?? profilesError?.message,
+    });
+  }
 
   const profiles = (profilesData ?? []) as {
     id: string;
