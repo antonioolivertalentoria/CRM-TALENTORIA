@@ -10,6 +10,8 @@ create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   full_name text not null default '',
   email text not null,
+  reminder_prefs jsonb not null default
+    '{"enabled": true, "kinds": ["Logística","Preparación","Material","Revisión","Entrega","Seguimiento"]}',
   created_at timestamptz not null default now()
 );
 
@@ -81,6 +83,12 @@ create table public.trainings (
   seguimiento_30 text not null default 'Pendiente',   -- Seguimiento día 30 y cierre de grupo WA
   mensaje_logistica text not null default 'Pendiente', -- Mensaje de logística (WhatsApp) antes del curso
   logistics_info text not null default '',     -- Respuestas logísticas confirmadas por el cliente
+  -- Checklist previo al curso (Pendiente | Listo | No aplica)
+  contenido_facilitador text not null default 'Pendiente', -- Contenido completo al facilitador
+  lista_participantes text not null default 'Pendiente',   -- Lista confirmada con nombres completos
+  impresion_manuales text not null default 'Pendiente',    -- Quién imprime (presencial)
+  encuestas_qr text not null default 'Pendiente',          -- QR/ligas de encuesta funcionando
+  liga_sesion_valida text not null default 'Pendiente',    -- Liga Zoom generada y validada (online)
   notes text not null default '',              -- Acciones específicas / notas
   internal_notes text not null default '',     -- Observaciones internas
   questions text not null default '',          -- Dudas

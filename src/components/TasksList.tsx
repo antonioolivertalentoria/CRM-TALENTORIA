@@ -8,6 +8,7 @@ import type { ComputedTask } from "@/lib/tasks";
 
 const KIND_STYLE: Record<string, string> = {
   Logística: "bg-cyan-100 text-cyan-700",
+  Preparación: "bg-sky-100 text-sky-700",
   Material: "bg-blue-100 text-blue-700",
   Revisión: "bg-violet-100 text-violet-700",
   Entrega: "bg-amber-100 text-amber-700",

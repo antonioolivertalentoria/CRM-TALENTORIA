@@ -168,18 +168,46 @@ export async function createTrainingAction(
     await supabase.from("sessions").insert(sessions);
   }
 
-  // Materiales estándar del proceso: PPT y Manual del participante.
-  // Fecha límite: 2 semanas antes de la primera sesión (o hoy, si ya estamos más cerca).
+  // Materiales estándar del proceso, con fechas según las reglas:
+  // PPT y manuales: 14 días antes si el facilitador es externo, 7 si es
+  // interno; si ya no alcanza, mañana. Manual del participante presencial:
+  // 7 días antes (hay que imprimirlo); online: el día de la última sesión
+  // (se envía digital máx. 48h después).
   const { data: profs } = await supabase.from("profiles").select("full_name");
   const names = ((profs ?? []) as { full_name: string }[]).map((p) => p.full_name);
   const maker = names.find((n) => n.includes("Oliver")) ?? "";
   const reviewer = names.find((n) => n.includes("Arianna")) ?? "";
-  const firstSessionDate = str(formData, "session_date_1") || null;
-  let materialsDue: string | null = null;
-  if (firstSessionDate) {
-    const twoWeeksBefore = addDays(firstSessionDate, -14);
-    materialsDue = twoWeeksBefore < todayISO() ? todayISO() : twoWeeksBefore;
+
+  const internalNames = [...names, "Carolina García", "Caro"];
+  const isInternal =
+    !facilitator ||
+    internalNames.some((n) => {
+      const a = n.toLowerCase();
+      const b = facilitator.toLowerCase().trim();
+      return a.includes(b) || b.includes(a.split(" ")[0]);
+    });
+  const contentDays = isInternal ? 7 : 14;
+
+  const today = todayISO();
+  const tomorrow = addDays(today, 1);
+  const sessionDates: string[] = [];
+  for (let i = 1; i <= Math.max(count, 1); i++) {
+    const d = str(formData, `session_date_${i}`);
+    if (d) sessionDates.push(d);
   }
+  sessionDates.sort();
+  const firstSessionDate = sessionDates[0] ?? null;
+  const lastSessionDate = sessionDates[sessionDates.length - 1] ?? null;
+
+  const beforeDue = (days: number): string | null => {
+    if (!firstSessionDate) return null;
+    const d = addDays(firstSessionDate, -days);
+    return d < tomorrow ? tomorrow : d;
+  };
+
+  const isPresencial = modality === "Presencial" || modality === "Mixta";
+  const mpDue = isPresencial ? beforeDue(7) : (lastSessionDate ?? null);
+
   await supabase.from("materials").insert([
     {
       training_id: data.id,
@@ -187,7 +215,15 @@ export async function createTrainingAction(
       name: `PPT ${shortName}`,
       maker,
       reviewer,
-      due_date: materialsDue,
+      due_date: beforeDue(contentDays),
+    },
+    {
+      training_id: data.id,
+      type: "Manual ejercicios",
+      name: `Manual de ejercicios ${shortName}`,
+      maker,
+      reviewer: "",
+      due_date: beforeDue(contentDays),
     },
     {
       training_id: data.id,
@@ -195,7 +231,7 @@ export async function createTrainingAction(
       name: `Manual del participante ${shortName}`,
       maker,
       reviewer: "",
-      due_date: materialsDue,
+      due_date: mpDue,
     },
   ]);
 
@@ -227,6 +263,11 @@ const TRAINING_FIELDS = new Set([
   "envio_leads",
   "encuesta_participantes",
   "encuesta_final",
+  "contenido_facilitador",
+  "lista_participantes",
+  "impresion_manuales",
+  "encuestas_qr",
+  "liga_sesion_valida",
   "factura",
   "seguimiento_20",
   "seguimiento_30",
@@ -419,6 +460,28 @@ export async function updateMaterialField(
 
   if (error) return { error: error.message };
   revalidatePath(`/capacitaciones/${trainingId}`);
+  revalidatePath("/tareas");
+  return null;
+}
+
+// ---------------- Recordatorios (preferencias por usuario) ----------------
+
+export async function updateReminderPrefs(prefs: {
+  enabled: boolean;
+  kinds: string[];
+}): Promise<FormState> {
+  const supabase = await createSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sin sesión." };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ reminder_prefs: prefs })
+    .eq("id", user.id);
+
+  if (error) return { error: error.message };
   revalidatePath("/tareas");
   return null;
 }

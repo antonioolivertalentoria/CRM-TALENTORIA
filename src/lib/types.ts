@@ -39,6 +39,11 @@ export type Training = {
   seguimiento_30: string;
   mensaje_logistica: string;
   logistics_info: string;
+  contenido_facilitador: string;
+  lista_participantes: string;
+  impresion_manuales: string;
+  encuestas_qr: string;
+  liga_sesion_valida: string;
   notes: string;
   internal_notes: string;
   questions: string;
@@ -92,10 +97,16 @@ export type MaterialComment = {
   created_at: string;
 };
 
+export type ReminderPrefs = {
+  enabled: boolean;
+  kinds: string[];
+};
+
 export type Profile = {
   id: string;
   full_name: string;
   email: string;
+  reminder_prefs?: ReminderPrefs;
 };
 
 export type TrainingWithClient = Training & { clients: Pick<Client, "id" | "company"> };

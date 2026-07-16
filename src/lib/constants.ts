@@ -70,7 +70,12 @@ export function statusColor(value: string): string {
 // Checklist post-capacitación (según el Proceso de Logística):
 // entregas en máx. 48h, cierre administrativo y seguimiento 20/30 días.
 export const CHECKLIST_FIELDS: { key: string; label: string; hint: string }[] = [
-  { key: "mensaje_logistica", label: "Mensaje de logística", hint: "Antes del curso: enviar mensaje de logística por WhatsApp al cliente" },
+  { key: "mensaje_logistica", label: "Mensaje de logística", hint: "Enviar mensaje de logística por WhatsApp (20 días antes o de inmediato)" },
+  { key: "contenido_facilitador", label: "Contenido al facilitador", hint: "Entregar todo el contenido (14 días antes si es externo, 7 si es interno)" },
+  { key: "lista_participantes", label: "Lista de participantes", hint: "Nombres completos confirmados (7 días antes, para constancias)" },
+  { key: "impresion_manuales", label: "Impresión de manuales", hint: "Presencial: confirmar si imprime el cliente o llevamos nosotros (7 días antes)" },
+  { key: "encuestas_qr", label: "Encuestas QR/ligas", hint: "Códigos QR y accesos de encuesta funcionando (3 días antes)" },
+  { key: "liga_sesion_valida", label: "Liga de sesión validada", hint: "Online: liga generada, compartida y accesos probados (3 días antes)" },
   { key: "envio_manual", label: "Envío de manual", hint: "Enviar manual del participante al cliente (máx. 48h)" },
   { key: "envio_constancias", label: "Constancias", hint: "Enviar constancias de participación (máx. 48h)" },
   { key: "envio_insignias", label: "Insignias", hint: "Enviar insignias digitales (máx. 48h)" },
