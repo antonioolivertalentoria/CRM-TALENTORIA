@@ -75,7 +75,11 @@ export function NewTrainingForm({
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">Responsable interno</label>
           {people.length > 0 ? (
-            <select name="internal_owner" defaultValue={currentUser} className={input}>
+            <select
+              name="internal_owner"
+              defaultValue={people.find((p) => p.includes("Oliver")) ?? currentUser}
+              className={input}
+            >
               <option value="">— Sin responsable</option>
               {people.map((p) => (
                 <option key={p} value={p}>{p}</option>

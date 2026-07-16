@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
+import { addDays, todayISO } from "@/lib/format";
 
 export type FormState = { error: string } | null;
 
@@ -167,7 +168,39 @@ export async function createTrainingAction(
     await supabase.from("sessions").insert(sessions);
   }
 
+  // Materiales estándar del proceso: PPT y Manual del participante.
+  // Fecha límite: 2 semanas antes de la primera sesión (o hoy, si ya estamos más cerca).
+  const { data: profs } = await supabase.from("profiles").select("full_name");
+  const names = (profs ?? []).map((p) => p.full_name as string);
+  const maker = names.find((n) => n.includes("Oliver")) ?? "";
+  const reviewer = names.find((n) => n.includes("Arianna")) ?? "";
+  const firstSessionDate = str(formData, "session_date_1") || null;
+  let materialsDue: string | null = null;
+  if (firstSessionDate) {
+    const twoWeeksBefore = addDays(firstSessionDate, -14);
+    materialsDue = twoWeeksBefore < todayISO() ? todayISO() : twoWeeksBefore;
+  }
+  await supabase.from("materials").insert([
+    {
+      training_id: data.id,
+      type: "PPT",
+      name: `PPT ${shortName}`,
+      maker,
+      reviewer,
+      due_date: materialsDue,
+    },
+    {
+      training_id: data.id,
+      type: "Manual participante",
+      name: `Manual del participante ${shortName}`,
+      maker,
+      reviewer: "",
+      due_date: materialsDue,
+    },
+  ]);
+
   revalidatePath("/");
+  revalidatePath("/tareas");
   redirect(`/capacitaciones/${data.id}`);
 }
 
