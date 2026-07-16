@@ -171,7 +171,7 @@ export async function createTrainingAction(
   // Materiales estándar del proceso: PPT y Manual del participante.
   // Fecha límite: 2 semanas antes de la primera sesión (o hoy, si ya estamos más cerca).
   const { data: profs } = await supabase.from("profiles").select("full_name");
-  const names = (profs ?? []).map((p) => p.full_name as string);
+  const names = ((profs ?? []) as { full_name: string }[]).map((p) => p.full_name);
   const maker = names.find((n) => n.includes("Oliver")) ?? "";
   const reviewer = names.find((n) => n.includes("Arianna")) ?? "";
   const firstSessionDate = str(formData, "session_date_1") || null;
