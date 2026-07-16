@@ -2,7 +2,7 @@
 
 import { useState, useActionState } from "react";
 import { createTrainingAction } from "@/lib/actions";
-import { TRAINING_STATUSES, PLATFORMS } from "@/lib/constants";
+import { TRAINING_STATUSES, PLATFORMS, EXTRA_FACILITATORS } from "@/lib/constants";
 
 const input =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
@@ -81,7 +81,7 @@ export function NewTrainingForm({ clientId, people = [] }: { clientId: string; p
             className={input}
           />
           <datalist id="facilitadores">
-            {people.map((p) => (
+            {[...people, ...EXTRA_FACILITATORS].map((p) => (
               <option key={p} value={p} />
             ))}
           </datalist>

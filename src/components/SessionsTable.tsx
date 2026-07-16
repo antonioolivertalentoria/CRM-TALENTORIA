@@ -6,7 +6,7 @@ import {
   updateSessionField,
   deleteSessionAction,
 } from "@/lib/actions";
-import { SESSION_STATUSES, MODALITIES, PLATFORMS, CHECK_STATUSES } from "@/lib/constants";
+import { SESSION_STATUSES, MODALITIES, PLATFORMS, CHECK_STATUSES, EXTRA_FACILITATORS } from "@/lib/constants";
 import { StatusSelect } from "./StatusSelect";
 import { EditableField } from "./EditableField";
 import type { Session } from "@/lib/types";
@@ -17,10 +17,13 @@ const selectCls =
 export function SessionsTable({
   trainingId,
   sessions,
+  people = [],
 }: {
   trainingId: string;
   sessions: Session[];
+  people?: string[];
 }) {
+  const facilitatorSuggestions = [...people, ...EXTRA_FACILITATORS];
   const [pending, startTransition] = useTransition();
 
   const save = (id: string, field: string) => (value: string) =>
@@ -92,7 +95,12 @@ export function SessionsTable({
                     <EditableField value={s.end_time?.slice(0, 5) ?? ""} type="time" onSave={save(s.id, "end_time")} />
                   </td>
                   <td className="px-1 py-1.5">
-                    <EditableField value={s.facilitator} onSave={save(s.id, "facilitator")} placeholder="Nombre" />
+                    <EditableField
+                      value={s.facilitator}
+                      onSave={save(s.id, "facilitator")}
+                      placeholder="Nombre"
+                      suggestions={facilitatorSuggestions}
+                    />
                   </td>
                   <td className="px-1 py-1.5">
                     <select

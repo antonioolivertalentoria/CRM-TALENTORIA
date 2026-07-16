@@ -203,7 +203,7 @@ export default async function TrainingDetailPage({
         people={people}
       />
 
-      <SessionsTable trainingId={training.id} sessions={sessions} />
+      <SessionsTable trainingId={training.id} sessions={sessions} people={people} />
 
       {/* Checklist post-capacitación */}
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

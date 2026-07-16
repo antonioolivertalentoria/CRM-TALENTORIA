@@ -26,6 +26,10 @@ export const MODALITIES = ["Online", "Presencial", "Híbrida"] as const;
 
 export const PLATFORMS = ["Zoom", "Google Meet", "Teams", "Presencial / N.A."] as const;
 
+// Facilitadores frecuentes que no son usuarios del CRM
+// (el campo siempre acepta cualquier nombre escrito a mano)
+export const EXTRA_FACILITATORS = ["Carolina García"] as const;
+
 export const MATERIAL_TYPES = [
   "PPT",
   "Manual participante",

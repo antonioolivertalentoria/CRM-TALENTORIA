@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 
 /**
  * Campo editable inline: guarda al salir del campo (blur) o con Enter.
@@ -13,6 +13,7 @@ export function EditableField({
   className = "",
   multiline = false,
   rows = 3,
+  suggestions,
 }: {
   value: string;
   onSave: (value: string) => Promise<unknown>;
@@ -21,9 +22,11 @@ export function EditableField({
   className?: string;
   multiline?: boolean;
   rows?: number;
+  suggestions?: string[];
 }) {
   const [draft, setDraft] = useState(value);
   const [pending, startTransition] = useTransition();
+  const listId = useId();
 
   const save = () => {
     if (draft === value) return;
@@ -50,16 +53,26 @@ export function EditableField({
   }
 
   return (
-    <input
-      type={type}
-      value={draft}
-      placeholder={placeholder}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={save}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-      }}
-      className={base}
-    />
+    <>
+      <input
+        type={type}
+        value={draft}
+        placeholder={placeholder}
+        list={suggestions ? listId : undefined}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        className={base}
+      />
+      {suggestions && (
+        <datalist id={listId}>
+          {suggestions.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+      )}
+    </>
   );
 }
