@@ -34,6 +34,7 @@ export type Training = {
   factura: string;
   seguimiento_20: string;
   seguimiento_30: string;
+  mensaje_logistica: string;
   notes: string;
   internal_notes: string;
   questions: string;
@@ -73,7 +74,24 @@ export type Material = {
   name: string;
   url: string;
   status: string;
+  maker: string;
+  reviewer: string;
+  due_date: string | null;
   created_at: string;
+};
+
+export type MaterialComment = {
+  id: string;
+  material_id: string;
+  author: string;
+  body: string;
+  created_at: string;
+};
+
+export type Profile = {
+  id: string;
+  full_name: string;
+  email: string;
 };
 
 export type TrainingWithClient = Training & { clients: Pick<Client, "id" | "company"> };

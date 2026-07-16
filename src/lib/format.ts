@@ -23,3 +23,32 @@ export function todayISO(): string {
   const dd = String(now.getDate()).padStart(2, "0");
   return `${now.getFullYear()}-${mm}-${dd}`;
 }
+
+function toDate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function toISO(date: Date): string {
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${mm}-${dd}`;
+}
+
+export function addDays(iso: string, days: number): string {
+  const d = toDate(iso);
+  d.setDate(d.getDate() + days);
+  return toISO(d);
+}
+
+/** Suma días hábiles (salta sábados y domingos). */
+export function addBusinessDays(iso: string, days: number): string {
+  const d = toDate(iso);
+  let remaining = days;
+  while (remaining > 0) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) remaining--;
+  }
+  return toISO(d);
+}

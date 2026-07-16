@@ -14,7 +14,9 @@ import { LinkChip } from "@/components/LinkChip";
 import { SessionsTable } from "@/components/SessionsTable";
 import { MaterialsSection } from "@/components/MaterialsSection";
 import { DeleteTrainingButton } from "@/components/DeleteTrainingButton";
-import type { Client, Training, Session, Material } from "@/lib/types";
+import { LogisticsMessage } from "@/components/LogisticsMessage";
+import { OwnerSelect } from "@/components/OwnerSelect";
+import type { Client, Training, Session, Material, MaterialComment, Profile } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +47,20 @@ export default async function TrainingDetailPage({
   const materials = [...training.materials].sort((a, b) =>
     a.created_at < b.created_at ? -1 : 1
   );
+
+  const [{ data: profilesData }, { data: commentsData }] = await Promise.all([
+    supabase.from("profiles").select("id, full_name, email").order("full_name"),
+    materials.length > 0
+      ? supabase
+          .from("material_comments")
+          .select("*")
+          .in("material_id", materials.map((m) => m.id))
+          .order("created_at")
+      : Promise.resolve({ data: [] }),
+  ]);
+  const profiles = (profilesData ?? []) as unknown as Profile[];
+  const people = profiles.map((p) => p.full_name);
+  const comments = (commentsData ?? []) as unknown as MaterialComment[];
 
   const save = (field: string) => updateTrainingField.bind(null, training.id, field);
   const done = sessions.filter((s) => s.status === "Impartida").length;
@@ -108,6 +124,12 @@ export default async function TrainingDetailPage({
 
         {/* Links siempre a la mano */}
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-slate-100 pt-4">
+          <LogisticsMessage
+            trainingId={training.id}
+            modalities={sessions.map((s) => s.modality)}
+            whatsapp={training.clients.whatsapp}
+            status={training.mensaje_logistica}
+          />
           <LinkChip label="Carpeta Drive" url={training.drive_folder_url} onSave={save("drive_folder_url")} />
           <LinkChip label="Temario" url={training.temario_url} onSave={save("temario_url")} />
           <LinkChip label="Lista de participantes" url={training.participants_url} onSave={save("participants_url")} />
@@ -123,7 +145,7 @@ export default async function TrainingDetailPage({
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <p className="text-xs font-semibold text-slate-400">Responsable interno</p>
-            <EditableField value={training.internal_owner} onSave={save("internal_owner")} placeholder="Ej. Oliver" />
+            <OwnerSelect value={training.internal_owner} people={people} onChange={save("internal_owner")} />
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-400">Total de sesiones</p>
@@ -144,7 +166,12 @@ export default async function TrainingDetailPage({
         </div>
       </section>
 
-      <MaterialsSection trainingId={training.id} materials={materials} />
+      <MaterialsSection
+        trainingId={training.id}
+        materials={materials}
+        comments={comments}
+        people={people}
+      />
 
       <SessionsTable trainingId={training.id} sessions={sessions} />
 

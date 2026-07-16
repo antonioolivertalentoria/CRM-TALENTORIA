@@ -18,7 +18,7 @@ export const SESSION_STATUSES = [
 
 export const CHECK_STATUSES = ["Pendiente", "Listo", "No aplica"] as const;
 
-export const MATERIAL_STATUSES = ["Pendiente", "En proceso", "Listo"] as const;
+export const MATERIAL_STATUSES = ["Pendiente", "En proceso", "Por revisar", "Listo"] as const;
 
 export const PRIORITIES = ["Alta", "Media", "Baja"] as const;
 
@@ -46,6 +46,7 @@ export const STATUS_COLORS: Record<string, string> = {
   Confirmada: "bg-cyan-500",
   "En curso": "bg-brand-cyan",
   "En proceso": "bg-amber-400",
+  "Por revisar": "bg-violet-500",
   Impartida: "bg-emerald-500",
   Finalizada: "bg-emerald-600",
   Cancelada: "bg-red-500",
@@ -65,6 +66,7 @@ export function statusColor(value: string): string {
 // Checklist post-capacitación (según el Proceso de Logística):
 // entregas en máx. 48h, cierre administrativo y seguimiento 20/30 días.
 export const CHECKLIST_FIELDS: { key: string; label: string; hint: string }[] = [
+  { key: "mensaje_logistica", label: "Mensaje de logística", hint: "Antes del curso: enviar mensaje de logística por WhatsApp al cliente" },
   { key: "envio_manual", label: "Envío de manual", hint: "Enviar manual del participante al cliente (máx. 48h)" },
   { key: "envio_constancias", label: "Constancias", hint: "Enviar constancias de participación (máx. 48h)" },
   { key: "envio_insignias", label: "Insignias", hint: "Enviar insignias digitales (máx. 48h)" },

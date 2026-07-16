@@ -76,6 +76,7 @@ create table public.trainings (
   factura text not null default 'Pendiente',          -- Cierre administrativo
   seguimiento_20 text not null default 'Pendiente',   -- Seguimiento día 20
   seguimiento_30 text not null default 'Pendiente',   -- Seguimiento día 30 y cierre de grupo WA
+  mensaje_logistica text not null default 'Pendiente', -- Mensaje de logística (WhatsApp) antes del curso
   notes text not null default '',              -- Acciones específicas / notas
   internal_notes text not null default '',     -- Observaciones internas
   questions text not null default '',          -- Dudas
@@ -125,11 +126,25 @@ create table public.materials (
   type text not null default 'Otro',
   name text not null,
   url text not null default '',
-  status text not null default 'Pendiente',    -- Pendiente | En proceso | Listo
+  status text not null default 'Pendiente',    -- Pendiente | En proceso | Por revisar | Listo
+  maker text not null default '',              -- Quién lo hace
+  reviewer text not null default '',           -- Quién lo revisa
+  due_date date,                               -- Fecha límite del material
   created_at timestamptz not null default now()
 );
 
 create index materials_training_id_idx on public.materials (training_id);
+
+-- ---------- Comentarios de revisión sobre materiales ----------
+create table public.material_comments (
+  id uuid primary key default gen_random_uuid(),
+  material_id uuid not null references public.materials (id) on delete cascade,
+  author text not null default '',
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+create index material_comments_material_id_idx on public.material_comments (material_id);
 
 -- ---------- updated_at automático ----------
 create or replace function public.set_updated_at()
@@ -153,6 +168,7 @@ alter table public.clients enable row level security;
 alter table public.trainings enable row level security;
 alter table public.sessions enable row level security;
 alter table public.materials enable row level security;
+alter table public.material_comments enable row level security;
 
 create policy "authenticated read profiles" on public.profiles
   for select to authenticated using (true);
@@ -166,4 +182,6 @@ create policy "authenticated all trainings" on public.trainings
 create policy "authenticated all sessions" on public.sessions
   for all to authenticated using (true) with check (true);
 create policy "authenticated all materials" on public.materials
+  for all to authenticated using (true) with check (true);
+create policy "authenticated all material_comments" on public.material_comments
   for all to authenticated using (true) with check (true);

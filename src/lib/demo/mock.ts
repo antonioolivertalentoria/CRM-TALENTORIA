@@ -38,6 +38,7 @@ const DEFAULTS: Record<string, Row> = {
     factura: "Pendiente",
     seguimiento_20: "Pendiente",
     seguimiento_30: "Pendiente",
+    mensaje_logistica: "Pendiente",
     notes: "",
     internal_notes: "",
     questions: "",
@@ -62,7 +63,8 @@ const DEFAULTS: Record<string, Row> = {
     survey_results_url: "",
     notes: "",
   },
-  materials: { type: "Otro", name: "", url: "", status: "Pendiente" },
+  materials: { type: "Otro", name: "", url: "", status: "Pendiente", maker: "", reviewer: "", due_date: null },
+  material_comments: { author: "", body: "" },
   profiles: { full_name: "", email: "" },
 };
 
@@ -139,6 +141,11 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
     if (op === "is" && value === null) {
       this.filters.push((r) => r[field] !== null && r[field] !== undefined);
     }
+    return this;
+  }
+  in(field: string, values: any[]) {
+    const set = new Set(values.map(String));
+    this.filters.push((r) => set.has(String(r[field])));
     return this;
   }
   order(field: string, opts?: { ascending?: boolean }) {

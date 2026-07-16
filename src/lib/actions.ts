@@ -130,6 +130,7 @@ export async function createTrainingAction(
 }
 
 const TRAINING_FIELDS = new Set([
+  "mensaje_logistica",
   "short_name",
   "official_name",
   "status",
@@ -180,6 +181,7 @@ export async function updateTrainingField(
   if (error) return { error: error.message };
   revalidatePath(`/capacitaciones/${id}`);
   revalidatePath("/");
+  revalidatePath("/tareas");
   return null;
 }
 
@@ -282,16 +284,21 @@ export async function createMaterialAction(
   if (!trainingId || !name) return { error: "El nombre del material es obligatorio." };
 
   const supabase = await createSupabase();
+  const dueDate = str(formData, "due_date");
   const { error } = await supabase.from("materials").insert({
     training_id: trainingId,
     type: str(formData, "type") || "Otro",
     name,
     url: str(formData, "url"),
     status: str(formData, "status") || "Pendiente",
+    maker: str(formData, "maker"),
+    reviewer: str(formData, "reviewer"),
+    due_date: dueDate || null,
   });
 
   if (error) return { error: error.message };
   revalidatePath(`/capacitaciones/${trainingId}`);
+  revalidatePath("/tareas");
   return null;
 }
 
@@ -301,14 +308,52 @@ export async function updateMaterialField(
   field: string,
   value: string
 ): Promise<FormState> {
-  if (!new Set(["type", "name", "url", "status"]).has(field))
+  if (!new Set(["type", "name", "url", "status", "maker", "reviewer", "due_date"]).has(field))
     return { error: "Campo no permitido." };
+
+  const parsed: string | null = field === "due_date" && !value ? null : value;
 
   const supabase = await createSupabase();
   const { error } = await supabase
     .from("materials")
-    .update({ [field]: value })
+    .update({ [field]: parsed })
     .eq("id", id);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/capacitaciones/${trainingId}`);
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function addMaterialCommentAction(
+  materialId: string,
+  trainingId: string,
+  body: string
+): Promise<FormState> {
+  const text = body.trim();
+  if (!text) return { error: "Escribe un comentario." };
+
+  const supabase = await createSupabase();
+
+  // Autor = perfil del usuario con sesión iniciada
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  let author = user?.email ?? "";
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .single();
+    if (profile?.full_name) author = profile.full_name;
+  }
+
+  const { error } = await supabase.from("material_comments").insert({
+    material_id: materialId,
+    author,
+    body: text,
+  });
 
   if (error) return { error: error.message };
   revalidatePath(`/capacitaciones/${trainingId}`);

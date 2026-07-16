@@ -12,6 +12,7 @@ export type DemoStore = {
   trainings: any[];
   sessions: any[];
   materials: any[];
+  material_comments: any[];
 };
 
 function iso(daysFromToday: number): string {
@@ -53,6 +54,7 @@ function createInitialData(): DemoStore {
     factura: "Pendiente",
     seguimiento_20: "Pendiente",
     seguimiento_30: "Pendiente",
+    mensaje_logistica: "Pendiente",
     notes: "",
     internal_notes: "",
     questions: "",
@@ -227,7 +229,10 @@ function createInitialData(): DemoStore {
         type: "PPT",
         name: "PPT Liderazgo y Feedback",
         url: "https://drive.google.com/file/d/ejemplo-ppt",
-        status: "Listo",
+        status: "Por revisar",
+        maker: "Antonio Oliver",
+        reviewer: "Arianna Évora",
+        due_date: iso(5),
         created_at: now,
       },
       {
@@ -237,6 +242,9 @@ function createInitialData(): DemoStore {
         name: "Manual del participante",
         url: "",
         status: "En proceso",
+        maker: "Antonio Oliver",
+        reviewer: "",
+        due_date: iso(5),
         created_at: now,
       },
       {
@@ -246,6 +254,18 @@ function createInitialData(): DemoStore {
         name: "Encuesta de satisfacción",
         url: "",
         status: "Pendiente",
+        maker: "Antonio Oliver",
+        reviewer: "",
+        due_date: null,
+        created_at: now,
+      },
+    ],
+    material_comments: [
+      {
+        id: "demo-mc1",
+        material_id: "demo-m1",
+        author: "Arianna Évora",
+        body: "Ejemplo de comentario de revisión: cambia el caso de la diapositiva 12 por uno de la industria del cliente.",
         created_at: now,
       },
     ],
