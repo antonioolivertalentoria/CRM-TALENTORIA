@@ -66,6 +66,13 @@ export default async function TrainingDetailPage({
   const done = sessions.filter((s) => s.status === "Impartida").length;
   const total = training.total_sessions ?? sessions.length;
 
+  const active = sessions.filter((s) => s.status !== "Cancelada");
+  const uniqueModalities = [...new Set(active.map((s) => s.modality).filter(Boolean))];
+  const trainingModality =
+    uniqueModalities.length === 0 ? "" : uniqueModalities.length === 1 ? uniqueModalities[0] : "Mixta";
+  const totalHours = active.reduce((acc, s) => acc + (Number(s.duration_hours) || 0), 0);
+  const facilitators = [...new Set(active.map((s) => s.facilitator).filter(Boolean))];
+
   return (
     <div className="space-y-6">
       <nav className="text-sm text-slate-400">
@@ -119,6 +126,11 @@ export default async function TrainingDetailPage({
           </div>
           <span className="text-sm font-medium text-slate-500">
             {done} de {total || "?"} sesiones impartidas
+          </span>
+          <span className="text-sm text-slate-400">
+            {trainingModality && <>· <span className="font-medium text-slate-600">{trainingModality}</span></>}
+            {totalHours > 0 && <> · <span className="font-medium text-slate-600">{totalHours} h totales</span></>}
+            {facilitators.length > 0 && <> · Facilita: <span className="font-medium text-slate-600">{facilitators.join(", ")}</span></>}
           </span>
         </div>
 

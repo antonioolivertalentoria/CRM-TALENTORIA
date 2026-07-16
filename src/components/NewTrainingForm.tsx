@@ -2,7 +2,7 @@
 
 import { useState, useActionState } from "react";
 import { createTrainingAction } from "@/lib/actions";
-import { TRAINING_STATUSES } from "@/lib/constants";
+import { TRAINING_STATUSES, PLATFORMS } from "@/lib/constants";
 
 const input =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
@@ -72,6 +72,56 @@ export function NewTrainingForm({ clientId, people = [] }: { clientId: string; p
             <input name="internal_owner" placeholder="Ej. Oliver" className={input} />
           )}
         </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Facilitador(a)</label>
+          <input
+            name="facilitator"
+            list="facilitadores"
+            placeholder="Ej. Arianna, Caro, Rocío…"
+            className={input}
+          />
+          <datalist id="facilitadores">
+            {people.map((p) => (
+              <option key={p} value={p} />
+            ))}
+          </datalist>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Modalidad</label>
+          <select name="modality" defaultValue="" className={input}>
+            <option value="">—</option>
+            <option value="Presencial">Presencial</option>
+            <option value="Online">Online</option>
+            <option value="Mixta">Mixta (se define por sesión)</option>
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-500">Hora inicio</label>
+            <input name="start_time" type="time" className={input} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-500">Hora cierre</label>
+            <input name="end_time" type="time" className={input} />
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Plataforma (si es online)</label>
+          <select name="platform" defaultValue="" className={input}>
+            <option value="">—</option>
+            {PLATFORMS.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Liga de la sesión (Zoom/Meet)</label>
+          <input name="session_link" type="url" placeholder="https://zoom.us/j/…" className={input} />
+        </div>
+        <p className="sm:col-span-2 -mt-1 text-xs text-slate-400">
+          Estos datos se aplican a todas las sesiones que se crean automáticamente; después puedes
+          ajustar cada sesión por separado. El número de horas se calcula solo con los horarios.
+        </p>
         {state?.error && (
           <p className="sm:col-span-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
             {state.error}

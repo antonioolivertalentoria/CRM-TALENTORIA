@@ -16,6 +16,16 @@ function intOrNull(formData: FormData, key: string): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+/** Horas entre dos horarios "HH:MM" (null si faltan o son inválidos). */
+function hoursBetween(start: string | null, end: string | null): number | null {
+  if (!start || !end) return null;
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  if ([sh, sm, eh, em].some(Number.isNaN)) return null;
+  const diff = eh * 60 + em - (sh * 60 + sm);
+  return diff > 0 ? Math.round((diff / 60) * 100) / 100 : null;
+}
+
 // ---------------- Clientes ----------------
 
 export async function createClientAction(
@@ -119,12 +129,36 @@ export async function createTrainingAction(
 
   if (error) return { error: `No se pudo crear la capacitación: ${error.message}` };
 
-  // Pre-crea las sesiones numeradas si se indicó el total
-  if (totalSessions && totalSessions > 0 && totalSessions <= 30) {
-    const sessions = Array.from({ length: totalSessions }, (_, i) => ({
+  // Datos que se aplican a todas las sesiones generadas
+  const facilitator = str(formData, "facilitator");
+  const modality = str(formData, "modality");
+  const platform = str(formData, "platform");
+  const sessionLink = str(formData, "session_link");
+  const startTime = str(formData, "start_time") || null;
+  const endTime = str(formData, "end_time") || null;
+  const duration = hoursBetween(startTime, endTime);
+  const hasDefaults = !!(facilitator || modality || platform || sessionLink || startTime);
+
+  // Pre-crea las sesiones numeradas (al menos 1 si se capturaron datos de sesión)
+  const count =
+    totalSessions && totalSessions > 0 && totalSessions <= 30
+      ? totalSessions
+      : hasDefaults
+        ? 1
+        : 0;
+  if (count > 0) {
+    const sessions = Array.from({ length: count }, (_, i) => ({
       training_id: data.id,
       session_number: i + 1,
       status: "Pendiente",
+      facilitator,
+      // "Mixta" significa que cada sesión define la suya
+      modality: modality === "Mixta" ? "" : modality,
+      platform,
+      session_link: sessionLink,
+      start_time: startTime,
+      end_time: endTime,
+      duration_hours: duration,
     }));
     await supabase.from("sessions").insert(sessions);
   }
@@ -267,6 +301,27 @@ export async function updateSessionField(
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  // Al cambiar horarios, recalcula la duración de la sesión
+  if (field === "start_time" || field === "end_time") {
+    const { data: row } = await supabase
+      .from("sessions")
+      .select("start_time, end_time")
+      .eq("id", id)
+      .single();
+    if (row) {
+      await supabase
+        .from("sessions")
+        .update({
+          duration_hours: hoursBetween(
+            row.start_time?.slice(0, 5) ?? null,
+            row.end_time?.slice(0, 5) ?? null
+          ),
+        })
+        .eq("id", id);
+    }
+  }
+
   revalidatePath(`/capacitaciones/${trainingId}`);
   revalidatePath("/");
   return null;
