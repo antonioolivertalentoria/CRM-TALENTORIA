@@ -25,6 +25,14 @@ export function ClientEditForm({ client }: { client: Client }) {
         </div>
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
           <div>
+            <dt className="text-xs font-semibold text-slate-400">Razón social</dt>
+            <dd className="text-slate-700">{client.razon_social || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold text-slate-400">RFC</dt>
+            <dd className="uppercase text-slate-700">{client.rfc || "—"}</dd>
+          </div>
+          <div>
             <dt className="text-xs font-semibold text-slate-400">Contacto</dt>
             <dd className="text-slate-700">{client.contact_name || "—"}</dd>
           </div>
@@ -85,6 +93,14 @@ export function ClientEditForm({ client }: { client: Client }) {
         <div className="sm:col-span-2">
           <label className="mb-1 block text-xs font-semibold text-slate-500">Compañía *</label>
           <input name="company" required defaultValue={client.company} className={input} />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Razón social</label>
+          <input name="razon_social" defaultValue={client.razon_social} placeholder="Para facturación" className={input} />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">RFC</label>
+          <input name="rfc" defaultValue={client.rfc} maxLength={13} className={input + " uppercase"} />
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">Contacto</label>

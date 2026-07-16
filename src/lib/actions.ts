@@ -30,6 +30,8 @@ export async function createClientAction(
     .from("clients")
     .insert({
       company,
+      razon_social: str(formData, "razon_social"),
+      rfc: str(formData, "rfc"),
       contact_name: str(formData, "contact_name"),
       email: str(formData, "email"),
       whatsapp: str(formData, "whatsapp"),
@@ -56,6 +58,8 @@ export async function updateClientAction(
     .from("clients")
     .update({
       company,
+      razon_social: str(formData, "razon_social"),
+      rfc: str(formData, "rfc"),
       contact_name: str(formData, "contact_name"),
       email: str(formData, "email"),
       whatsapp: str(formData, "whatsapp"),

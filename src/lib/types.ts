@@ -1,6 +1,8 @@
 export type Client = {
   id: string;
   company: string;
+  razon_social: string;
+  rfc: string;
   contact_name: string;
   email: string;
   whatsapp: string;

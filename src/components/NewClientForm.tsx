@@ -35,6 +35,14 @@ export function NewClientForm() {
           <input name="company" required placeholder="Ej. SIGMA Alimentos" className={input} />
         </div>
         <div>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Razón social</label>
+          <input name="razon_social" placeholder="Ej. Sigma Alimentos, S.A. de C.V." className={input} />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">RFC</label>
+          <input name="rfc" placeholder="Ej. SAL840112ABC" maxLength={13} className={input + " uppercase"} />
+        </div>
+        <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">Nombre del contacto</label>
           <input name="contact_name" placeholder="Ej. Humberto González" className={input} />
         </div>

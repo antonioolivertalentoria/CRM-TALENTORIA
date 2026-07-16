@@ -4,6 +4,11 @@
 -- (una sola vez, sobre la base que ya tiene schema.sql)
 -- ============================================================
 
+-- Clientes: datos fiscales
+alter table public.clients
+  add column if not exists razon_social text not null default '',
+  add column if not exists rfc text not null default '';
+
 -- Materiales: quién lo hace, quién lo revisa y fecha límite
 alter table public.materials
   add column if not exists maker text not null default '',

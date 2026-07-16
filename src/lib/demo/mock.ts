@@ -15,7 +15,7 @@ export function isDemoMode(): boolean {
 type Row = Record<string, any>;
 
 const DEFAULTS: Record<string, Row> = {
-  clients: { company: "", contact_name: "", email: "", whatsapp: "", notes: "" },
+  clients: { company: "", razon_social: "", rfc: "", contact_name: "", email: "", whatsapp: "", notes: "" },
   trainings: {
     official_name: "",
     status: "Propuesta",

@@ -39,6 +39,8 @@ create trigger on_auth_user_created
 create table public.clients (
   id uuid primary key default gen_random_uuid(),
   company text not null,
+  razon_social text not null default '',
+  rfc text not null default '',
   contact_name text not null default '',
   email text not null default '',
   whatsapp text not null default '',
