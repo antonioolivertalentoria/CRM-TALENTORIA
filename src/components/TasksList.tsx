@@ -29,12 +29,13 @@ export function TasksList({
   const [done, setDone] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
 
+  // Las tareas sin responsable aparecen en el perfil de todos,
+  // marcadas "sin asignar", para que nada se pierda.
   const visible = useMemo(
     () =>
       tasks.filter((t) => {
         if (filter === "Todas") return true;
-        if (filter === "Sin asignar") return !t.assignee;
-        return t.assignee === filter;
+        return t.assignee === filter || !t.assignee;
       }),
     [tasks, filter]
   );
@@ -68,13 +69,11 @@ export function TasksList({
     });
   };
 
-  const hasUnassigned = tasks.some((t) => !t.assignee);
-
   return (
     <div className="space-y-6">
       {/* Filtro por persona */}
       <div className="flex flex-wrap items-center gap-2">
-        {[...people, ...(hasUnassigned ? ["Sin asignar"] : []), "Todas"].map((p) => (
+        {[...people, "Todas"].map((p) => (
           <button
             key={p}
             onClick={() => setFilter(p)}
@@ -85,9 +84,9 @@ export function TasksList({
             }`}
           >
             {p}
-            {p !== "Todas" && p !== "Sin asignar" && (
+            {p !== "Todas" && (
               <span className="ml-1.5 opacity-75">
-                {tasks.filter((t) => t.assignee === p && !done.has(t.key)).length}
+                {tasks.filter((t) => (t.assignee === p || !t.assignee) && !done.has(t.key)).length}
               </span>
             )}
           </button>
@@ -159,10 +158,16 @@ export function TasksList({
                         </Link>
                       </div>
 
-                      {filter === "Todas" && t.assignee && (
-                        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">
-                          {t.assignee}
+                      {!t.assignee ? (
+                        <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                          sin asignar
                         </span>
+                      ) : (
+                        filter === "Todas" && (
+                          <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">
+                            {t.assignee}
+                          </span>
+                        )
                       )}
 
                       <span

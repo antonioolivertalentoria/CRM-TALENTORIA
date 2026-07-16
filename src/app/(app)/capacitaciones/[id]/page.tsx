@@ -75,13 +75,18 @@ export default async function TrainingDetailPage({
 
   return (
     <div className="space-y-6">
-      <nav className="text-sm text-slate-400">
-        <Link href="/" className="hover:text-brand-cyan-dark hover:underline">Tablero</Link>{" "}
-        /{" "}
-        <Link href={`/clientes/${training.clients.id}`} className="hover:text-brand-cyan-dark hover:underline">
-          {training.clients.company}
-        </Link>{" "}
-        / <span className="text-slate-600">{training.short_name}</span>
+      <nav className="flex items-center justify-between text-sm text-slate-400">
+        <span>
+          <Link href="/" className="hover:text-brand-cyan-dark hover:underline">Tablero</Link>{" "}
+          /{" "}
+          <Link href={`/clientes/${training.clients.id}`} className="hover:text-brand-cyan-dark hover:underline">
+            {training.clients.company}
+          </Link>{" "}
+          / <span className="text-slate-600">{training.short_name}</span>
+        </span>
+        <span className="text-xs text-slate-400" title="Los campos se guardan al salir de ellos o al elegir una opción; se iluminan en verde al guardar.">
+          ✓ Todo se guarda automáticamente
+        </span>
       </nav>
 
       {/* Encabezado */}

@@ -25,15 +25,19 @@ export default async function ClientDetailPage({
   if (!data) notFound();
   const client = data as unknown as Client;
 
-  const [{ data: trainingsData }, { data: profilesData }] = await Promise.all([
+  const [{ data: trainingsData }, { data: profilesData }, userRes] = await Promise.all([
     supabase
       .from("trainings")
       .select("*, sessions(id, status)")
       .eq("client_id", id)
       .order("created_at", { ascending: false }),
-    supabase.from("profiles").select("full_name").order("full_name"),
+    supabase.from("profiles").select("id, full_name").order("full_name"),
+    supabase.auth.getUser(),
   ]);
-  const people = (profilesData ?? []).map((p: { full_name: string }) => p.full_name);
+  const profiles = (profilesData ?? []) as { id: string; full_name: string }[];
+  const people = profiles.map((p) => p.full_name);
+  const currentUser =
+    profiles.find((p) => p.id === userRes.data.user?.id)?.full_name ?? "";
 
   const trainings = (trainingsData ?? []) as unknown as (Training & {
     sessions: Pick<Session, "id" | "status">[];
@@ -50,7 +54,7 @@ export default async function ClientDetailPage({
 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <h1 className="text-2xl font-bold text-brand-navy">{client.company}</h1>
-        <NewTrainingForm clientId={client.id} people={people} />
+        <NewTrainingForm clientId={client.id} people={people} currentUser={currentUser} />
       </header>
 
       <ClientEditForm client={client} />

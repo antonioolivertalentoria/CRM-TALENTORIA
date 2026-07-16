@@ -147,19 +147,23 @@ export async function createTrainingAction(
         ? 1
         : 0;
   if (count > 0) {
-    const sessions = Array.from({ length: count }, (_, i) => ({
-      training_id: data.id,
-      session_number: i + 1,
-      status: "Pendiente",
-      facilitator,
-      // "Mixta" significa que cada sesión define la suya
-      modality: modality === "Mixta" ? "" : modality,
-      platform,
-      session_link: sessionLink,
-      start_time: startTime,
-      end_time: endTime,
-      duration_hours: duration,
-    }));
+    const sessions = Array.from({ length: count }, (_, i) => {
+      const sessionDate = str(formData, `session_date_${i + 1}`) || null;
+      return {
+        training_id: data.id,
+        session_number: i + 1,
+        status: sessionDate ? "Programada" : "Pendiente",
+        session_date: sessionDate,
+        facilitator,
+        // "Mixta" significa que cada sesión define la suya
+        modality: modality === "Mixta" ? "" : modality,
+        platform,
+        session_link: sessionLink,
+        start_time: startTime,
+        end_time: endTime,
+        duration_hours: duration,
+      };
+    });
     await supabase.from("sessions").insert(sessions);
   }
 

@@ -25,6 +25,7 @@ export function EditableField({
   suggestions?: string[];
 }) {
   const [draft, setDraft] = useState(value);
+  const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
   const listId = useId();
 
@@ -32,12 +33,14 @@ export function EditableField({
     if (draft === value) return;
     startTransition(async () => {
       await onSave(draft);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
     });
   };
 
-  const base = `w-full rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition hover:border-slate-300 focus:border-brand-cyan focus:bg-white focus:ring-2 focus:ring-brand-cyan/20 ${
+  const base = `w-full rounded-md border bg-transparent px-2 py-1 text-sm outline-none transition hover:border-slate-300 focus:border-brand-cyan focus:bg-white focus:ring-2 focus:ring-brand-cyan/20 ${
     pending ? "opacity-50" : ""
-  } ${className}`;
+  } ${saved ? "border-emerald-400 ring-2 ring-emerald-200" : "border-transparent"} ${className}`;
 
   if (multiline) {
     return (
