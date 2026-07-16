@@ -452,10 +452,16 @@ export async function updateMaterialField(
 
   const parsed: string | null = field === "due_date" && !value ? null : value;
 
+  const update: Record<string, string | null> = { [field]: parsed };
+  // El plazo del revisor corre desde que el material queda "Por revisar"
+  if (field === "status") {
+    update.review_requested_at = value === "Por revisar" ? todayISO() : null;
+  }
+
   const supabase = await createSupabase();
   const { error } = await supabase
     .from("materials")
-    .update({ [field]: parsed })
+    .update(update)
     .eq("id", id);
 
   if (error) return { error: error.message };

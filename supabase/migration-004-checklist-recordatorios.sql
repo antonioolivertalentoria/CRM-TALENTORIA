@@ -12,6 +12,11 @@ alter table public.trainings
   add column if not exists encuestas_qr text not null default 'Pendiente',
   add column if not exists liga_sesion_valida text not null default 'Pendiente';
 
+-- Fecha en que un material pasó a revisión (el plazo del revisor
+-- corre desde aquí, no desde la fecha límite del que lo hizo)
+alter table public.materials
+  add column if not exists review_requested_at date;
+
 -- Preferencias de recordatorios por correo (por usuario)
 alter table public.profiles
   add column if not exists reminder_prefs jsonb not null default

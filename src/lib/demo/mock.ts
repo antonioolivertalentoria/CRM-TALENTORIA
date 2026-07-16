@@ -70,7 +70,7 @@ const DEFAULTS: Record<string, Row> = {
     survey_results_url: "",
     notes: "",
   },
-  materials: { type: "Otro", name: "", url: "", status: "Pendiente", maker: "", reviewer: "", due_date: null },
+  materials: { type: "Otro", name: "", url: "", status: "Pendiente", maker: "", reviewer: "", due_date: null, review_requested_at: null },
   material_comments: { author: "", body: "" },
   profiles: { full_name: "", email: "" },
 };

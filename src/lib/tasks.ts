@@ -186,13 +186,18 @@ export function computeTasks(
         });
       }
       if (m.status === "Por revisar") {
+        // El plazo del revisor corre desde que se subió el material,
+        // no desde la fecha límite de quien lo hizo.
+        const reviewDue = m.review_requested_at
+          ? addBusinessDays(m.review_requested_at, 1)
+          : due;
         tasks.push({
           ...base,
           key: `${m.id}-revisar`,
           kind: "Revisión",
           title: `Revisar ${m.type}: ${m.name}`,
           assignee: m.reviewer || t.internal_owner,
-          due,
+          due: reviewDue,
           complete: { type: "material_status", materialId: m.id, nextStatus: "Listo" },
         });
       }

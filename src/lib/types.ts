@@ -86,6 +86,7 @@ export type Material = {
   maker: string;
   reviewer: string;
   due_date: string | null;
+  review_requested_at: string | null;
   created_at: string;
 };
 

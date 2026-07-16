@@ -142,6 +142,7 @@ create table public.materials (
   maker text not null default '',              -- Quién lo hace
   reviewer text not null default '',           -- Quién lo revisa
   due_date date,                               -- Fecha límite del material
+  review_requested_at date,                    -- Cuándo pasó a "Por revisar"
   created_at timestamptz not null default now()
 );
 
