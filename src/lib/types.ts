@@ -35,6 +35,7 @@ export type Training = {
   seguimiento_20: string;
   seguimiento_30: string;
   mensaje_logistica: string;
+  logistics_info: string;
   notes: string;
   internal_notes: string;
   questions: string;

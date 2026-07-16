@@ -11,8 +11,10 @@ alter table public.materials
   add column if not exists due_date date;
 
 -- Capacitaciones: mensaje de logística por WhatsApp (Pendiente | Listo | No aplica)
+-- e información logística confirmada por el cliente (texto libre)
 alter table public.trainings
-  add column if not exists mensaje_logistica text not null default 'Pendiente';
+  add column if not exists mensaje_logistica text not null default 'Pendiente',
+  add column if not exists logistics_info text not null default '';
 
 -- Comentarios de revisión sobre materiales
 create table if not exists public.material_comments (

@@ -166,6 +166,24 @@ export default async function TrainingDetailPage({
         </div>
       </section>
 
+      {/* Respuestas logísticas del cliente */}
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+          Información logística confirmada
+        </h2>
+        <p className="mb-3 mt-0.5 text-xs text-slate-400">
+          Pega aquí las respuestas del cliente al mensaje de logística (vestimenta, accesos,
+          sala, participantes, estacionamiento…). Se respetan los saltos de línea y viñetas.
+        </p>
+        <EditableField
+          value={training.logistics_info}
+          onSave={save("logistics_info")}
+          multiline
+          rows={10}
+          placeholder={"Ejemplo:\n• Vestimenta: casual, sin calzado de seguridad.\n• Acceso: registro en recepción con INE.\n• Sala: disponible 30 min antes, acomodo en herradura.\n• WiFi y proyector confirmados…"}
+        />
+      </section>
+
       <MaterialsSection
         trainingId={training.id}
         materials={materials}

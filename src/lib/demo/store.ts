@@ -55,6 +55,7 @@ function createInitialData(): DemoStore {
     seguimiento_20: "Pendiente",
     seguimiento_30: "Pendiente",
     mensaje_logistica: "Pendiente",
+    logistics_info: "",
     notes: "",
     internal_notes: "",
     questions: "",

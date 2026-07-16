@@ -12,6 +12,7 @@ export function EditableField({
   placeholder = "—",
   className = "",
   multiline = false,
+  rows = 3,
 }: {
   value: string;
   onSave: (value: string) => Promise<unknown>;
@@ -19,6 +20,7 @@ export function EditableField({
   placeholder?: string;
   className?: string;
   multiline?: boolean;
+  rows?: number;
 }) {
   const [draft, setDraft] = useState(value);
   const [pending, startTransition] = useTransition();
@@ -39,7 +41,7 @@ export function EditableField({
       <textarea
         value={draft}
         placeholder={placeholder}
-        rows={3}
+        rows={rows}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={save}
         className={base + " resize-y"}

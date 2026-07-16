@@ -77,6 +77,7 @@ create table public.trainings (
   seguimiento_20 text not null default 'Pendiente',   -- Seguimiento día 20
   seguimiento_30 text not null default 'Pendiente',   -- Seguimiento día 30 y cierre de grupo WA
   mensaje_logistica text not null default 'Pendiente', -- Mensaje de logística (WhatsApp) antes del curso
+  logistics_info text not null default '',     -- Respuestas logísticas confirmadas por el cliente
   notes text not null default '',              -- Acciones específicas / notas
   internal_notes text not null default '',     -- Observaciones internas
   questions text not null default '',          -- Dudas
