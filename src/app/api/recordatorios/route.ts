@@ -55,6 +55,12 @@ export async function GET(request: Request) {
     return NextResponse.json({
       sent: 0,
       error: trainingsError?.message ?? profilesError?.message,
+      // Diagnóstico sin exponer secretos: largo y extremos de la llave recibida
+      debug: {
+        serviceKeyLength: serviceKey.length,
+        serviceKeyStart: serviceKey.slice(0, 10),
+        serviceKeyEnd: serviceKey.slice(-2),
+      },
     });
   }
 
