@@ -50,6 +50,7 @@ function createInitialData(): DemoStore {
     envio_insignias: "Pendiente",
     envio_dc3: "Pendiente",
     envio_leads: "Pendiente",
+    encuesta_participantes: "Pendiente",
     encuesta_final: "Pendiente",
     factura: "Pendiente",
     seguimiento_20: "Pendiente",

@@ -34,6 +34,7 @@ const POST_ITEMS: { field: string; label: string }[] = [
   { field: "envio_constancias", label: "Enviar constancias" },
   { field: "envio_insignias", label: "Enviar insignias" },
   { field: "envio_dc3", label: "Enviar DC-3" },
+  { field: "encuesta_participantes", label: "Recabar encuesta de satisfacción de participantes" },
   { field: "envio_leads", label: "Compartir leads con comercial" },
   { field: "encuesta_final", label: "Encuesta del cliente contratante" },
 ];

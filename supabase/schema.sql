@@ -74,6 +74,7 @@ create table public.trainings (
   envio_insignias text not null default 'Pendiente',
   envio_dc3 text not null default 'Pendiente',
   envio_leads text not null default 'Pendiente',
+  encuesta_participantes text not null default 'Pendiente', -- Encuesta de satisfacción de participantes
   encuesta_final text not null default 'Pendiente',   -- Encuesta cliente contratante
   factura text not null default 'Pendiente',          -- Cierre administrativo
   seguimiento_20 text not null default 'Pendiente',   -- Seguimiento día 20

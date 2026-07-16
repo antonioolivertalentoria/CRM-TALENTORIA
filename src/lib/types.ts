@@ -32,6 +32,7 @@ export type Training = {
   envio_insignias: string;
   envio_dc3: string;
   envio_leads: string;
+  encuesta_participantes: string;
   encuesta_final: string;
   factura: string;
   seguimiento_20: string;

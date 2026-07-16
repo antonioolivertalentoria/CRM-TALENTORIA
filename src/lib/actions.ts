@@ -192,6 +192,7 @@ const TRAINING_FIELDS = new Set([
   "envio_insignias",
   "envio_dc3",
   "envio_leads",
+  "encuesta_participantes",
   "encuesta_final",
   "factura",
   "seguimiento_20",

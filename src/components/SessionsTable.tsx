@@ -6,7 +6,7 @@ import {
   updateSessionField,
   deleteSessionAction,
 } from "@/lib/actions";
-import { SESSION_STATUSES, MODALITIES, PLATFORMS, CHECK_STATUSES, EXTRA_FACILITATORS } from "@/lib/constants";
+import { SESSION_STATUSES, MODALITIES, PLATFORMS, EXTRA_FACILITATORS } from "@/lib/constants";
 import { StatusSelect } from "./StatusSelect";
 import { EditableField } from "./EditableField";
 import type { Session } from "@/lib/types";
@@ -65,7 +65,6 @@ export function SessionsTable({
                 <th className="min-w-36 px-2 py-2 font-semibold">Liga sesión</th>
                 <th className="w-20 px-2 py-2 font-semibold"># Insc.</th>
                 <th className="w-20 px-2 py-2 font-semibold"># Asist.</th>
-                <th className="w-32 px-2 py-2 font-semibold">Encuesta</th>
                 <th className="min-w-40 px-2 py-2 font-semibold">Notas</th>
                 <th className="w-10 px-2 py-2"></th>
               </tr>
@@ -115,48 +114,48 @@ export function SessionsTable({
                     </select>
                   </td>
                   <td className="px-1 py-1.5">
-                    <select
-                      value={s.platform || ""}
-                      onChange={(e) => save(s.id, "platform")(e.target.value)}
-                      className={selectCls}
-                    >
-                      <option value="">—</option>
-                      {PLATFORMS.map((p) => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
-                    </select>
+                    {s.modality === "Presencial" ? (
+                      <span className="px-2 text-xs text-slate-300">No aplica</span>
+                    ) : (
+                      <select
+                        value={s.platform || ""}
+                        onChange={(e) => save(s.id, "platform")(e.target.value)}
+                        className={selectCls}
+                      >
+                        <option value="">—</option>
+                        {PLATFORMS.map((p) => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                   <td className="px-1 py-1.5">
-                    <div className="flex items-center gap-1">
-                      {s.session_link && (
-                        <a
-                          href={s.session_link}
-                          target="_blank"
-                          rel="noreferrer"
-                          title="Abrir liga"
-                          className="shrink-0 text-brand-cyan-dark hover:text-brand-magenta"
-                        >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                          </svg>
-                        </a>
-                      )}
-                      <EditableField value={s.session_link} type="url" onSave={save(s.id, "session_link")} placeholder="Liga Zoom/Meet" />
-                    </div>
+                    {s.modality === "Presencial" ? (
+                      <span className="px-2 text-xs text-slate-300">No aplica</span>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        {s.session_link && (
+                          <a
+                            href={s.session_link}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Abrir liga"
+                            className="shrink-0 text-brand-cyan-dark hover:text-brand-magenta"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                            </svg>
+                          </a>
+                        )}
+                        <EditableField value={s.session_link} type="url" onSave={save(s.id, "session_link")} placeholder="Liga Zoom/Meet" />
+                      </div>
+                    )}
                   </td>
                   <td className="px-1 py-1.5">
                     <EditableField value={s.enrolled?.toString() ?? ""} type="number" onSave={save(s.id, "enrolled")} />
                   </td>
                   <td className="px-1 py-1.5">
                     <EditableField value={s.attended?.toString() ?? ""} type="number" onSave={save(s.id, "attended")} />
-                  </td>
-                  <td className="px-2 py-1.5 pt-2">
-                    <StatusSelect
-                      value={s.survey_status}
-                      options={CHECK_STATUSES}
-                      onChange={save(s.id, "survey_status")}
-                      small
-                    />
                   </td>
                   <td className="px-1 py-1.5">
                     <EditableField value={s.notes} onSave={save(s.id, "notes")} placeholder="Notas" />
