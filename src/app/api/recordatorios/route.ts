@@ -75,7 +75,7 @@ export async function GET(request: Request) {
   const tasks = computeTasks((trainingsData ?? []) as any, internalNames);
 
   const today = todayISO();
-  const from = process.env.REMINDER_FROM ?? "CRM Talentoría <onboarding@resend.dev>";
+  const from = process.env.REMINDER_FROM ?? "CRM Talentoría <crm@talentoriacursos.com>";
   let sent = 0;
   const results: string[] = [];
 
