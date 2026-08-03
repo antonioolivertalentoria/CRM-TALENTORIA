@@ -2,7 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { updateTrainingField, updateMaterialField } from "@/lib/actions";
+import {
+  updateTrainingField,
+  updateMaterialField,
+  completeCustomTaskAction,
+  deleteCustomTaskAction,
+} from "@/lib/actions";
 import { formatDate } from "@/lib/format";
 import type { ComputedTask } from "@/lib/tasks";
 
@@ -13,6 +18,7 @@ const KIND_STYLE: Record<string, string> = {
   Revisión: "bg-violet-100 text-violet-700",
   Entrega: "bg-amber-100 text-amber-700",
   Seguimiento: "bg-emerald-100 text-emerald-700",
+  Personal: "bg-rose-100 text-rose-700",
 };
 
 export function TasksList({
@@ -58,14 +64,26 @@ export function TasksList({
     startTransition(async () => {
       if (task.complete.type === "training_field") {
         await updateTrainingField(task.trainingId, task.complete.field, task.complete.value);
-      } else {
+      } else if (task.complete.type === "material_status") {
         await updateMaterialField(
           task.complete.materialId,
           task.trainingId,
           "status",
           task.complete.nextStatus
         );
+      } else {
+        await completeCustomTaskAction(task.complete.taskId);
       }
+      setDone((prev) => new Set(prev).add(task.key));
+    });
+  };
+
+  const removeCustom = (task: ComputedTask) => {
+    if (task.complete.type !== "custom_task") return;
+    const taskId = task.complete.taskId;
+    if (!confirm(`¿Eliminar la tarea "${task.title}"?`)) return;
+    startTransition(async () => {
+      await deleteCustomTaskAction(taskId);
       setDone((prev) => new Set(prev).add(task.key));
     });
   };
@@ -150,13 +168,21 @@ export function TasksList({
                         <p className={`text-sm font-medium text-slate-800 ${isDone ? "line-through" : ""}`}>
                           {t.title}
                         </p>
-                        <Link
-                          href={`/capacitaciones/${t.trainingId}`}
-                          className="text-xs text-slate-400 hover:text-brand-cyan-dark hover:underline"
-                        >
-                          {t.trainingName}
-                          {t.clientName ? ` · ${t.clientName}` : ""}
-                        </Link>
+                        {t.trainingId ? (
+                          <Link
+                            href={`/capacitaciones/${t.trainingId}`}
+                            className="text-xs text-slate-400 hover:text-brand-cyan-dark hover:underline"
+                          >
+                            {t.trainingName}
+                            {t.clientName ? ` · ${t.clientName}` : ""}
+                          </Link>
+                        ) : (
+                          <p className="text-xs text-slate-400">
+                            {t.clientName}
+                            {t.requestedBy ? ` · Pidió: ${t.requestedBy}` : ""}
+                            {t.details ? ` — ${t.details}` : ""}
+                          </p>
+                        )}
                       </div>
 
                       {!t.assignee ? (
@@ -178,6 +204,19 @@ export function TasksList({
                       >
                         {t.due ? formatDate(t.due) : "Sin fecha"}
                       </span>
+
+                      {t.complete.type === "custom_task" && !isDone && (
+                        <button
+                          title="Eliminar tarea"
+                          disabled={pending}
+                          onClick={() => removeCustom(t)}
+                          className="shrink-0 text-slate-300 transition hover:text-red-500"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
                     </li>
                   );
                 })}

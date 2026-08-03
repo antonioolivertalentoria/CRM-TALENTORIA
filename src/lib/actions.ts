@@ -37,21 +37,29 @@ export async function createClientAction(
   if (!company) return { error: "El nombre de la compañía es obligatorio." };
 
   const supabase = await createSupabase();
-  const { data, error } = await supabase
+  const payload: Record<string, string | null> = {
+    company,
+    parent_id: str(formData, "parent_id") || null,
+    razon_social: str(formData, "razon_social"),
+    rfc: str(formData, "rfc"),
+    contact_name: str(formData, "contact_name"),
+    email: str(formData, "email"),
+    whatsapp: str(formData, "whatsapp"),
+    notes: str(formData, "notes"),
+  };
+  let { data, error } = await supabase
     .from("clients")
-    .insert({
-      company,
-      razon_social: str(formData, "razon_social"),
-      rfc: str(formData, "rfc"),
-      contact_name: str(formData, "contact_name"),
-      email: str(formData, "email"),
-      whatsapp: str(formData, "whatsapp"),
-      notes: str(formData, "notes"),
-    })
+    .insert(payload)
     .select("id")
     .single();
 
-  if (error) return { error: `No se pudo crear el cliente: ${error.message}` };
+  // Respaldo mientras la migración 005 no esté corrida en la base
+  if (error && !payload.parent_id && error.message.includes("parent_id")) {
+    delete payload.parent_id;
+    ({ data, error } = await supabase.from("clients").insert(payload).select("id").single());
+  }
+
+  if (error || !data) return { error: `No se pudo crear el cliente: ${error?.message}` };
   revalidatePath("/clientes");
   redirect(`/clientes/${data.id}`);
 }
@@ -65,18 +73,23 @@ export async function updateClientAction(
   if (!id || !company) return { error: "Datos incompletos." };
 
   const supabase = await createSupabase();
-  const { error } = await supabase
-    .from("clients")
-    .update({
-      company,
-      razon_social: str(formData, "razon_social"),
-      rfc: str(formData, "rfc"),
-      contact_name: str(formData, "contact_name"),
-      email: str(formData, "email"),
-      whatsapp: str(formData, "whatsapp"),
-      notes: str(formData, "notes"),
-    })
-    .eq("id", id);
+  const payload: Record<string, string | null> = {
+    company,
+    parent_id: str(formData, "parent_id") || null,
+    razon_social: str(formData, "razon_social"),
+    rfc: str(formData, "rfc"),
+    contact_name: str(formData, "contact_name"),
+    email: str(formData, "email"),
+    whatsapp: str(formData, "whatsapp"),
+    notes: str(formData, "notes"),
+  };
+  let { error } = await supabase.from("clients").update(payload).eq("id", id);
+
+  // Respaldo mientras la migración 005 no esté corrida en la base
+  if (error && !payload.parent_id && error.message.includes("parent_id")) {
+    delete payload.parent_id;
+    ({ error } = await supabase.from("clients").update(payload).eq("id", id));
+  }
 
   if (error) return { error: `No se pudo actualizar: ${error.message}` };
   revalidatePath(`/clientes/${id}`);
@@ -148,21 +161,27 @@ export async function createTrainingAction(
         ? 1
         : 0;
   if (count > 0) {
+    // Cada sesión puede traer su propia fecha, horario y facilitador;
+    // si no se capturan, hereda los datos generales del formulario.
     const sessions = Array.from({ length: count }, (_, i) => {
-      const sessionDate = str(formData, `session_date_${i + 1}`) || null;
+      const n = i + 1;
+      const sessionDate = str(formData, `session_date_${n}`) || null;
+      const sFacilitator = str(formData, `session_facilitator_${n}`) || facilitator;
+      const sStart = str(formData, `session_start_${n}`) || startTime;
+      const sEnd = str(formData, `session_end_${n}`) || endTime;
       return {
         training_id: data.id,
-        session_number: i + 1,
+        session_number: n,
         status: sessionDate ? "Programada" : "Pendiente",
         session_date: sessionDate,
-        facilitator,
+        facilitator: sFacilitator,
         // "Mixta" significa que cada sesión define la suya
         modality: modality === "Mixta" ? "" : modality,
         platform,
         session_link: sessionLink,
-        start_time: startTime,
-        end_time: endTime,
-        duration_hours: duration,
+        start_time: sStart,
+        end_time: sEnd,
+        duration_hours: hoursBetween(sStart, sEnd) ?? duration,
       };
     });
     await supabase.from("sessions").insert(sessions);
@@ -179,13 +198,22 @@ export async function createTrainingAction(
   const reviewer = names.find((n) => n.includes("Arianna")) ?? "";
 
   const internalNames = [...names, "Carolina García", "Caro"];
+  // Junta el facilitador general y los capturados por sesión: basta uno
+  // externo para aplicar el plazo largo de contenido (14 días).
+  const allFacilitators = [
+    ...new Set(
+      [facilitator, ...Array.from({ length: count }, (_, i) => str(formData, `session_facilitator_${i + 1}`))].filter(Boolean)
+    ),
+  ];
   const isInternal =
-    !facilitator ||
-    internalNames.some((n) => {
-      const a = n.toLowerCase();
-      const b = facilitator.toLowerCase().trim();
-      return a.includes(b) || b.includes(a.split(" ")[0]);
-    });
+    allFacilitators.length === 0 ||
+    allFacilitators.every((f) =>
+      internalNames.some((n) => {
+        const a = n.toLowerCase();
+        const b = f.toLowerCase().trim();
+        return a.includes(b) || b.includes(a.split(" ")[0]);
+      })
+    );
   const contentDays = isInternal ? 7 : 14;
 
   const today = todayISO();
@@ -262,6 +290,7 @@ const TRAINING_FIELDS = new Set([
   "envio_dc3",
   "envio_leads",
   "encuesta_participantes",
+  "informe_encuesta",
   "encuesta_final",
   "contenido_facilitador",
   "lista_participantes",
@@ -531,4 +560,63 @@ export async function deleteMaterialAction(id: string, trainingId: string) {
   const supabase = await createSupabase();
   await supabase.from("materials").delete().eq("id", id);
   revalidatePath(`/capacitaciones/${trainingId}`);
+}
+
+// ---------------- Tareas propias (custom_tasks) ----------------
+
+/** Nombre del perfil con sesión iniciada (o su correo como respaldo). */
+async function currentUserName(
+  supabase: Awaited<ReturnType<typeof createSupabase>>
+): Promise<string> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return "";
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", user.id)
+    .single();
+  return profile?.full_name || user.email || "";
+}
+
+export async function createCustomTaskAction(
+  _prev: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const title = str(formData, "title");
+  if (!title) return { error: "Escribe qué hay que hacer." };
+
+  const supabase = await createSupabase();
+  const requestedBy = await currentUserName(supabase);
+
+  const { error } = await supabase.from("custom_tasks").insert({
+    title,
+    details: str(formData, "details"),
+    assignee: str(formData, "assignee"),
+    requested_by: requestedBy,
+    client_id: str(formData, "client_id") || null,
+    due_date: str(formData, "due_date") || null,
+  });
+
+  if (error) return { error: `No se pudo crear la tarea: ${error.message}` };
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function completeCustomTaskAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("custom_tasks")
+    .update({ status: "Completada", completed_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function deleteCustomTaskAction(id: string) {
+  const supabase = await createSupabase();
+  await supabase.from("custom_tasks").delete().eq("id", id);
+  revalidatePath("/tareas");
 }

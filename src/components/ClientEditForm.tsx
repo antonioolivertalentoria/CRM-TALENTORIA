@@ -7,7 +7,16 @@ import type { Client } from "@/lib/types";
 const input =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
 
-export function ClientEditForm({ client }: { client: Client }) {
+export function ClientEditForm({
+  client,
+  parents = [],
+  parentName = "",
+}: {
+  client: Client;
+  /** Posibles clientes "padre" (sin incluir a este cliente ni subclientes). */
+  parents?: { id: string; company: string }[];
+  parentName?: string;
+}) {
   const [editing, setEditing] = useState(false);
   const [state, formAction, pending] = useActionState(updateClientAction, null);
 
@@ -24,6 +33,12 @@ export function ClientEditForm({ client }: { client: Client }) {
           </button>
         </div>
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+          {client.parent_id && (
+            <div className="sm:col-span-2">
+              <dt className="text-xs font-semibold text-slate-400">Subcliente de</dt>
+              <dd className="font-medium text-brand-cyan-dark">{parentName || "—"}</dd>
+            </div>
+          )}
           <div>
             <dt className="text-xs font-semibold text-slate-400">Razón social</dt>
             <dd className="text-slate-700">{client.razon_social || "—"}</dd>
@@ -93,6 +108,15 @@ export function ClientEditForm({ client }: { client: Client }) {
         <div className="sm:col-span-2">
           <label className="mb-1 block text-xs font-semibold text-slate-500">Compañía *</label>
           <input name="company" required defaultValue={client.company} className={input} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-xs font-semibold text-slate-500">¿Es subcliente de alguien?</label>
+          <select name="parent_id" defaultValue={client.parent_id ?? ""} className={input}>
+            <option value="">No, es cliente directo</option>
+            {parents.map((p) => (
+              <option key={p.id} value={p.id}>Subcliente de {p.company}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">Razón social</label>

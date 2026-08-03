@@ -62,6 +62,17 @@ export default async function TrainingDetailPage({
   const people = profiles.map((p) => p.full_name);
   const comments = (commentsData ?? []) as unknown as MaterialComment[];
 
+  // Si el cliente es subcliente, mostramos también al cliente "paraguas"
+  let parentClient: Pick<Client, "id" | "company"> | null = null;
+  if (training.clients.parent_id) {
+    const { data: parentData } = await supabase
+      .from("clients")
+      .select("id, company")
+      .eq("id", training.clients.parent_id)
+      .maybeSingle();
+    parentClient = (parentData as Pick<Client, "id" | "company"> | null) ?? null;
+  }
+
   const save = (field: string) => updateTrainingField.bind(null, training.id, field);
   const done = sessions.filter((s) => s.status === "Impartida").length;
   const total = training.total_sessions ?? sessions.length;
@@ -79,10 +90,23 @@ export default async function TrainingDetailPage({
         <span>
           <Link href="/" className="hover:text-brand-cyan-dark hover:underline">Tablero</Link>{" "}
           /{" "}
+          {parentClient && (
+            <>
+              <Link href={`/clientes/${parentClient.id}`} className="hover:text-brand-cyan-dark hover:underline">
+                {parentClient.company}
+              </Link>{" "}
+              /{" "}
+            </>
+          )}
           <Link href={`/clientes/${training.clients.id}`} className="hover:text-brand-cyan-dark hover:underline">
             {training.clients.company}
           </Link>{" "}
           / <span className="text-slate-600">{training.short_name}</span>
+          {parentClient && (
+            <span className="ml-2 rounded-full bg-brand-cyan/10 px-2 py-0.5 text-[11px] font-semibold text-brand-cyan-dark">
+              vía {parentClient.company}
+            </span>
+          )}
         </span>
         <span className="text-xs text-slate-400" title="Los campos se guardan al salir de ellos o al elegir una opción; se iluminan en verde al guardar.">
           ✓ Todo se guarda automáticamente

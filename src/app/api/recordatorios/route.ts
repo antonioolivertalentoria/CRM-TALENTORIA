@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { computeTasks, type ComputedTask } from "@/lib/tasks";
+import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
 import { todayISO, formatDate } from "@/lib/format";
 import { EXTRA_FACILITATORS } from "@/lib/constants";
 import type { ReminderPrefs } from "@/lib/types";
@@ -46,9 +46,11 @@ export async function GET(request: Request) {
   const [
     { data: trainingsData, error: trainingsError },
     { data: profilesData, error: profilesError },
+    { data: customData },
   ] = await Promise.all([
     supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
+    supabase.from("custom_tasks").select("*, clients(id, company)").eq("status", "Pendiente"),
   ]);
 
   if (trainingsError || profilesError) {
@@ -71,8 +73,13 @@ export async function GET(request: Request) {
     reminder_prefs: ReminderPrefs | null;
   }[];
   const internalNames = [...profiles.map((p) => p.full_name), ...EXTRA_FACILITATORS];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tasks = computeTasks((trainingsData ?? []) as any, internalNames);
+   
+  const tasks = sortByDue([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...computeTasks((trainingsData ?? []) as any, internalNames),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...customToComputed((customData ?? []) as any),
+  ]);
 
   const today = todayISO();
   const from = process.env.REMINDER_FROM ?? "CRM Talentoría <crm@talentoriacursos.com>";

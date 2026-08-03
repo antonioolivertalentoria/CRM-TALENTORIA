@@ -73,6 +73,16 @@ const DEFAULTS: Record<string, Row> = {
   materials: { type: "Otro", name: "", url: "", status: "Pendiente", maker: "", reviewer: "", due_date: null, review_requested_at: null },
   material_comments: { author: "", body: "" },
   profiles: { full_name: "", email: "" },
+  custom_tasks: {
+    title: "",
+    details: "",
+    assignee: "",
+    requested_by: "",
+    client_id: null,
+    due_date: null,
+    status: "Pendiente",
+    completed_at: null,
+  },
 };
 
 function compare(a: any, b: any): number {

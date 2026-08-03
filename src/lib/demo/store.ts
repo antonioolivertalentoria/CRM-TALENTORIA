@@ -13,6 +13,7 @@ export type DemoStore = {
   sessions: any[];
   materials: any[];
   material_comments: any[];
+  custom_tasks: any[];
 };
 
 function iso(daysFromToday: number): string {
@@ -276,6 +277,7 @@ function createInitialData(): DemoStore {
         created_at: now,
       },
     ],
+    custom_tasks: [],
   };
 }
 

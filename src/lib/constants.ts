@@ -81,6 +81,7 @@ export const CHECKLIST_FIELDS: { key: string; label: string; hint: string }[] = 
   { key: "envio_insignias", label: "Insignias", hint: "Enviar insignias digitales (máx. 48h)" },
   { key: "envio_dc3", label: "DC-3", hint: "Formatos DC-3 si el cliente los requiere" },
   { key: "encuesta_participantes", label: "Encuesta de satisfacción", hint: "Aplicar la encuesta a participantes y recabar resultados" },
+  { key: "informe_encuesta", label: "Informe de encuesta", hint: "Entregar al cliente el informe de resultados de la encuesta de satisfacción" },
   { key: "envio_leads", label: "Leads a comercial", hint: "Compartir referidos de la encuesta con comercial" },
   { key: "encuesta_final", label: "Encuesta cliente contratante", hint: "Encuesta de satisfacción del cliente que contrató" },
   { key: "factura", label: "Factura", hint: "Solicitar emisión/envío de factura el mismo día del curso" },

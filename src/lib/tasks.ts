@@ -1,5 +1,5 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
-import type { Client, Material, Session, Training } from "./types";
+import type { Client, CustomTask, Material, Session, Training } from "./types";
 
 /**
  * Motor de tareas: las tareas NO se capturan aparte, se derivan de las
@@ -18,16 +18,20 @@ import type { Client, Material, Session, Training } from "./types";
 
 export type ComputedTask = {
   key: string;
-  kind: "Logística" | "Preparación" | "Material" | "Revisión" | "Entrega" | "Seguimiento";
+  kind: "Logística" | "Preparación" | "Material" | "Revisión" | "Entrega" | "Seguimiento" | "Personal";
   title: string;
+  /** Vacío en tareas personales (no cuelgan de una capacitación). */
   trainingId: string;
   trainingName: string;
   clientName: string;
   assignee: string;
+  requestedBy?: string;
+  details?: string;
   due: string | null;
   complete:
     | { type: "training_field"; field: string; value: string }
-    | { type: "material_status"; materialId: string; nextStatus: string };
+    | { type: "material_status"; materialId: string; nextStatus: string }
+    | { type: "custom_task"; taskId: string };
 };
 
 type TrainingFull = Training & {
@@ -42,6 +46,7 @@ const POST_ITEMS: { field: string; label: string }[] = [
   { field: "envio_insignias", label: "Enviar insignias" },
   { field: "envio_dc3", label: "Enviar DC-3" },
   { field: "encuesta_participantes", label: "Recabar encuesta de satisfacción de participantes" },
+  { field: "informe_encuesta", label: "Entregar informe de la encuesta de satisfacción al cliente" },
   { field: "envio_leads", label: "Compartir leads con comercial" },
   { field: "encuesta_final", label: "Encuesta del cliente contratante" },
 ];
@@ -254,10 +259,43 @@ export function computeTasks(
     }
   }
 
+  return sortByDue(tasks);
+}
+
+export function sortByDue(tasks: ComputedTask[]): ComputedTask[] {
   return tasks.sort((a, b) => {
     if (!a.due && !b.due) return 0;
     if (!a.due) return 1;
     if (!b.due) return -1;
     return a.due < b.due ? -1 : 1;
   });
+}
+
+/**
+ * Convierte las tareas propias (custom_tasks) al mismo formato que las
+ * tareas derivadas, para mostrarlas juntas en "Mis tareas", en los
+ * recordatorios y en el reporte semanal.
+ */
+export function customToComputed(
+  tasks: (CustomTask & { clients?: Pick<Client, "id" | "company"> | null })[],
+  clientNameById: Record<string, string> = {}
+): ComputedTask[] {
+  return tasks
+    .filter((t) => t.status !== "Completada")
+    .map((t) => ({
+      key: `custom-${t.id}`,
+      kind: "Personal" as const,
+      title: t.title,
+      trainingId: "",
+      trainingName: "",
+      clientName:
+        t.clients?.company ||
+        (t.client_id ? clientNameById[t.client_id] : "") ||
+        "Marca blanca / interno",
+      assignee: t.assignee,
+      requestedBy: t.requested_by,
+      details: t.details,
+      due: t.due_date,
+      complete: { type: "custom_task" as const, taskId: t.id },
+    }));
 }

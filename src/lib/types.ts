@@ -1,5 +1,6 @@
 export type Client = {
   id: string;
+  parent_id: string | null;
   company: string;
   razon_social: string;
   rfc: string;
@@ -33,6 +34,7 @@ export type Training = {
   envio_dc3: string;
   envio_leads: string;
   encuesta_participantes: string;
+  informe_encuesta: string;
   encuesta_final: string;
   factura: string;
   seguimiento_20: string;
@@ -108,6 +110,20 @@ export type Profile = {
   full_name: string;
   email: string;
   reminder_prefs?: ReminderPrefs;
+};
+
+export type CustomTask = {
+  id: string;
+  title: string;
+  details: string;
+  assignee: string;
+  requested_by: string;
+  client_id: string | null;
+  due_date: string | null;
+  status: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type TrainingWithClient = Training & { clients: Pick<Client, "id" | "company"> };

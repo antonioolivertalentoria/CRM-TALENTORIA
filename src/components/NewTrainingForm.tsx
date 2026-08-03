@@ -11,10 +11,16 @@ export function NewTrainingForm({
   clientId,
   people = [],
   currentUser = "",
+  recipients,
 }: {
   clientId: string;
   people?: string[];
   currentUser?: string;
+  /**
+   * Para clientes con subclientes: opciones de quién recibe la capacitación
+   * (el propio cliente = venta al público en general, o uno de sus subclientes).
+   */
+  recipients?: { id: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [total, setTotal] = useState(0);
@@ -40,7 +46,23 @@ export function NewTrainingForm({
         </button>
       </div>
       <form action={formAction} className="grid gap-3 sm:grid-cols-2">
-        <input type="hidden" name="client_id" value={clientId} />
+        {recipients && recipients.length > 1 ? (
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-semibold text-slate-500">
+              ¿Quién recibe la capacitación?
+            </label>
+            <select name="client_id" defaultValue={clientId} className={input}>
+              {recipients.map((r) => (
+                <option key={r.id} value={r.id}>{r.label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Elige al subcliente que la recibe, o al propio cliente si la vende al público en general.
+            </p>
+          </div>
+        ) : (
+          <input type="hidden" name="client_id" value={clientId} />
+        )}
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">Nombre corto *</label>
           <input name="short_name" required placeholder="Ej. Comunicación y Feedback" className={input} />
@@ -90,7 +112,7 @@ export function NewTrainingForm({
           )}
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold text-slate-500">Facilitador(a)</label>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Facilitador(a) general</label>
           <input
             name="facilitator"
             list="facilitadores"
@@ -114,11 +136,11 @@ export function NewTrainingForm({
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-500">Hora inicio</label>
+            <label className="mb-1 block text-xs font-semibold text-slate-500">Hora inicio general</label>
             <input name="start_time" type="time" className={input} />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-500">Hora cierre</label>
+            <label className="mb-1 block text-xs font-semibold text-slate-500">Hora cierre general</label>
             <input name="end_time" type="time" className={input} />
           </div>
         </div>
@@ -139,21 +161,44 @@ export function NewTrainingForm({
         {total > 0 && (
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-semibold text-slate-500">
-              Fechas de las sesiones (puedes dejarlas vacías y ponerlas después)
+              Programa de sesiones
             </label>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            <p className="mb-2 text-[11px] text-slate-400">
+              Cada sesión puede tener su propia fecha, horario y facilitador(a). Lo que dejes
+              vacío hereda los datos generales de arriba; todo se puede ajustar después.
+            </p>
+            <div className="space-y-2">
               {Array.from({ length: total }, (_, i) => (
-                <div key={i}>
-                  <span className="mb-0.5 block text-[11px] font-medium text-slate-400">Sesión {i + 1}</span>
-                  <input name={`session_date_${i + 1}`} type="date" className={input} />
+                <div key={i} className="grid grid-cols-2 items-end gap-2 rounded-lg border border-slate-100 bg-slate-50/60 p-2 sm:grid-cols-[auto_1fr_1fr_1fr_1.4fr]">
+                  <span className="pb-2 text-xs font-bold text-brand-navy sm:w-8">S{i + 1}</span>
+                  <div>
+                    <span className="mb-0.5 block text-[11px] font-medium text-slate-400">Fecha</span>
+                    <input name={`session_date_${i + 1}`} type="date" className={input} />
+                  </div>
+                  <div>
+                    <span className="mb-0.5 block text-[11px] font-medium text-slate-400">Inicio</span>
+                    <input name={`session_start_${i + 1}`} type="time" className={input} />
+                  </div>
+                  <div>
+                    <span className="mb-0.5 block text-[11px] font-medium text-slate-400">Cierre</span>
+                    <input name={`session_end_${i + 1}`} type="time" className={input} />
+                  </div>
+                  <div>
+                    <span className="mb-0.5 block text-[11px] font-medium text-slate-400">Facilitador/a</span>
+                    <input
+                      name={`session_facilitator_${i + 1}`}
+                      list="facilitadores"
+                      placeholder="Igual que general"
+                      className={input}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
         <p className="sm:col-span-2 -mt-1 text-xs text-slate-400">
-          Estos datos se aplican a todas las sesiones que se crean automáticamente; después puedes
-          ajustar cada sesión por separado. El número de horas se calcula solo con los horarios.
+          El número de horas de cada sesión se calcula solo con sus horarios.
         </p>
         {state?.error && (
           <p className="sm:col-span-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
