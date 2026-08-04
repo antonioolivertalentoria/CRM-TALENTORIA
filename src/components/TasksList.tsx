@@ -7,9 +7,100 @@ import {
   updateMaterialField,
   completeCustomTaskAction,
   deleteCustomTaskAction,
+  updateCustomTaskAction,
 } from "@/lib/actions";
 import { formatDate } from "@/lib/format";
 import type { ComputedTask } from "@/lib/tasks";
+import type { CustomTask } from "@/lib/types";
+
+const inputCls =
+  "w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
+
+/** Editor inline de una tarea propia (título, detalles, responsable, cliente, fecha). */
+function CustomTaskEditor({
+  task,
+  people,
+  clients,
+  onClose,
+}: {
+  task: CustomTask;
+  people: string[];
+  clients: { id: string; company: string }[];
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [details, setDetails] = useState(task.details);
+  const [assignee, setAssignee] = useState(task.assignee);
+  const [clientId, setClientId] = useState(task.client_id ?? "");
+  const [dueDate, setDueDate] = useState(task.due_date ?? "");
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  const save = () =>
+    startTransition(async () => {
+      const res = await updateCustomTaskAction(task.id, {
+        title,
+        details,
+        assignee,
+        client_id: clientId || null,
+        due_date: dueDate || null,
+      });
+      if (res?.error) setError(res.error);
+      else onClose();
+    });
+
+  return (
+    <div className="mt-2 w-full rounded-lg border border-brand-cyan/30 bg-slate-50/80 p-3">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className="mb-0.5 block text-[11px] font-semibold text-slate-500">¿Qué hay que hacer?</label>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label className="mb-0.5 block text-[11px] font-semibold text-slate-500">Para quién es</label>
+          <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className={inputCls}>
+            <option value="">— Sin asignar</option>
+            {people.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-0.5 block text-[11px] font-semibold text-slate-500">Fecha límite</label>
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-0.5 block text-[11px] font-semibold text-slate-500">Cliente relacionado</label>
+          <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={inputCls}>
+            <option value="">Marca blanca / interno (sin cliente)</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>{c.company}</option>
+            ))}
+          </select>
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-0.5 block text-[11px] font-semibold text-slate-500">Detalles</label>
+          <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={2} className={inputCls + " resize-y"} />
+        </div>
+      </div>
+      {error && (
+        <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-600">{error}</p>
+      )}
+      <div className="mt-2 flex items-center gap-3">
+        <button
+          disabled={pending}
+          onClick={save}
+          className="rounded-lg bg-brand-cyan px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-brand-cyan-dark disabled:opacity-60"
+        >
+          {pending ? "Guardando…" : "Guardar cambios"}
+        </button>
+        <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const KIND_STYLE: Record<string, string> = {
   Logística: "bg-cyan-100 text-cyan-700",
@@ -24,16 +115,19 @@ const KIND_STYLE: Record<string, string> = {
 export function TasksList({
   tasks,
   people,
+  clients = [],
   currentUser,
   today,
 }: {
   tasks: ComputedTask[];
   people: string[];
+  clients?: { id: string; company: string }[];
   currentUser: string;
   today: string;
 }) {
   const [filter, setFilter] = useState<string>(currentUser || "Todas");
   const [done, setDone] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   // Las tareas sin responsable aparecen en el perfil de todos,
@@ -165,9 +259,19 @@ export function TasksList({
                       </span>
 
                       <div className="min-w-48 flex-1">
-                        <p className={`text-sm font-medium text-slate-800 ${isDone ? "line-through" : ""}`}>
-                          {t.title}
-                        </p>
+                        {t.custom && !isDone ? (
+                          <button
+                            onClick={() => setEditing(editing === t.key ? null : t.key)}
+                            title="Abrir y editar la tarea"
+                            className="text-left text-sm font-medium text-slate-800 hover:text-brand-cyan-dark hover:underline"
+                          >
+                            {t.title}
+                          </button>
+                        ) : (
+                          <p className={`text-sm font-medium text-slate-800 ${isDone ? "line-through" : ""}`}>
+                            {t.title}
+                          </p>
+                        )}
                         {t.trainingId ? (
                           <Link
                             href={`/capacitaciones/${t.trainingId}`}
@@ -205,6 +309,18 @@ export function TasksList({
                         {t.due ? formatDate(t.due) : "Sin fecha"}
                       </span>
 
+                      {t.custom && !isDone && (
+                        <button
+                          title="Abrir y editar la tarea"
+                          onClick={() => setEditing(editing === t.key ? null : t.key)}
+                          className="shrink-0 text-slate-300 transition hover:text-brand-cyan-dark"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                          </svg>
+                        </button>
+                      )}
+
                       {t.complete.type === "custom_task" && !isDone && (
                         <button
                           title="Eliminar tarea"
@@ -216,6 +332,15 @@ export function TasksList({
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         </button>
+                      )}
+
+                      {t.custom && editing === t.key && !isDone && (
+                        <CustomTaskEditor
+                          task={t.custom}
+                          people={people}
+                          clients={clients}
+                          onClose={() => setEditing(null)}
+                        />
                       )}
                     </li>
                   );

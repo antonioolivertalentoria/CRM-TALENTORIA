@@ -27,6 +27,8 @@ export type ComputedTask = {
   assignee: string;
   requestedBy?: string;
   details?: string;
+  /** La tarea propia original (solo en tareas kind "Personal"), para editarla. */
+  custom?: CustomTask;
   due: string | null;
   complete:
     | { type: "training_field"; field: string; value: string }
@@ -295,6 +297,7 @@ export function customToComputed(
       assignee: t.assignee,
       requestedBy: t.requested_by,
       details: t.details,
+      custom: t,
       due: t.due_date,
       complete: { type: "custom_task" as const, taskId: t.id },
     }));

@@ -4,6 +4,7 @@ import { todayISO } from "@/lib/format";
 import { EXTRA_FACILITATORS } from "@/lib/constants";
 import { TasksList } from "@/components/TasksList";
 import { NewTaskForm } from "@/components/NewTaskForm";
+import { CompletedCustomTasks } from "@/components/CompletedCustomTasks";
 import { ReminderSettings } from "@/components/ReminderSettings";
 import type { Client, CustomTask, Material, Profile, Session, Training } from "@/lib/types";
 
@@ -16,6 +17,7 @@ export default async function TasksPage() {
     { data: trainingsData },
     { data: profilesData },
     { data: customData },
+    { data: completedData },
     { data: clientsData },
     userRes,
   ] = await Promise.all([
@@ -25,6 +27,12 @@ export default async function TasksPage() {
       .order("created_at"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs").order("full_name"),
     supabase.from("custom_tasks").select("*").eq("status", "Pendiente").order("due_date"),
+    supabase
+      .from("custom_tasks")
+      .select("*, clients(id, company)")
+      .eq("status", "Completada")
+      .order("completed_at", { ascending: false })
+      .limit(30),
     supabase.from("clients").select("id, company").order("company"),
     supabase.auth.getUser(),
   ]);
@@ -36,6 +44,9 @@ export default async function TasksPage() {
   })[];
   const profiles = (profilesData ?? []) as unknown as Profile[];
   const customTasks = (customData ?? []) as unknown as CustomTask[];
+  const completedTasks = (completedData ?? []) as unknown as (CustomTask & {
+    clients?: { id: string; company: string } | null;
+  })[];
   const clients = (clientsData ?? []) as unknown as Pick<Client, "id" | "company">[];
   const clientNameById = Object.fromEntries(clients.map((c) => [c.id, c.company]));
 
@@ -92,9 +103,12 @@ export default async function TasksPage() {
       <TasksList
         tasks={tasks}
         people={profiles.map((p) => p.full_name)}
+        clients={clients}
         currentUser={currentProfile?.full_name ?? "Todas"}
         today={todayISO()}
       />
+
+      <CompletedCustomTasks tasks={completedTasks} />
     </div>
   );
 }

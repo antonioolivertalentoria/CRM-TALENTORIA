@@ -604,6 +604,47 @@ export async function createCustomTaskAction(
   return null;
 }
 
+export async function updateCustomTaskAction(
+  id: string,
+  fields: {
+    title: string;
+    details: string;
+    assignee: string;
+    client_id: string | null;
+    due_date: string | null;
+  }
+): Promise<FormState> {
+  const title = fields.title.trim();
+  if (!title) return { error: "El título no puede quedar vacío." };
+
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("custom_tasks")
+    .update({
+      title,
+      details: fields.details.trim(),
+      assignee: fields.assignee,
+      client_id: fields.client_id || null,
+      due_date: fields.due_date || null,
+    })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function reopenCustomTaskAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("custom_tasks")
+    .update({ status: "Pendiente", completed_at: null })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tareas");
+  return null;
+}
+
 export async function completeCustomTaskAction(id: string): Promise<FormState> {
   const supabase = await createSupabase();
   const { error } = await supabase
