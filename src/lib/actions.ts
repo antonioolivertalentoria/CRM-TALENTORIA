@@ -4,8 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, todayISO } from "@/lib/format";
+import type { TaskAttachment } from "@/lib/types";
 
 export type FormState = { error: string } | null;
+
+// Bucket privado de Supabase Storage donde viven los adjuntos.
+// (En un archivo "use server" no se pueden exportar constantes: el cliente
+// usa el mismo nombre desde @/lib/constants.)
+const ATTACHMENTS_BUCKET = "adjuntos";
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -580,28 +586,32 @@ async function currentUserName(
   return profile?.full_name || user.email || "";
 }
 
+/** Devuelve el id de la tarea creada, para poder adjuntarle archivos enseguida. */
 export async function createCustomTaskAction(
-  _prev: FormState,
   formData: FormData
-): Promise<FormState> {
+): Promise<{ error: string } | { taskId: string }> {
   const title = str(formData, "title");
   if (!title) return { error: "Escribe qué hay que hacer." };
 
   const supabase = await createSupabase();
   const requestedBy = await currentUserName(supabase);
 
-  const { error } = await supabase.from("custom_tasks").insert({
-    title,
-    details: str(formData, "details"),
-    assignee: str(formData, "assignee"),
-    requested_by: requestedBy,
-    client_id: str(formData, "client_id") || null,
-    due_date: str(formData, "due_date") || null,
-  });
+  const { data, error } = await supabase
+    .from("custom_tasks")
+    .insert({
+      title,
+      details: str(formData, "details"),
+      assignee: str(formData, "assignee"),
+      requested_by: requestedBy,
+      client_id: str(formData, "client_id") || null,
+      due_date: str(formData, "due_date") || null,
+    })
+    .select("id")
+    .single();
 
-  if (error) return { error: `No se pudo crear la tarea: ${error.message}` };
+  if (error || !data) return { error: `No se pudo crear la tarea: ${error?.message}` };
   revalidatePath("/tareas");
-  return null;
+  return { taskId: data.id };
 }
 
 export async function updateCustomTaskAction(
@@ -658,6 +668,96 @@ export async function completeCustomTaskAction(id: string): Promise<FormState> {
 
 export async function deleteCustomTaskAction(id: string) {
   const supabase = await createSupabase();
+
+  // Los archivos del bucket no se borran solos con la fila: primero el Storage
+  const { data: files } = await supabase
+    .from("task_attachments")
+    .select("storage_path")
+    .eq("task_id", id);
+  const paths = (files ?? []).map((f: { storage_path: string }) => f.storage_path);
+  if (paths.length > 0) {
+    await supabase.storage.from(ATTACHMENTS_BUCKET).remove(paths);
+  }
+
   await supabase.from("custom_tasks").delete().eq("id", id);
   revalidatePath("/tareas");
+}
+
+// ---------------- Adjuntos de tareas ----------------
+
+/**
+ * Registra en la base un archivo que el navegador ya subió al bucket.
+ * (Los archivos NO pasan por el servidor: las Server Actions tienen un
+ * límite de 1 MB, así que la subida va directa del navegador a Storage.)
+ */
+export async function registerAttachmentAction(fields: {
+  taskId: string;
+  storagePath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}): Promise<{ error: string } | { attachment: TaskAttachment }> {
+  const supabase = await createSupabase();
+  const uploadedBy = await currentUserName(supabase);
+
+  const { data, error } = await supabase
+    .from("task_attachments")
+    .insert({
+      task_id: fields.taskId,
+      storage_path: fields.storagePath,
+      file_name: fields.fileName,
+      file_size: fields.fileSize,
+      mime_type: fields.mimeType,
+      uploaded_by: uploadedBy,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "No se pudo registrar el archivo." };
+  revalidatePath("/tareas");
+  return { attachment: data as TaskAttachment };
+}
+
+export async function deleteAttachmentAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+
+  const { data: file } = await supabase
+    .from("task_attachments")
+    .select("storage_path")
+    .eq("id", id)
+    .single();
+
+  if (file?.storage_path) {
+    await supabase.storage.from(ATTACHMENTS_BUCKET).remove([file.storage_path]);
+  }
+
+  const { error } = await supabase.from("task_attachments").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tareas");
+  return null;
+}
+
+/**
+ * URL temporal (1 hora) para abrir o descargar un adjunto privado.
+ * Se genera al momento de dar clic, no se guarda en ningún lado.
+ */
+export async function getAttachmentUrlAction(
+  id: string
+): Promise<{ url: string } | { error: string }> {
+  const supabase = await createSupabase();
+
+  const { data: file } = await supabase
+    .from("task_attachments")
+    .select("storage_path, file_name")
+    .eq("id", id)
+    .single();
+
+  if (!file) return { error: "No se encontró el archivo." };
+
+  const { data, error } = await supabase.storage
+    .from(ATTACHMENTS_BUCKET)
+    .createSignedUrl(file.storage_path, 3600, { download: file.file_name });
+
+  if (error || !data) return { error: error?.message ?? "No se pudo abrir el archivo." };
+  return { url: data.signedUrl };
 }

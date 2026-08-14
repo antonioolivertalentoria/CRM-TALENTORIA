@@ -22,6 +22,7 @@ todos los usuarios autenticados ven y editan todo.
 |---|---|
 | Frontend + backend | **Next.js 16** (App Router, React Server Components + Server Actions) |
 | Base de datos y login | **Supabase** (Postgres + Auth, con Row Level Security) |
+| Archivos adjuntos | **Supabase Storage** (bucket privado `adjuntos`, URLs firmadas) |
 | Estilos | Tailwind CSS v4 (colores de marca: cyan `#00AEEF`, magenta `#E6007E`, navy `#16345F`) |
 | PDF | `pdf-lib` (generación del reporte semanal en el servidor) |
 | Correo | Resend (recordatorios diarios; dominio verificado: `talentoriacursos.com`) |
@@ -74,7 +75,8 @@ refrescar. No hay API REST propia para los datos (solo los 2 endpoints de `api/`
 clients ──< trainings ──< sessions
    │            └──────< materials ──< material_comments
    └──< clients (subclientes, via parent_id)
-custom_tasks >── clients (opcional)
+custom_tasks ──< task_attachments   (archivos en Supabase Storage)
+   └── clients (opcional)
 profiles (1 por usuario de auth)
 ```
 
@@ -86,10 +88,26 @@ profiles (1 por usuario de auth)
 | `materials` | Materiales del proyecto (links a Drive) | tipo (PPT, manuales…), quién lo hace (`maker`), quién lo revisa (`reviewer`), estado (Pendiente → En proceso → Por revisar → Listo), fecha límite |
 | `material_comments` | Comentarios de revisión | autor, texto |
 | `custom_tasks` | Tareas capturadas a mano | título, detalles, para quién (`assignee`), quién la pidió (`requested_by`), `client_id` opcional (`null` = "marca blanca / interno"), fecha límite, estado (Pendiente/Completada) |
+| `task_attachments` | Archivos adjuntos de una tarea propia | `task_id`, `storage_path` (ruta en el bucket), nombre original, tamaño, tipo, quién lo subió |
 | `profiles` | Perfil por usuario de auth | nombre, correo, `reminder_prefs` (JSON: recordatorios on/off y tipos de tarea) |
 
 Seguridad: **RLS activado en todas las tablas** con política simple: cualquier usuario
 autenticado puede leer y escribir todo (`to authenticated using (true)`). No hay roles.
+
+### Archivos adjuntos (Supabase Storage)
+
+Bucket **privado** `adjuntos`, con tope de **20 MB por archivo**; los archivos viven en
+`tareas/<task_id>/<uuid>-<nombre>`. Detalles importantes del diseño:
+
+- La subida va **directa del navegador a Storage** (con la sesión del usuario, así que aplica
+  RLS). No pasa por el servidor porque las Server Actions de Next.js tienen un límite de 1 MB
+  de payload. La Server Action solo registra los metadatos en `task_attachments`.
+- La descarga usa **URLs firmadas temporales** (1 hora) generadas al momento del clic: sin
+  firma, el archivo devuelve error. Nada es público.
+- Al borrar una tarea o un adjunto, el archivo también se borra del bucket (la cascada de la
+  base solo elimina la fila, no el objeto en Storage).
+- El plan gratuito de Supabase da **1 GB** de almacenamiento total. Para material pesado
+  (videos, PPTs grandes) se sigue usando Google Drive con link.
 
 Las migraciones (`supabase/migration-001…005.sql`) se corren a mano en el SQL Editor del
 dashboard de Supabase; todas son aditivas.

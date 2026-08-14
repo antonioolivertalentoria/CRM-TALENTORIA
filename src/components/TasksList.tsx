@@ -10,8 +10,9 @@ import {
   updateCustomTaskAction,
 } from "@/lib/actions";
 import { formatDate } from "@/lib/format";
+import { TaskAttachments } from "./TaskAttachments";
 import type { ComputedTask } from "@/lib/tasks";
-import type { CustomTask } from "@/lib/types";
+import type { CustomTask, TaskAttachment } from "@/lib/types";
 
 const inputCls =
   "w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
@@ -21,11 +22,13 @@ function CustomTaskEditor({
   task,
   people,
   clients,
+  attachments,
   onClose,
 }: {
   task: CustomTask;
   people: string[];
   clients: { id: string; company: string }[];
+  attachments: TaskAttachment[];
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(task.title);
@@ -82,6 +85,9 @@ function CustomTaskEditor({
           <label className="mb-0.5 block text-[11px] font-semibold text-slate-500">Detalles</label>
           <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={2} className={inputCls + " resize-y"} />
         </div>
+        <div className="sm:col-span-2">
+          <TaskAttachments taskId={task.id} attachments={attachments} />
+        </div>
       </div>
       {error && (
         <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-600">{error}</p>
@@ -116,12 +122,14 @@ export function TasksList({
   tasks,
   people,
   clients = [],
+  attachmentsByTask = {},
   currentUser,
   today,
 }: {
   tasks: ComputedTask[];
   people: string[];
   clients?: { id: string; company: string }[];
+  attachmentsByTask?: Record<string, TaskAttachment[]>;
   currentUser: string;
   today: string;
 }) {
@@ -285,6 +293,11 @@ export function TasksList({
                             {t.clientName}
                             {t.requestedBy ? ` · Pidió: ${t.requestedBy}` : ""}
                             {t.details ? ` — ${t.details}` : ""}
+                            {t.custom && (attachmentsByTask[t.custom.id]?.length ?? 0) > 0 && (
+                              <span className="ml-1.5 font-medium text-brand-cyan-dark">
+                                📎 {attachmentsByTask[t.custom.id].length}
+                              </span>
+                            )}
                           </p>
                         )}
                       </div>
@@ -339,6 +352,7 @@ export function TasksList({
                           task={t.custom}
                           people={people}
                           clients={clients}
+                          attachments={attachmentsByTask[t.custom.id] ?? []}
                           onClose={() => setEditing(null)}
                         />
                       )}

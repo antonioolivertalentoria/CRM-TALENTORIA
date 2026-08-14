@@ -1,5 +1,9 @@
 // Catálogos y colores tipo Monday para todo el CRM.
 
+// Adjuntos: bucket privado de Supabase Storage y tope por archivo.
+export const ATTACHMENTS_BUCKET = "adjuntos";
+export const MAX_ATTACHMENT_MB = 20;
+
 export const TRAINING_STATUSES = [
   "Propuesta",
   "Confirmada",

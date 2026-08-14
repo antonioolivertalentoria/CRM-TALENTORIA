@@ -126,5 +126,16 @@ export type CustomTask = {
   updated_at: string;
 };
 
+export type TaskAttachment = {
+  id: string;
+  task_id: string;
+  storage_path: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  uploaded_by: string;
+  created_at: string;
+};
+
 export type TrainingWithClient = Training & { clients: Pick<Client, "id" | "company"> };
 export type TrainingWithSessions = TrainingWithClient & { sessions: Session[] };

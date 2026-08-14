@@ -6,7 +6,15 @@ import { TasksList } from "@/components/TasksList";
 import { NewTaskForm } from "@/components/NewTaskForm";
 import { CompletedCustomTasks } from "@/components/CompletedCustomTasks";
 import { ReminderSettings } from "@/components/ReminderSettings";
-import type { Client, CustomTask, Material, Profile, Session, Training } from "@/lib/types";
+import type {
+  Client,
+  CustomTask,
+  Material,
+  Profile,
+  Session,
+  TaskAttachment,
+  Training,
+} from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +27,7 @@ export default async function TasksPage() {
     { data: customData },
     { data: completedData },
     { data: clientsData },
+    { data: attachmentsData },
     userRes,
   ] = await Promise.all([
     supabase
@@ -34,6 +43,7 @@ export default async function TasksPage() {
       .order("completed_at", { ascending: false })
       .limit(30),
     supabase.from("clients").select("id, company").order("company"),
+    supabase.from("task_attachments").select("*").order("created_at"),
     supabase.auth.getUser(),
   ]);
 
@@ -48,6 +58,13 @@ export default async function TasksPage() {
     clients?: { id: string; company: string } | null;
   })[];
   const clients = (clientsData ?? []) as unknown as Pick<Client, "id" | "company">[];
+
+  // Adjuntos agrupados por tarea, para pasarlos ya listos a cada fila
+  const attachments = (attachmentsData ?? []) as unknown as TaskAttachment[];
+  const attachmentsByTask: Record<string, TaskAttachment[]> = {};
+  for (const a of attachments) {
+    (attachmentsByTask[a.task_id] ??= []).push(a);
+  }
   const clientNameById = Object.fromEntries(clients.map((c) => [c.id, c.company]));
 
   const currentProfile = profiles.find((p) => p.id === userRes.data.user?.id);
@@ -104,6 +121,7 @@ export default async function TasksPage() {
         tasks={tasks}
         people={profiles.map((p) => p.full_name)}
         clients={clients}
+        attachmentsByTask={attachmentsByTask}
         currentUser={currentProfile?.full_name ?? "Todas"}
         today={todayISO()}
       />
