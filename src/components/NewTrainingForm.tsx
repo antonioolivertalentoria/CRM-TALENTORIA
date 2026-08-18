@@ -13,6 +13,7 @@ export function NewTrainingForm({
   facilitators,
   currentUser = "",
   recipients,
+  kind = "Capacitación",
 }: {
   clientId: string;
   people?: string[];
@@ -24,18 +25,23 @@ export function NewTrainingForm({
    * (el propio cliente = venta al público en general, o uno de sus subclientes).
    */
   recipients?: { id: string; label: string }[];
+  /** "Capacitación" (por defecto) o "Team building" (sin materiales/checklist). */
+  kind?: "Capacitación" | "Team building";
 }) {
   const [open, setOpen] = useState(false);
   const [total, setTotal] = useState(0);
   const [state, formAction, pending] = useActionState(createTrainingAction, null);
+  const isTB = kind === "Team building";
 
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="rounded-lg bg-gradient-to-r from-brand-cyan to-brand-magenta px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:opacity-90"
+        className={`rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:opacity-90 ${
+          isTB ? "bg-gradient-to-r from-brand-magenta to-brand-navy" : "bg-gradient-to-r from-brand-cyan to-brand-magenta"
+        }`}
       >
-        + Nueva capacitación
+        {isTB ? "+ Nuevo team building" : "+ Nueva capacitación"}
       </button>
     );
   }
@@ -43,12 +49,13 @@ export function NewTrainingForm({
   return (
     <div className="w-full rounded-xl border border-brand-cyan/30 bg-white p-5 shadow-md">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="font-bold text-brand-navy">Nueva capacitación</h2>
+        <h2 className="font-bold text-brand-navy">{isTB ? "Nuevo team building" : "Nueva capacitación"}</h2>
         <button onClick={() => setOpen(false)} className="text-sm text-slate-400 hover:text-slate-600">
           Cancelar
         </button>
       </div>
       <form action={formAction} className="grid gap-3 sm:grid-cols-2">
+        <input type="hidden" name="kind" value={kind} />
         {recipients && recipients.length > 1 ? (
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-semibold text-slate-500">
@@ -68,7 +75,7 @@ export function NewTrainingForm({
         )}
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">Nombre corto *</label>
-          <input name="short_name" required placeholder="Ej. Comunicación y Feedback" className={input} />
+          <input name="short_name" required placeholder={isTB ? "Ej. Rally de integración" : "Ej. Comunicación y Feedback"} className={input} />
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">Nombre oficial</label>

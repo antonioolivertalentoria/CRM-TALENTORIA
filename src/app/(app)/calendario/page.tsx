@@ -47,6 +47,11 @@ export default async function CalendarPage() {
         <p className="font-semibold text-brand-navy">
           {s.trainings.short_name}
           <span className="font-normal text-slate-400"> · Sesión {s.session_number}</span>
+          {s.trainings.kind === "Team building" && (
+            <span className="ml-1.5 rounded-full bg-brand-magenta/10 px-2 py-0.5 text-[10px] font-semibold text-brand-magenta">
+              Team building
+            </span>
+          )}
         </p>
         <p className="text-xs text-slate-500">
           {s.trainings.clients?.company}

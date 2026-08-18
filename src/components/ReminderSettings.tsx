@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { updateReminderPrefs } from "@/lib/actions";
 import type { ReminderPrefs } from "@/lib/types";
 
-const ALL_KINDS = ["Logística", "Preparación", "Material", "Revisión", "Entrega", "Seguimiento", "Personal"];
+const ALL_KINDS = ["Logística", "Preparación", "Material", "Revisión", "Entrega", "Seguimiento", "Personal", "Petición"];
 
 /**
  * Preferencias personales de recordatorios por correo:

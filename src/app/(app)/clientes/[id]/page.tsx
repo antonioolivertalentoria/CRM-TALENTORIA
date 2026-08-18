@@ -24,7 +24,14 @@ function TrainingCardLink({ t, subLabel }: { t: TrainingCard; subLabel?: string 
       className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-cyan hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="font-semibold text-brand-navy">{t.short_name}</p>
+        <p className="font-semibold text-brand-navy">
+          {t.short_name}
+          {t.kind === "Team building" && (
+            <span className="ml-1.5 align-middle rounded-full bg-brand-magenta/10 px-2 py-0.5 text-[10px] font-semibold text-brand-magenta">
+              Team building
+            </span>
+          )}
+        </p>
         <span
           className={`${statusColor(t.status)} shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white`}
         >
@@ -106,6 +113,8 @@ export default async function ClientDetailPage({
   );
 
   const trainings = (trainingsData ?? []) as unknown as TrainingCard[];
+  const courses = trainings.filter((t) => t.kind !== "Team building");
+  const teamBuildings = trainings.filter((t) => t.kind === "Team building");
 
   // Capacitaciones que este cliente dio a sus subclientes
   let subTrainings: TrainingCard[] = [];
@@ -155,13 +164,23 @@ export default async function ClientDetailPage({
             </p>
           )}
         </div>
-        <NewTrainingForm
-          clientId={client.id}
-          people={people}
-          facilitators={facilitatorSuggestions(people, catalog)}
-          currentUser={currentUser}
-          recipients={recipients}
-        />
+        <div className="flex flex-wrap gap-2">
+          <NewTrainingForm
+            clientId={client.id}
+            people={people}
+            facilitators={facilitatorSuggestions(people, catalog)}
+            currentUser={currentUser}
+            recipients={recipients}
+          />
+          <NewTrainingForm
+            clientId={client.id}
+            people={people}
+            facilitators={facilitatorSuggestions(people, catalog)}
+            currentUser={currentUser}
+            recipients={recipients}
+            kind="Team building"
+          />
+        </div>
       </header>
 
       <ClientEditForm client={client} parents={parentOptions} parentName={parent?.company ?? ""} />
@@ -201,20 +220,33 @@ export default async function ClientDetailPage({
 
       <section>
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
-          Capacitaciones ({trainings.length})
+          Capacitaciones ({courses.length})
         </h2>
-        {trainings.length === 0 ? (
+        {courses.length === 0 ? (
           <div className="rounded-xl border-2 border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">
             Este cliente aún no tiene capacitaciones. Crea la primera con el botón de arriba.
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {trainings.map((t) => (
+            {courses.map((t) => (
               <TrainingCardLink key={t.id} t={t} />
             ))}
           </div>
         )}
       </section>
+
+      {teamBuildings.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+            Team buildings ({teamBuildings.length})
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {teamBuildings.map((t) => (
+              <TrainingCardLink key={t.id} t={t} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {subTrainings.length > 0 && (
         <section>

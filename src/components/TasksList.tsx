@@ -8,6 +8,7 @@ import {
   completeCustomTaskAction,
   deleteCustomTaskAction,
   updateCustomTaskAction,
+  toggleTrainingRequestAction,
   addTimeEntryAction,
   deleteTimeEntryAction,
   addSubtaskAction,
@@ -399,6 +400,7 @@ const KIND_STYLE: Record<string, string> = {
   Entrega: "bg-amber-100 text-amber-700",
   Seguimiento: "bg-emerald-100 text-emerald-700",
   Personal: "bg-rose-100 text-rose-700",
+  Petición: "bg-orange-100 text-orange-700",
 };
 
 export function TasksList({
@@ -465,6 +467,8 @@ export function TasksList({
           "status",
           task.complete.nextStatus
         );
+      } else if (task.complete.type === "training_request") {
+        await toggleTrainingRequestAction(task.complete.requestId, true);
       } else {
         await completeCustomTaskAction(task.complete.taskId);
       }

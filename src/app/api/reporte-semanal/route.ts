@@ -84,13 +84,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Inicia sesión para descargar el reporte." }, { status: 401 });
   }
 
-  const [{ data: trainingsData }, { data: profilesData }, { data: customData }, facilitators] =
+  const [{ data: trainingsData }, { data: profilesData }, { data: customData }, facilitators, { data: requestsData }] =
     await Promise.all([
       supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
       supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
       supabase.from("custom_tasks").select("*, clients(id, company)").eq("status", "Pendiente"),
       fetchFacilitators(supabase),
+      // Peticiones de team building (tolerante a que falte la migración 011)
+      supabase.from("training_requests").select("*"),
     ]);
+
+  const requestsByTraining: Record<string, unknown[]> = {};
+  for (const r of (requestsData ?? []) as { training_id: string }[]) {
+    (requestsByTraining[r.training_id] ??= []).push(r);
+  }
+  const trainingsWithRequests = ((trainingsData ?? []) as { id: string }[]).map((t) => ({
+    ...t,
+    training_requests: requestsByTraining[t.id] ?? [],
+  }));
 
   const profiles = (profilesData ?? []) as {
     id: string;
@@ -101,7 +112,7 @@ export async function GET(request: Request) {
   const internalNames = internalFacilitatorNames(profiles.map((p) => p.full_name), facilitators);
   const allTasks = sortByDue([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ...computeTasks((trainingsData ?? []) as any, internalNames),
+    ...computeTasks(trainingsWithRequests as any, internalNames),
 
     ...customToComputed((customData ?? []) as (CustomTask & { clients: { id: string; company: string } | null })[]),
   ]);

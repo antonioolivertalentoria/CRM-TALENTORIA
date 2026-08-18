@@ -16,6 +16,7 @@ import type {
   TaskAttachment,
   TimeEntry,
   Training,
+  TrainingRequest,
 } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,7 @@ export default async function TasksPage() {
     facilitators,
     { data: timeData },
     { data: subtasksData },
+    { data: requestsData },
   ] = await Promise.all([
     supabase
       .from("trainings")
@@ -51,17 +53,25 @@ export default async function TasksPage() {
     supabase.from("task_attachments").select("*").order("created_at"),
     supabase.auth.getUser(),
     fetchFacilitators(supabase),
-    // Tolerantes a que las migraciones 008/009 no hayan corrido aún:
+    // Tolerantes a que las migraciones 008/009/011 no hayan corrido aún:
     // si la tabla no existe, data llega null y seguimos con listas vacías.
     supabase.from("time_entries").select("*").order("created_at"),
     supabase.from("subtasks").select("*").order("position"),
+    supabase.from("training_requests").select("*").order("position"),
   ]);
 
-  const trainings = (trainingsData ?? []) as unknown as (Training & {
+  // Peticiones de team building, colgadas de su training para el motor de tareas
+  const allRequests = (requestsData ?? []) as unknown as TrainingRequest[];
+  const requestsByTraining: Record<string, TrainingRequest[]> = {};
+  for (const r of allRequests) {
+    (requestsByTraining[r.training_id] ??= []).push(r);
+  }
+
+  const trainings = ((trainingsData ?? []) as unknown as (Training & {
     clients: Pick<Client, "id" | "company"> | null;
     sessions: Session[];
     materials: Material[];
-  })[];
+  })[]).map((t) => ({ ...t, training_requests: requestsByTraining[t.id] ?? [] }));
   const profiles = (profilesData ?? []) as unknown as Profile[];
   const customTasks = (customData ?? []) as unknown as CustomTask[];
   const completedTasks = (completedData ?? []) as unknown as (CustomTask & {
@@ -124,6 +134,7 @@ export default async function TasksPage() {
                   "Entrega",
                   "Seguimiento",
                   "Personal",
+                  "Petición",
                 ],
               }
             }

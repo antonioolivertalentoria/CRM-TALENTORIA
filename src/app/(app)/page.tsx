@@ -70,9 +70,11 @@ export default async function DashboardPage() {
 
   const trainings = (data ?? []) as unknown as TrainingWithSessions[];
 
+  // El tablero muestra solo capacitaciones; los team buildings tienen su
+  // propio apartado, pero sus sesiones sí entran a "Próximas sesiones".
   const groups = GROUP_ORDER.map((status) => ({
     status,
-    items: trainings.filter((t) => t.status === status),
+    items: trainings.filter((t) => t.status === status && t.kind !== "Team building"),
   })).filter((g) => g.items.length > 0);
 
   // Sesiones de los próximos 14 días
@@ -128,6 +130,11 @@ export default async function DashboardPage() {
                 <p className="truncate text-sm font-semibold text-brand-navy">
                   {s.training.short_name}
                   <span className="font-normal text-slate-400"> · Sesión {s.session_number}</span>
+                  {s.training.kind === "Team building" && (
+                    <span className="ml-1.5 rounded-full bg-brand-magenta/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand-magenta">
+                      TB
+                    </span>
+                  )}
                 </p>
                 <p className="truncate text-xs text-slate-500">
                   {s.training.clients?.company}

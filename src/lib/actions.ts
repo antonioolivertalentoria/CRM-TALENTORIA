@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, todayISO } from "@/lib/format";
-import type { Subtask, TaskAttachment, TimeEntry } from "@/lib/types";
+import type { Subtask, TaskAttachment, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
 
@@ -160,23 +160,42 @@ export async function createTrainingAction(
     .single();
 
   const totalSessions = intOrNull(formData, "total_sessions");
+  // "Capacitación" (por defecto) o "Team building" (sin materiales/checklist)
+  const kind = str(formData, "kind") === "Team building" ? "Team building" : "Capacitación";
+  const isTeamBuilding = kind === "Team building";
 
-  const { data, error } = await supabase
+  const trainingPayload: Record<string, string | number | null> = {
+    client_id: clientId,
+    short_name: shortName,
+    official_name: str(formData, "official_name") || shortName,
+    kind,
+    status: str(formData, "status") || "Propuesta",
+    total_sessions: totalSessions,
+    internal_owner: str(formData, "internal_owner"),
+    client_contact: client?.contact_name ?? "",
+    client_email: client?.email ?? "",
+  };
+
+  let { data, error } = await supabase
     .from("trainings")
-    .insert({
-      client_id: clientId,
-      short_name: shortName,
-      official_name: str(formData, "official_name") || shortName,
-      status: str(formData, "status") || "Propuesta",
-      total_sessions: totalSessions,
-      internal_owner: str(formData, "internal_owner"),
-      client_contact: client?.contact_name ?? "",
-      client_email: client?.email ?? "",
-    })
+    .insert(trainingPayload)
     .select("id")
     .single();
 
-  if (error) return { error: `No se pudo crear la capacitación: ${error.message}` };
+  // Respaldo mientras la migración 011 no esté corrida en la base
+  if (error && !isTeamBuilding && error.message.includes("kind")) {
+    delete trainingPayload.kind;
+    ({ data, error } = await supabase.from("trainings").insert(trainingPayload).select("id").single());
+  }
+
+  if (error || !data)
+    return {
+      error: `No se pudo crear ${isTeamBuilding ? "el team building" : "la capacitación"}: ${error?.message}${
+        isTeamBuilding && error?.message.includes("kind")
+          ? " (falta correr la migración 011 en la base)"
+          : ""
+      }`,
+    };
 
   // Datos que se aplican a todas las sesiones generadas
   const facilitator = str(formData, "facilitator");
@@ -222,83 +241,94 @@ export async function createTrainingAction(
     await supabase.from("sessions").insert(sessions);
   }
 
-  // Materiales estándar del proceso, con fechas según las reglas:
-  // PPT y manuales: 14 días antes si el facilitador es externo, 7 si es
-  // interno; si ya no alcanza, mañana. Manual del participante presencial:
-  // 7 días antes (hay que imprimirlo); online: el día de la última sesión
-  // (se envía digital máx. 48h después).
-  const { data: profs } = await supabase.from("profiles").select("full_name");
-  const names = ((profs ?? []) as { full_name: string }[]).map((p) => p.full_name);
-  const maker = names.find((n) => n.includes("Oliver")) ?? "";
-  const reviewer = names.find((n) => n.includes("Arianna")) ?? "";
+  // Team building: sin materiales estándar (PPT/manuales); sus pendientes
+  // se capturan como peticiones en la página del evento.
+  if (!isTeamBuilding) {
+    // Materiales estándar del proceso, con fechas según las reglas:
+    // PPT y manuales: 14 días antes si el facilitador es externo, 7 si es
+    // interno; si ya no alcanza, mañana. Manual del participante presencial:
+    // 7 días antes (hay que imprimirlo); online: el día de la última sesión
+    // (se envía digital máx. 48h después).
+    const { data: profs } = await supabase.from("profiles").select("full_name");
+    const names = ((profs ?? []) as { full_name: string }[]).map((p) => p.full_name);
+    const maker = names.find((n) => n.includes("Oliver")) ?? "";
+    const reviewer = names.find((n) => n.includes("Arianna")) ?? "";
 
-  const internalNames = [...names, "Carolina García", "Caro"];
-  // Junta el facilitador general y los capturados por sesión: basta uno
-  // externo para aplicar el plazo largo de contenido (14 días).
-  const allFacilitators = [
-    ...new Set(
-      [facilitator, ...Array.from({ length: count }, (_, i) => str(formData, `session_facilitator_${i + 1}`))].filter(Boolean)
-    ),
-  ];
-  const isInternal =
-    allFacilitators.length === 0 ||
-    allFacilitators.every((f) =>
-      internalNames.some((n) => {
-        const a = n.toLowerCase();
-        const b = f.toLowerCase().trim();
-        return a.includes(b) || b.includes(a.split(" ")[0]);
-      })
-    );
-  const contentDays = isInternal ? 7 : 14;
+    const internalNames = [...names, "Carolina García", "Caro"];
+    // Junta el facilitador general y los capturados por sesión: basta uno
+    // externo para aplicar el plazo largo de contenido (14 días).
+    const allFacilitators = [
+      ...new Set(
+        [facilitator, ...Array.from({ length: count }, (_, i) => str(formData, `session_facilitator_${i + 1}`))].filter(Boolean)
+      ),
+    ];
+    const isInternal =
+      allFacilitators.length === 0 ||
+      allFacilitators.every((f) =>
+        internalNames.some((n) => {
+          const a = n.toLowerCase();
+          const b = f.toLowerCase().trim();
+          return a.includes(b) || b.includes(a.split(" ")[0]);
+        })
+      );
+    const contentDays = isInternal ? 7 : 14;
 
-  const today = todayISO();
-  const tomorrow = addDays(today, 1);
-  const sessionDates: string[] = [];
-  for (let i = 1; i <= Math.max(count, 1); i++) {
-    const d = str(formData, `session_date_${i}`);
-    if (d) sessionDates.push(d);
+    const today = todayISO();
+    const tomorrow = addDays(today, 1);
+    const sessionDates: string[] = [];
+    for (let i = 1; i <= Math.max(count, 1); i++) {
+      const d = str(formData, `session_date_${i}`);
+      if (d) sessionDates.push(d);
+    }
+    sessionDates.sort();
+    const firstSessionDate = sessionDates[0] ?? null;
+    const lastSessionDate = sessionDates[sessionDates.length - 1] ?? null;
+
+    const beforeDue = (days: number): string | null => {
+      if (!firstSessionDate) return null;
+      const d = addDays(firstSessionDate, -days);
+      return d < tomorrow ? tomorrow : d;
+    };
+
+    const isPresencial = modality === "Presencial" || modality === "Mixta";
+    const mpDue = isPresencial ? beforeDue(7) : (lastSessionDate ?? null);
+
+    await supabase.from("materials").insert([
+      {
+        training_id: data.id,
+        type: "PPT",
+        name: `PPT ${shortName}`,
+        maker,
+        reviewer,
+        due_date: beforeDue(contentDays),
+      },
+      {
+        training_id: data.id,
+        type: "Manual ejercicios",
+        name: `Manual de ejercicios ${shortName}`,
+        maker,
+        reviewer: "",
+        due_date: beforeDue(contentDays),
+      },
+      {
+        training_id: data.id,
+        type: "Manual participante",
+        name: `Manual del participante ${shortName}`,
+        maker,
+        reviewer: "",
+        due_date: mpDue,
+      },
+    ]);
   }
-  sessionDates.sort();
-  const firstSessionDate = sessionDates[0] ?? null;
-  const lastSessionDate = sessionDates[sessionDates.length - 1] ?? null;
 
-  const beforeDue = (days: number): string | null => {
-    if (!firstSessionDate) return null;
-    const d = addDays(firstSessionDate, -days);
-    return d < tomorrow ? tomorrow : d;
-  };
-
-  const isPresencial = modality === "Presencial" || modality === "Mixta";
-  const mpDue = isPresencial ? beforeDue(7) : (lastSessionDate ?? null);
-
-  await supabase.from("materials").insert([
-    {
-      training_id: data.id,
-      type: "PPT",
-      name: `PPT ${shortName}`,
-      maker,
-      reviewer,
-      due_date: beforeDue(contentDays),
-    },
-    {
-      training_id: data.id,
-      type: "Manual ejercicios",
-      name: `Manual de ejercicios ${shortName}`,
-      maker,
-      reviewer: "",
-      due_date: beforeDue(contentDays),
-    },
-    {
-      training_id: data.id,
-      type: "Manual participante",
-      name: `Manual del participante ${shortName}`,
-      maker,
-      reviewer: "",
-      due_date: mpDue,
-    },
-  ]);
-
-  await logActivity(supabase, "creó", "capacitación", data.id, `creó la capacitación "${shortName}"`);
+  await logActivity(
+    supabase,
+    "creó",
+    isTeamBuilding ? "team building" : "capacitación",
+    data.id,
+    `creó ${isTeamBuilding ? "el team building" : "la capacitación"} "${shortName}"`
+  );
+  if (isTeamBuilding) revalidatePath("/teambuildings");
   revalidatePath("/");
   revalidatePath("/tareas");
   redirect(`/capacitaciones/${data.id}`);
@@ -388,6 +418,21 @@ export async function updateTrainingField(
 export async function deleteTrainingAction(id: string, clientId: string) {
   const supabase = await createSupabase();
   const { data: tr } = await supabase.from("trainings").select("short_name").eq("id", id).maybeSingle();
+
+  // Los archivos del bucket no se borran solos con la fila (team buildings)
+  try {
+    const { data: files } = await supabase
+      .from("training_attachments")
+      .select("storage_path")
+      .eq("training_id", id);
+    const paths = (files ?? []).map((f: { storage_path: string }) => f.storage_path);
+    if (paths.length > 0) {
+      await supabase.storage.from(ATTACHMENTS_BUCKET).remove(paths);
+    }
+  } catch {
+    // tabla aún sin migrar: no hay archivos que borrar
+  }
+
   await supabase.from("trainings").delete().eq("id", id);
   await logActivity(supabase, "eliminó", "capacitación", id, `eliminó la capacitación "${tr?.short_name ?? ""}"`);
   revalidatePath("/");
@@ -1134,4 +1179,181 @@ export async function deleteSubtaskAction(id: string): Promise<FormState> {
   if (error) return { error: error.message };
   revalidatePath("/tareas");
   return null;
+}
+
+// ---------------- Peticiones de team building (migración 011) ----------------
+
+export async function addTrainingRequestAction(fields: {
+  trainingId: string;
+  title: string;
+  assignee: string;
+  dueDate: string | null;
+}): Promise<{ error: string } | { request: TrainingRequest }> {
+  const title = fields.title.trim();
+  if (!title) return { error: "Escribe la petición." };
+
+  const supabase = await createSupabase();
+  const requestedBy = await currentUserName(supabase);
+
+  const { count } = await supabase
+    .from("training_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("training_id", fields.trainingId);
+
+  const { data, error } = await supabase
+    .from("training_requests")
+    .insert({
+      training_id: fields.trainingId,
+      title,
+      assignee: fields.assignee.trim(),
+      requested_by: requestedBy,
+      due_date: fields.dueDate || null,
+      position: count ?? 0,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("training_requests")) {
+      return { error: "Falta correr la migración 011 en la base (team buildings)." };
+    }
+    return { error: error?.message ?? "No se pudo agregar la petición." };
+  }
+
+  await logActivity(
+    supabase,
+    "creó",
+    "petición",
+    data.id,
+    `pidió "${title}"${fields.assignee ? ` a ${fields.assignee.trim()}` : ""}`
+  );
+  revalidatePath(`/capacitaciones/${fields.trainingId}`);
+  revalidatePath("/tareas");
+  revalidatePath("/teambuildings");
+  return { request: data as TrainingRequest };
+}
+
+export async function toggleTrainingRequestAction(
+  id: string,
+  done: boolean
+): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { data: req } = await supabase
+    .from("training_requests")
+    .select("title, training_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  const { error } = await supabase.from("training_requests").update({ done }).eq("id", id);
+  if (error) return { error: error.message };
+
+  if (done && req) {
+    await logActivity(supabase, "completó", "petición", id, `completó la petición "${req.title}"`);
+  }
+  if (req) revalidatePath(`/capacitaciones/${req.training_id}`);
+  revalidatePath("/tareas");
+  revalidatePath("/teambuildings");
+  return null;
+}
+
+export async function deleteTrainingRequestAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { data: req } = await supabase
+    .from("training_requests")
+    .select("title, training_id")
+    .eq("id", id)
+    .maybeSingle();
+  const { error } = await supabase.from("training_requests").delete().eq("id", id);
+  if (error) return { error: error.message };
+  await logActivity(supabase, "eliminó", "petición", id, `eliminó la petición "${req?.title ?? ""}"`);
+  if (req) revalidatePath(`/capacitaciones/${req.training_id}`);
+  revalidatePath("/tareas");
+  revalidatePath("/teambuildings");
+  return null;
+}
+
+// ---------------- Archivos de team building (migración 011) ----------------
+
+/** Igual que los adjuntos de tareas: el navegador sube directo a Storage
+ *  (tope de 1 MB en Server Actions) y aquí solo se registran los metadatos. */
+export async function registerTrainingAttachmentAction(fields: {
+  trainingId: string;
+  storagePath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+}): Promise<{ error: string } | { attachment: TrainingAttachment }> {
+  const supabase = await createSupabase();
+  const uploadedBy = await currentUserName(supabase);
+
+  const { data, error } = await supabase
+    .from("training_attachments")
+    .insert({
+      training_id: fields.trainingId,
+      storage_path: fields.storagePath,
+      file_name: fields.fileName,
+      file_size: fields.fileSize,
+      mime_type: fields.mimeType,
+      uploaded_by: uploadedBy,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("training_attachments")) {
+      return { error: "Falta correr la migración 011 en la base (team buildings)." };
+    }
+    return { error: error?.message ?? "No se pudo registrar el archivo." };
+  }
+
+  await logActivity(
+    supabase,
+    "subió",
+    "team building",
+    fields.trainingId,
+    `subió el archivo "${fields.fileName}"`
+  );
+  revalidatePath(`/capacitaciones/${fields.trainingId}`);
+  return { attachment: data as TrainingAttachment };
+}
+
+export async function deleteTrainingAttachmentAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+
+  const { data: file } = await supabase
+    .from("training_attachments")
+    .select("storage_path, training_id")
+    .eq("id", id)
+    .single();
+
+  if (file?.storage_path) {
+    await supabase.storage.from(ATTACHMENTS_BUCKET).remove([file.storage_path]);
+  }
+
+  const { error } = await supabase.from("training_attachments").delete().eq("id", id);
+  if (error) return { error: error.message };
+  if (file) revalidatePath(`/capacitaciones/${file.training_id}`);
+  return null;
+}
+
+/** URL temporal (1 hora) para abrir o descargar un archivo del team building. */
+export async function getTrainingAttachmentUrlAction(
+  id: string
+): Promise<{ url: string } | { error: string }> {
+  const supabase = await createSupabase();
+
+  const { data: file } = await supabase
+    .from("training_attachments")
+    .select("storage_path, file_name")
+    .eq("id", id)
+    .single();
+
+  if (!file) return { error: "No se encontró el archivo." };
+
+  const { data, error } = await supabase.storage
+    .from(ATTACHMENTS_BUCKET)
+    .createSignedUrl(file.storage_path, 3600, { download: file.file_name });
+
+  if (error || !data) return { error: error?.message ?? "No se pudo abrir el archivo." };
+  return { url: data.signedUrl };
 }

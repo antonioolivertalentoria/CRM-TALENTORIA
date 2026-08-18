@@ -17,6 +17,8 @@ export type Training = {
   client_id: string;
   short_name: string;
   official_name: string;
+  /** "Capacitación" (por defecto) o "Team building" (migración 011). */
+  kind?: string;
   status: string;
   total_sessions: number | null;
   internal_owner: string;
@@ -166,6 +168,29 @@ export type Subtask = {
   due_date: string | null;
   done: boolean;
   position: number;
+  created_at: string;
+};
+
+export type TrainingRequest = {
+  id: string;
+  training_id: string;
+  title: string;
+  assignee: string;
+  requested_by: string;
+  due_date: string | null;
+  done: boolean;
+  position: number;
+  created_at: string;
+};
+
+export type TrainingAttachment = {
+  id: string;
+  training_id: string;
+  storage_path: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  uploaded_by: string;
   created_at: string;
 };
 

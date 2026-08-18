@@ -17,7 +17,9 @@ import { DeleteTrainingButton } from "@/components/DeleteTrainingButton";
 import { LogisticsMessage } from "@/components/LogisticsMessage";
 import { OwnerSelect } from "@/components/OwnerSelect";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
-import type { Client, Training, Session, Material, MaterialComment, Profile } from "@/lib/types";
+import { RequestsSection } from "@/components/RequestsSection";
+import { TrainingAttachments } from "@/components/TrainingAttachments";
+import type { Client, Training, Session, Material, MaterialComment, Profile, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +51,15 @@ export default async function TrainingDetailPage({
     a.created_at < b.created_at ? -1 : 1
   );
 
-  const [{ data: profilesData }, { data: commentsData }, catalog] = await Promise.all([
+  const isTeamBuilding = training.kind === "Team building";
+
+  const [
+    { data: profilesData },
+    { data: commentsData },
+    catalog,
+    { data: requestsData },
+    { data: tbFilesData },
+  ] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email").order("full_name"),
     materials.length > 0
       ? supabase
@@ -59,7 +69,17 @@ export default async function TrainingDetailPage({
           .order("created_at")
       : Promise.resolve({ data: [] }),
     fetchFacilitators(supabase),
+    // Solo aplican a team buildings; se piden aparte para tolerar que la
+    // migración 011 no haya corrido (el error solo deja data en null).
+    isTeamBuilding
+      ? supabase.from("training_requests").select("*").eq("training_id", id).order("position")
+      : Promise.resolve({ data: [] }),
+    isTeamBuilding
+      ? supabase.from("training_attachments").select("*").eq("training_id", id).order("created_at")
+      : Promise.resolve({ data: [] }),
   ]);
+  const requests = (requestsData ?? []) as unknown as TrainingRequest[];
+  const tbFiles = (tbFilesData ?? []) as unknown as TrainingAttachment[];
   const profiles = (profilesData ?? []) as unknown as Profile[];
   const people = profiles.map((p) => p.full_name);
   const comments = (commentsData ?? []) as unknown as MaterialComment[];
@@ -104,6 +124,11 @@ export default async function TrainingDetailPage({
             {training.clients.company}
           </Link>{" "}
           / <span className="text-slate-600">{training.short_name}</span>
+          {isTeamBuilding && (
+            <span className="ml-2 rounded-full bg-brand-magenta/10 px-2 py-0.5 text-[11px] font-semibold text-brand-magenta">
+              Team building
+            </span>
+          )}
           {parentClient && (
             <span className="ml-2 rounded-full bg-brand-cyan/10 px-2 py-0.5 text-[11px] font-semibold text-brand-cyan-dark">
               vía {parentClient.company}
@@ -167,15 +192,21 @@ export default async function TrainingDetailPage({
 
         {/* Links siempre a la mano */}
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-slate-100 pt-4">
-          <LogisticsMessage
-            trainingId={training.id}
-            modalities={sessions.map((s) => s.modality)}
-            whatsapp={training.clients.whatsapp}
-            status={training.mensaje_logistica}
-          />
+          {!isTeamBuilding && (
+            <LogisticsMessage
+              trainingId={training.id}
+              modalities={sessions.map((s) => s.modality)}
+              whatsapp={training.clients.whatsapp}
+              status={training.mensaje_logistica}
+            />
+          )}
           <LinkChip label="Carpeta Drive" url={training.drive_folder_url} onSave={save("drive_folder_url")} />
-          <LinkChip label="Temario" url={training.temario_url} onSave={save("temario_url")} />
-          <LinkChip label="Lista de participantes" url={training.participants_url} onSave={save("participants_url")} />
+          {!isTeamBuilding && (
+            <>
+              <LinkChip label="Temario" url={training.temario_url} onSave={save("temario_url")} />
+              <LinkChip label="Lista de participantes" url={training.participants_url} onSave={save("participants_url")} />
+            </>
+          )}
           <LinkChip label="Grupo WhatsApp" url={training.whatsapp_group} onSave={save("whatsapp_group")} />
         </div>
       </header>
@@ -194,10 +225,12 @@ export default async function TrainingDetailPage({
             <p className="text-xs font-semibold text-slate-400">Total de sesiones</p>
             <EditableField value={training.total_sessions?.toString() ?? ""} type="number" onSave={save("total_sessions")} />
           </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400">Fecha límite de materiales</p>
-            <EditableField value={training.materials_deadline ?? ""} type="date" onSave={save("materials_deadline")} />
-          </div>
+          {!isTeamBuilding && (
+            <div>
+              <p className="text-xs font-semibold text-slate-400">Fecha límite de materiales</p>
+              <EditableField value={training.materials_deadline ?? ""} type="date" onSave={save("materials_deadline")} />
+            </div>
+          )}
           <div>
             <p className="text-xs font-semibold text-slate-400">Contacto del cliente</p>
             <EditableField value={training.client_contact} onSave={save("client_contact")} placeholder="Nombre del contacto" />
@@ -209,30 +242,38 @@ export default async function TrainingDetailPage({
         </div>
       </section>
 
-      {/* Respuestas logísticas del cliente */}
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-          Información logística confirmada
-        </h2>
-        <p className="mb-3 mt-0.5 text-xs text-slate-400">
-          Pega aquí las respuestas del cliente al mensaje de logística (vestimenta, accesos,
-          sala, participantes, estacionamiento…). Se respetan los saltos de línea y viñetas.
-        </p>
-        <EditableField
-          value={training.logistics_info}
-          onSave={save("logistics_info")}
-          multiline
-          rows={10}
-          placeholder={"Ejemplo:\n• Vestimenta: casual, sin calzado de seguridad.\n• Acceso: registro en recepción con INE.\n• Sala: disponible 30 min antes, acomodo en herradura.\n• WiFi y proyector confirmados…"}
-        />
-      </section>
+      {!isTeamBuilding && (
+        <>
+        {/* Respuestas logísticas del cliente */}
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+            Información logística confirmada
+          </h2>
+          <p className="mb-3 mt-0.5 text-xs text-slate-400">
+            Pega aquí las respuestas del cliente al mensaje de logística (vestimenta, accesos,
+            sala, participantes, estacionamiento…). Se respetan los saltos de línea y viñetas.
+          </p>
+          <EditableField
+            value={training.logistics_info}
+            onSave={save("logistics_info")}
+            multiline
+            rows={10}
+            placeholder={"Ejemplo:\n• Vestimenta: casual, sin calzado de seguridad.\n• Acceso: registro en recepción con INE.\n• Sala: disponible 30 min antes, acomodo en herradura.\n• WiFi y proyector confirmados…"}
+          />
+        </section>
 
-      <MaterialsSection
-        trainingId={training.id}
-        materials={materials}
-        comments={comments}
-        people={people}
-      />
+        <MaterialsSection
+          trainingId={training.id}
+          materials={materials}
+          comments={comments}
+          people={people}
+        />
+        </>
+      )}
+
+      {isTeamBuilding && (
+        <RequestsSection trainingId={training.id} requests={requests} people={people} />
+      )}
 
       <SessionsTable
         trainingId={training.id}
@@ -241,7 +282,10 @@ export default async function TrainingDetailPage({
         facilitators={facilitatorSuggestions(people, catalog)}
       />
 
+      {isTeamBuilding && <TrainingAttachments trainingId={training.id} attachments={tbFiles} />}
+
       {/* Checklist post-capacitación */}
+      {!isTeamBuilding && (
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
           Entregas y seguimiento
@@ -270,6 +314,7 @@ export default async function TrainingDetailPage({
           ))}
         </div>
       </section>
+      )}
 
       {/* Notas */}
       <section className="grid gap-4 lg:grid-cols-3">

@@ -1,5 +1,5 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
-import type { Client, CustomTask, Material, Session, Training } from "./types";
+import type { Client, CustomTask, Material, Session, Training, TrainingRequest } from "./types";
 
 /**
  * Motor de tareas: las tareas NO se capturan aparte, se derivan de las
@@ -18,7 +18,7 @@ import type { Client, CustomTask, Material, Session, Training } from "./types";
 
 export type ComputedTask = {
   key: string;
-  kind: "Logística" | "Preparación" | "Material" | "Revisión" | "Entrega" | "Seguimiento" | "Personal";
+  kind: "Logística" | "Preparación" | "Material" | "Revisión" | "Entrega" | "Seguimiento" | "Personal" | "Petición";
   title: string;
   /** Vacío en tareas personales (no cuelgan de una capacitación). */
   trainingId: string;
@@ -33,13 +33,16 @@ export type ComputedTask = {
   complete:
     | { type: "training_field"; field: string; value: string }
     | { type: "material_status"; materialId: string; nextStatus: string }
-    | { type: "custom_task"; taskId: string };
+    | { type: "custom_task"; taskId: string }
+    | { type: "training_request"; requestId: string };
 };
 
 type TrainingFull = Training & {
   clients: Pick<Client, "id" | "company"> | null;
   sessions: Session[];
   materials: Material[];
+  /** Peticiones de team building (solo llega si el select las incluye). */
+  training_requests?: TrainingRequest[];
 };
 
 const POST_ITEMS: { field: string; label: string }[] = [
@@ -91,6 +94,28 @@ export function computeTasks(
     if (t.status === "Cancelada") continue;
 
     const clientName = t.clients?.company ?? "";
+
+    // Team buildings: sin checklist/materiales/logística. Sus tareas son
+    // las peticiones pendientes (gafetes, tarjetas, lo que pida el cliente).
+    if (t.kind === "Team building") {
+      for (const r of t.training_requests ?? []) {
+        if (r.done) continue;
+        tasks.push({
+          key: `req-${r.id}`,
+          kind: "Petición",
+          title: r.title,
+          trainingId: t.id,
+          trainingName: t.short_name,
+          clientName,
+          assignee: r.assignee || t.internal_owner,
+          requestedBy: r.requested_by,
+          due: r.due_date,
+          complete: { type: "training_request", requestId: r.id },
+        });
+      }
+      continue;
+    }
+
     const dates = activeDates(t.sessions);
     const firstDate = dates[0] ?? null;
     const lastDate = dates[dates.length - 1] ?? null;

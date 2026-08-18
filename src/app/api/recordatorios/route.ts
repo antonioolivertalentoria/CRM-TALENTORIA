@@ -58,12 +58,24 @@ export async function GET(request: Request) {
     { data: profilesData, error: profilesError },
     { data: customData },
     facilitators,
+    { data: requestsData },
   ] = await Promise.all([
     supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
     supabase.from("custom_tasks").select("*, clients(id, company)").eq("status", "Pendiente"),
     fetchFacilitators(supabase),
+    // Peticiones de team building (tolerante a que falte la migración 011)
+    supabase.from("training_requests").select("*"),
   ]);
+
+  const requestsByTraining: Record<string, unknown[]> = {};
+  for (const r of (requestsData ?? []) as { training_id: string }[]) {
+    (requestsByTraining[r.training_id] ??= []).push(r);
+  }
+  const trainingsWithRequests = ((trainingsData ?? []) as { id: string }[]).map((t) => ({
+    ...t,
+    training_requests: requestsByTraining[t.id] ?? [],
+  }));
 
   if (trainingsError || profilesError) {
     return NextResponse.json({
@@ -88,7 +100,7 @@ export async function GET(request: Request) {
    
   const tasks = sortByDue([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ...computeTasks((trainingsData ?? []) as any, internalNames),
+    ...computeTasks(trainingsWithRequests as any, internalNames),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...customToComputed((customData ?? []) as any),
   ]);
