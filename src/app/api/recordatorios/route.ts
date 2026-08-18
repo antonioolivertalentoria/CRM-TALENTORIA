@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
 import { todayISO, formatDate } from "@/lib/format";
-import { EXTRA_FACILITATORS } from "@/lib/constants";
+import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import type { ReminderPrefs } from "@/lib/types";
 
 /**
@@ -43,14 +43,26 @@ export async function GET(request: Request) {
     auth: { persistSession: false },
   });
 
+  // Mantenimiento del registro de actividad: fuera los eventos de más de
+  // 90 días, para que la tabla nunca crezca sin control. Best effort: si
+  // la tabla no existe todavía, los recordatorios siguen su curso.
+  try {
+    const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    await supabase.from("activity_log").delete().lt("created_at", cutoff);
+  } catch {
+    // sin consecuencias
+  }
+
   const [
     { data: trainingsData, error: trainingsError },
     { data: profilesData, error: profilesError },
     { data: customData },
+    facilitators,
   ] = await Promise.all([
     supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
     supabase.from("custom_tasks").select("*, clients(id, company)").eq("status", "Pendiente"),
+    fetchFacilitators(supabase),
   ]);
 
   if (trainingsError || profilesError) {
@@ -72,7 +84,7 @@ export async function GET(request: Request) {
     email: string;
     reminder_prefs: ReminderPrefs | null;
   }[];
-  const internalNames = [...profiles.map((p) => p.full_name), ...EXTRA_FACILITATORS];
+  const internalNames = internalFacilitatorNames(profiles.map((p) => p.full_name), facilitators);
    
   const tasks = sortByDue([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

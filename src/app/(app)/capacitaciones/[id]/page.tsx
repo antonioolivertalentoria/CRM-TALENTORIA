@@ -16,6 +16,7 @@ import { MaterialsSection } from "@/components/MaterialsSection";
 import { DeleteTrainingButton } from "@/components/DeleteTrainingButton";
 import { LogisticsMessage } from "@/components/LogisticsMessage";
 import { OwnerSelect } from "@/components/OwnerSelect";
+import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import type { Client, Training, Session, Material, MaterialComment, Profile } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +49,7 @@ export default async function TrainingDetailPage({
     a.created_at < b.created_at ? -1 : 1
   );
 
-  const [{ data: profilesData }, { data: commentsData }] = await Promise.all([
+  const [{ data: profilesData }, { data: commentsData }, catalog] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email").order("full_name"),
     materials.length > 0
       ? supabase
@@ -57,6 +58,7 @@ export default async function TrainingDetailPage({
           .in("material_id", materials.map((m) => m.id))
           .order("created_at")
       : Promise.resolve({ data: [] }),
+    fetchFacilitators(supabase),
   ]);
   const profiles = (profilesData ?? []) as unknown as Profile[];
   const people = profiles.map((p) => p.full_name);
@@ -232,7 +234,12 @@ export default async function TrainingDetailPage({
         people={people}
       />
 
-      <SessionsTable trainingId={training.id} sessions={sessions} people={people} />
+      <SessionsTable
+        trainingId={training.id}
+        sessions={sessions}
+        people={people}
+        facilitators={facilitatorSuggestions(people, catalog)}
+      />
 
       {/* Checklist post-capacitación */}
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

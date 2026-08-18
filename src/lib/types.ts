@@ -122,6 +122,8 @@ export type CustomTask = {
   due_date: string | null;
   status: string;
   completed_at: string | null;
+  /** Al completarse, avisar por correo a quien la pidió (migración 009). */
+  notify_on_complete?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -134,6 +136,46 @@ export type TaskAttachment = {
   file_size: number;
   mime_type: string;
   uploaded_by: string;
+  /** "insumo" (material para trabajar) o "entregable" (resultado). */
+  category?: string;
+  created_at: string;
+};
+
+export type Facilitator = {
+  id: string;
+  name: string;
+  is_internal: boolean;
+  active: boolean;
+  created_at: string;
+};
+
+export type TimeEntry = {
+  id: string;
+  task_key: string;
+  task_title: string;
+  person: string;
+  minutes: number;
+  entry_date: string;
+  created_at: string;
+};
+
+export type Subtask = {
+  id: string;
+  task_id: string;
+  title: string;
+  due_date: string | null;
+  done: boolean;
+  position: number;
+  created_at: string;
+};
+
+export type ActivityEvent = {
+  id: string;
+  actor: string;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  summary: string;
   created_at: string;
 };
 

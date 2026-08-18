@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ClientEditForm } from "@/components/ClientEditForm";
 import { NewClientForm } from "@/components/NewClientForm";
 import { NewTrainingForm } from "@/components/NewTrainingForm";
+import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { statusColor } from "@/lib/constants";
 import type { Client, Training, Session } from "@/lib/types";
 
@@ -73,6 +74,7 @@ export default async function ClientDetailPage({
     { data: profilesData },
     { data: allClientsData },
     userRes,
+    catalog,
   ] = await Promise.all([
     supabase
       .from("trainings")
@@ -82,6 +84,7 @@ export default async function ClientDetailPage({
     supabase.from("profiles").select("id, full_name").order("full_name"),
     supabase.from("clients").select("id, company, parent_id").order("company"),
     supabase.auth.getUser(),
+    fetchFacilitators(supabase),
   ]);
   const profiles = (profilesData ?? []) as { id: string; full_name: string }[];
   const people = profiles.map((p) => p.full_name);
@@ -155,6 +158,7 @@ export default async function ClientDetailPage({
         <NewTrainingForm
           clientId={client.id}
           people={people}
+          facilitators={facilitatorSuggestions(people, catalog)}
           currentUser={currentUser}
           recipients={recipients}
         />

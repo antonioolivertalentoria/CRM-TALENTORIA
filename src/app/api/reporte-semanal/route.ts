@@ -3,7 +3,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf
 import { createClient } from "@/lib/supabase/server";
 import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
 import { addDays, formatDate, todayISO } from "@/lib/format";
-import { EXTRA_FACILITATORS } from "@/lib/constants";
+import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import type { CustomTask, ReminderPrefs } from "@/lib/types";
 
 /**
@@ -75,7 +75,7 @@ function wrap(text: string, font: PDFFont, size: number, maxWidth: number): stri
   return lines;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -84,11 +84,12 @@ export async function GET() {
     return NextResponse.json({ error: "Inicia sesión para descargar el reporte." }, { status: 401 });
   }
 
-  const [{ data: trainingsData }, { data: profilesData }, { data: customData }] =
+  const [{ data: trainingsData }, { data: profilesData }, { data: customData }, facilitators] =
     await Promise.all([
       supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
       supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
       supabase.from("custom_tasks").select("*, clients(id, company)").eq("status", "Pendiente"),
+      fetchFacilitators(supabase),
     ]);
 
   const profiles = (profilesData ?? []) as {
@@ -97,13 +98,23 @@ export async function GET() {
     email: string;
     reminder_prefs: ReminderPrefs | null;
   }[];
-  const internalNames = [...profiles.map((p) => p.full_name), ...EXTRA_FACILITATORS];
-  const tasks = sortByDue([
+  const internalNames = internalFacilitatorNames(profiles.map((p) => p.full_name), facilitators);
+  const allTasks = sortByDue([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...computeTasks((trainingsData ?? []) as any, internalNames),
-     
+
     ...customToComputed((customData ?? []) as (CustomTask & { clients: { id: string; company: string } | null })[]),
   ]);
+
+  // El reporte respeta el filtro de persona seleccionado en "Mis tareas":
+  // /api/reporte-semanal?persona=Arianna → solo sus tareas (y las sin
+  // asignar, que aparecen en el perfil de todos). Sin parámetro o con
+  // "Todas", el reporte trae todo, como antes.
+  const persona = new URL(request.url).searchParams.get("persona")?.trim() ?? "";
+  const filtered = persona && persona !== "Todas";
+  const tasks = filtered
+    ? allTasks.filter((t) => t.assignee === persona || !t.assignee)
+    : allTasks;
 
   const today = todayISO();
   const week = businessWindow(today);
@@ -142,7 +153,7 @@ export async function GET() {
   page.drawRectangle({ x: 0, y: pageSize[1] - 8, width: pageSize[0] / 2, height: 8, color: CYAN });
   page.drawRectangle({ x: pageSize[0] / 2, y: pageSize[1] - 8, width: pageSize[0] / 2, height: 8, color: MAGENTA });
 
-  page.drawText("Reporte semanal de tareas — Talentoría", {
+  page.drawText(clean(filtered ? `Reporte semanal de ${persona} — Talentoría` : "Reporte semanal de tareas — Talentoría"), {
     x: margin, y: y - 10, size: 18, font: bold, color: NAVY,
   });
   y -= 32;
@@ -229,7 +240,7 @@ export async function GET() {
   return new NextResponse(Buffer.from(bytes), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="reporte-semanal-${today}.pdf"`,
+      "Content-Disposition": `attachment; filename="reporte-semanal-${filtered ? `${persona.toLowerCase().replace(/\s+/g, "-")}-` : ""}${today}.pdf"`,
       "Cache-Control": "no-store",
     },
   });

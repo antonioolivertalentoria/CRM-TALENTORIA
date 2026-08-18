@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, todayISO } from "@/lib/format";
-import type { TaskAttachment } from "@/lib/types";
+import type { Subtask, TaskAttachment, TimeEntry } from "@/lib/types";
 
 export type FormState = { error: string } | null;
 
@@ -31,6 +31,32 @@ function hoursBetween(start: string | null, end: string | null): number | null {
   if ([sh, sm, eh, em].some(Number.isNaN)) return null;
   const diff = eh * 60 + em - (sh * 60 + sm);
   return diff > 0 ? Math.round((diff / 60) * 100) / 100 : null;
+}
+
+/**
+ * Registro de actividad (migración 010): apunta quién hizo qué y cuándo,
+ * para el panel "Actividad reciente". Es "best effort": si la tabla aún
+ * no existe o el insert falla, la acción original sigue como si nada.
+ */
+async function logActivity(
+  supabase: Awaited<ReturnType<typeof createSupabase>>,
+  action: string,
+  entityType: string,
+  entityId: string,
+  summary: string
+) {
+  try {
+    const actor = await currentUserName(supabase);
+    await supabase.from("activity_log").insert({
+      actor,
+      action,
+      entity_type: entityType,
+      entity_id: entityId,
+      summary,
+    });
+  } catch {
+    // Nunca debe tumbar la acción que lo llamó.
+  }
 }
 
 // ---------------- Clientes ----------------
@@ -66,6 +92,7 @@ export async function createClientAction(
   }
 
   if (error || !data) return { error: `No se pudo crear el cliente: ${error?.message}` };
+  await logActivity(supabase, "creó", "cliente", data.id, `creó el cliente "${company}"`);
   revalidatePath("/clientes");
   redirect(`/clientes/${data.id}`);
 }
@@ -105,7 +132,9 @@ export async function updateClientAction(
 
 export async function deleteClientAction(id: string) {
   const supabase = await createSupabase();
+  const { data: client } = await supabase.from("clients").select("company").eq("id", id).maybeSingle();
   await supabase.from("clients").delete().eq("id", id);
+  await logActivity(supabase, "eliminó", "cliente", id, `eliminó el cliente "${client?.company ?? ""}"`);
   revalidatePath("/clientes");
   redirect("/clientes");
 }
@@ -269,6 +298,7 @@ export async function createTrainingAction(
     },
   ]);
 
+  await logActivity(supabase, "creó", "capacitación", data.id, `creó la capacitación "${shortName}"`);
   revalidatePath("/");
   revalidatePath("/tareas");
   redirect(`/capacitaciones/${data.id}`);
@@ -332,6 +362,23 @@ export async function updateTrainingField(
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  // Al registro de actividad solo van los cambios con peso: estado general
+  // y checklist (completar un punto del checklist ES completar una tarea).
+  if (field === "status" || value === "Listo" || value === "No aplica") {
+    const { data: tr } = await supabase
+      .from("trainings")
+      .select("short_name")
+      .eq("id", id)
+      .maybeSingle();
+    const name = tr?.short_name ?? "";
+    const summary =
+      field === "status"
+        ? `cambió el estado de "${name}" a ${value}`
+        : `marcó "${field.replaceAll("_", " ")}" como ${value} en "${name}"`;
+    await logActivity(supabase, field === "status" ? "cambió" : "completó", "capacitación", id, summary);
+  }
+
   revalidatePath(`/capacitaciones/${id}`);
   revalidatePath("/");
   revalidatePath("/tareas");
@@ -340,7 +387,9 @@ export async function updateTrainingField(
 
 export async function deleteTrainingAction(id: string, clientId: string) {
   const supabase = await createSupabase();
+  const { data: tr } = await supabase.from("trainings").select("short_name").eq("id", id).maybeSingle();
   await supabase.from("trainings").delete().eq("id", id);
+  await logActivity(supabase, "eliminó", "capacitación", id, `eliminó la capacitación "${tr?.short_name ?? ""}"`);
   revalidatePath("/");
   redirect(`/clientes/${clientId}`);
 }
@@ -351,17 +400,28 @@ export async function addSessionAction(trainingId: string) {
   const supabase = await createSupabase();
   const { data: last } = await supabase
     .from("sessions")
-    .select("session_number")
+    .select("session_number, facilitator, start_time, end_time, duration_hours, modality, platform, session_link")
     .eq("training_id", trainingId)
     .order("session_number", { ascending: false })
     .limit(1)
     .maybeSingle();
 
+  // La sesión nueva hereda horario, facilitador, modalidad, plataforma y
+  // liga de la última sesión (la fecha no: esa siempre se captura).
+  const nextNumber = (last?.session_number ?? 0) + 1;
   await supabase.from("sessions").insert({
     training_id: trainingId,
-    session_number: (last?.session_number ?? 0) + 1,
+    session_number: nextNumber,
     status: "Pendiente",
+    facilitator: last?.facilitator ?? "",
+    start_time: last?.start_time ?? null,
+    end_time: last?.end_time ?? null,
+    duration_hours: last?.duration_hours ?? null,
+    modality: last?.modality ?? "",
+    platform: last?.platform ?? "",
+    session_link: last?.session_link ?? "",
   });
+  await logActivity(supabase, "creó", "sesión", trainingId, `agregó la sesión ${nextNumber}`);
   revalidatePath(`/capacitaciones/${trainingId}`);
 }
 
@@ -436,6 +496,11 @@ export async function updateSessionField(
     }
   }
 
+  if (field === "status") {
+    const { data: s } = await supabase.from("sessions").select("session_number").eq("id", id).maybeSingle();
+    await logActivity(supabase, "cambió", "sesión", trainingId, `puso la sesión ${s?.session_number ?? ""} en ${value}`);
+  }
+
   revalidatePath(`/capacitaciones/${trainingId}`);
   revalidatePath("/");
   return null;
@@ -443,7 +508,9 @@ export async function updateSessionField(
 
 export async function deleteSessionAction(id: string, trainingId: string) {
   const supabase = await createSupabase();
+  const { data: s } = await supabase.from("sessions").select("session_number").eq("id", id).maybeSingle();
   await supabase.from("sessions").delete().eq("id", id);
+  await logActivity(supabase, "eliminó", "sesión", trainingId, `eliminó la sesión ${s?.session_number ?? ""}`);
   revalidatePath(`/capacitaciones/${trainingId}`);
 }
 
@@ -500,6 +567,18 @@ export async function updateMaterialField(
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  if (field === "status") {
+    const { data: m } = await supabase.from("materials").select("name").eq("id", id).maybeSingle();
+    await logActivity(
+      supabase,
+      value === "Listo" ? "completó" : "cambió",
+      "material",
+      id,
+      `marcó el material "${m?.name ?? ""}" como ${value}`
+    );
+  }
+
   revalidatePath(`/capacitaciones/${trainingId}`);
   revalidatePath("/tareas");
   return null;
@@ -596,20 +675,32 @@ export async function createCustomTaskAction(
   const supabase = await createSupabase();
   const requestedBy = await currentUserName(supabase);
 
-  const { data, error } = await supabase
-    .from("custom_tasks")
-    .insert({
-      title,
-      details: str(formData, "details"),
-      assignee: str(formData, "assignee"),
-      requested_by: requestedBy,
-      client_id: str(formData, "client_id") || null,
-      due_date: str(formData, "due_date") || null,
-    })
-    .select("id")
-    .single();
+  const payload: Record<string, string | boolean | null> = {
+    title,
+    details: str(formData, "details"),
+    assignee: str(formData, "assignee"),
+    requested_by: requestedBy,
+    client_id: str(formData, "client_id") || null,
+    due_date: str(formData, "due_date") || null,
+    notify_on_complete: formData.get("notify_on_complete") === "on",
+  };
+
+  let { data, error } = await supabase.from("custom_tasks").insert(payload).select("id").single();
+
+  // Respaldo mientras la migración 009 no esté corrida en la base
+  if (error && error.message.includes("notify_on_complete")) {
+    delete payload.notify_on_complete;
+    ({ data, error } = await supabase.from("custom_tasks").insert(payload).select("id").single());
+  }
 
   if (error || !data) return { error: `No se pudo crear la tarea: ${error?.message}` };
+  await logActivity(
+    supabase,
+    "creó",
+    "tarea",
+    data.id,
+    `creó la tarea "${title}"${payload.assignee ? ` para ${payload.assignee}` : ""}`
+  );
   revalidatePath("/tareas");
   return { taskId: data.id };
 }
@@ -622,52 +713,130 @@ export async function updateCustomTaskAction(
     assignee: string;
     client_id: string | null;
     due_date: string | null;
+    notify_on_complete?: boolean;
   }
 ): Promise<FormState> {
   const title = fields.title.trim();
   if (!title) return { error: "El título no puede quedar vacío." };
 
   const supabase = await createSupabase();
-  const { error } = await supabase
-    .from("custom_tasks")
-    .update({
-      title,
-      details: fields.details.trim(),
-      assignee: fields.assignee,
-      client_id: fields.client_id || null,
-      due_date: fields.due_date || null,
-    })
-    .eq("id", id);
+  const payload: Record<string, string | boolean | null> = {
+    title,
+    details: fields.details.trim(),
+    assignee: fields.assignee,
+    client_id: fields.client_id || null,
+    due_date: fields.due_date || null,
+  };
+  if (fields.notify_on_complete !== undefined) {
+    payload.notify_on_complete = fields.notify_on_complete;
+  }
+
+  let { error } = await supabase.from("custom_tasks").update(payload).eq("id", id);
+
+  // Respaldo mientras la migración 009 no esté corrida en la base
+  if (error && error.message.includes("notify_on_complete")) {
+    delete payload.notify_on_complete;
+    ({ error } = await supabase.from("custom_tasks").update(payload).eq("id", id));
+  }
 
   if (error) return { error: error.message };
+  await logActivity(supabase, "editó", "tarea", id, `editó la tarea "${title}"`);
   revalidatePath("/tareas");
   return null;
 }
 
 export async function reopenCustomTaskAction(id: string): Promise<FormState> {
   const supabase = await createSupabase();
+  const { data: task } = await supabase.from("custom_tasks").select("title").eq("id", id).maybeSingle();
   const { error } = await supabase
     .from("custom_tasks")
     .update({ status: "Pendiente", completed_at: null })
     .eq("id", id);
   if (error) return { error: error.message };
+  await logActivity(supabase, "reabrió", "tarea", id, `reabrió la tarea "${task?.title ?? ""}"`);
   revalidatePath("/tareas");
   return null;
 }
 
+/**
+ * Aviso de tarea completada: correo a quien la pidió, solo si la tarea
+ * tiene activado notify_on_complete. Nunca truena la acción: si falta la
+ * llave de Resend o el correo del solicitante, simplemente no se envía.
+ */
+async function notifyTaskCompleted(
+  supabase: Awaited<ReturnType<typeof createSupabase>>,
+  task: { title: string; requested_by: string; assignee: string; due_date: string | null }
+) {
+  try {
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey || !task.requested_by) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email, full_name")
+      .ilike("full_name", `%${task.requested_by}%`)
+      .maybeSingle();
+    if (!profile?.email) return;
+
+    const completedBy = await currentUserName(supabase);
+    const from = process.env.REMINDER_FROM ?? "CRM Talentoría <crm@talentoriacursos.com>";
+    const html = `
+      <div style="font-family:Arial,sans-serif;color:#16345f">
+        <div style="height:6px;background:linear-gradient(90deg,#00aeef,#e6007e);border-radius:3px"></div>
+        <h2 style="margin:16px 0 4px">✅ Tarea completada</h2>
+        <p style="font-size:15px;margin:8px 0"><strong>${task.title}</strong></p>
+        <p style="color:#64748b;font-size:13px;margin:4px 0">
+          La completó: ${completedBy || task.assignee || "alguien del equipo"}
+        </p>
+        <p style="color:#94a3b8;font-size:12px;margin-top:16px">
+          Recibes este aviso porque al crear la tarea se marcó "avisar al completarla".
+          — CRM Talentoría
+        </p>
+      </div>`;
+
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: [profile.email],
+        subject: `✅ Tarea completada: ${task.title}`,
+        html,
+      }),
+    });
+  } catch {
+    // El aviso es cortesía: si falla, la tarea queda completada igual.
+  }
+}
+
 export async function completeCustomTaskAction(id: string): Promise<FormState> {
   const supabase = await createSupabase();
+
+  // Se lee antes de actualizar para saber título y si hay que avisar.
+  // select("*") tolera que notify_on_complete aún no exista en la base.
+  const { data: task } = await supabase.from("custom_tasks").select("*").eq("id", id).maybeSingle();
+
   const { error } = await supabase
     .from("custom_tasks")
     .update({ status: "Completada", completed_at: new Date().toISOString() })
     .eq("id", id);
   if (error) return { error: error.message };
+
+  if (task) {
+    await logActivity(supabase, "completó", "tarea", id, `completó la tarea "${task.title}"`);
+    if (task.notify_on_complete) {
+      await notifyTaskCompleted(supabase, task);
+    }
+  }
+
   revalidatePath("/tareas");
   return null;
 }
 
 export async function deleteCustomTaskAction(id: string) {
   const supabase = await createSupabase();
+
+  const { data: task } = await supabase.from("custom_tasks").select("title").eq("id", id).maybeSingle();
 
   // Los archivos del bucket no se borran solos con la fila: primero el Storage
   const { data: files } = await supabase
@@ -680,6 +849,7 @@ export async function deleteCustomTaskAction(id: string) {
   }
 
   await supabase.from("custom_tasks").delete().eq("id", id);
+  await logActivity(supabase, "eliminó", "tarea", id, `eliminó la tarea "${task?.title ?? ""}"`);
   revalidatePath("/tareas");
 }
 
@@ -696,26 +866,58 @@ export async function registerAttachmentAction(fields: {
   fileName: string;
   fileSize: number;
   mimeType: string;
+  /** "insumo" (por defecto) o "entregable". */
+  category?: string;
 }): Promise<{ error: string } | { attachment: TaskAttachment }> {
   const supabase = await createSupabase();
   const uploadedBy = await currentUserName(supabase);
 
-  const { data, error } = await supabase
-    .from("task_attachments")
-    .insert({
-      task_id: fields.taskId,
-      storage_path: fields.storagePath,
-      file_name: fields.fileName,
-      file_size: fields.fileSize,
-      mime_type: fields.mimeType,
-      uploaded_by: uploadedBy,
-    })
-    .select("*")
-    .single();
+  const payload: Record<string, string | number> = {
+    task_id: fields.taskId,
+    storage_path: fields.storagePath,
+    file_name: fields.fileName,
+    file_size: fields.fileSize,
+    mime_type: fields.mimeType,
+    uploaded_by: uploadedBy,
+    category: fields.category === "entregable" ? "entregable" : "insumo",
+  };
+
+  let { data, error } = await supabase.from("task_attachments").insert(payload).select("*").single();
+
+  // Respaldo mientras la migración 009 no esté corrida en la base
+  if (error && error.message.includes("category")) {
+    delete payload.category;
+    ({ data, error } = await supabase.from("task_attachments").insert(payload).select("*").single());
+  }
 
   if (error || !data) return { error: error?.message ?? "No se pudo registrar el archivo." };
+  await logActivity(
+    supabase,
+    "subió",
+    "tarea",
+    fields.taskId,
+    `subió el archivo "${fields.fileName}" (${fields.category === "entregable" ? "entregable" : "insumo"})`
+  );
   revalidatePath("/tareas");
   return { attachment: data as TaskAttachment };
+}
+
+/** Mueve un adjunto entre "insumo" y "entregable". */
+export async function setAttachmentCategoryAction(
+  id: string,
+  category: string
+): Promise<FormState> {
+  const value = category === "entregable" ? "entregable" : "insumo";
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("task_attachments").update({ category: value }).eq("id", id);
+  if (error) {
+    if (error.message.includes("category")) {
+      return { error: "Falta correr la migración 009 en la base para clasificar archivos." };
+    }
+    return { error: error.message };
+  }
+  revalidatePath("/tareas");
+  return null;
 }
 
 export async function deleteAttachmentAction(id: string): Promise<FormState> {
@@ -760,4 +962,176 @@ export async function getAttachmentUrlAction(
 
   if (error || !data) return { error: error?.message ?? "No se pudo abrir el archivo." };
   return { url: data.signedUrl };
+}
+
+// ---------------- Facilitadores (catálogo, migración 007) ----------------
+
+export async function addFacilitatorAction(
+  name: string,
+  isInternal: boolean
+): Promise<FormState> {
+  const clean = name.trim();
+  if (!clean) return { error: "Escribe el nombre del facilitador." };
+
+  const supabase = await createSupabase();
+
+  // Evita duplicados por mayúsculas/acentos de dedo
+  const { data: existing } = await supabase
+    .from("facilitators")
+    .select("id, name")
+    .ilike("name", clean)
+    .maybeSingle();
+  if (existing) return { error: `"${existing.name}" ya está en el catálogo.` };
+
+  const { data, error } = await supabase
+    .from("facilitators")
+    .insert({ name: clean, is_internal: isInternal })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("facilitators")) {
+      return { error: "Falta correr la migración 007 en la base (tabla de facilitadores)." };
+    }
+    return { error: error?.message ?? "No se pudo agregar." };
+  }
+
+  await logActivity(supabase, "creó", "facilitador", data.id, `agregó al facilitador "${clean}"`);
+  revalidatePath("/facilitadores");
+  return null;
+}
+
+export async function updateFacilitatorAction(
+  id: string,
+  fields: { name?: string; is_internal?: boolean; active?: boolean }
+): Promise<FormState> {
+  const supabase = await createSupabase();
+  const payload: Record<string, string | boolean> = {};
+  if (fields.name !== undefined) {
+    const clean = fields.name.trim();
+    if (!clean) return { error: "El nombre no puede quedar vacío." };
+    payload.name = clean;
+  }
+  if (fields.is_internal !== undefined) payload.is_internal = fields.is_internal;
+  if (fields.active !== undefined) payload.active = fields.active;
+
+  const { error } = await supabase.from("facilitators").update(payload).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/facilitadores");
+  return null;
+}
+
+export async function deleteFacilitatorAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { data: f } = await supabase.from("facilitators").select("name").eq("id", id).maybeSingle();
+  const { error } = await supabase.from("facilitators").delete().eq("id", id);
+  if (error) return { error: error.message };
+  await logActivity(supabase, "eliminó", "facilitador", id, `quitó del catálogo a "${f?.name ?? ""}"`);
+  revalidatePath("/facilitadores");
+  return null;
+}
+
+// ---------------- Tiempo invertido (migración 008) ----------------
+
+/**
+ * Registra tiempo invertido en una tarea. Recibe horas (acepta decimales:
+ * 1.5 = hora y media) y las guarda como minutos enteros.
+ */
+export async function addTimeEntryAction(fields: {
+  taskKey: string;
+  taskTitle: string;
+  hours: number;
+}): Promise<{ error: string } | { entry: TimeEntry }> {
+  const minutes = Math.round(fields.hours * 60);
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    return { error: "Pon un tiempo mayor a cero (ej. 1.5 = hora y media)." };
+  }
+  if (minutes > 24 * 60) return { error: "Máximo 24 horas por registro." };
+
+  const supabase = await createSupabase();
+  const person = await currentUserName(supabase);
+
+  const { data, error } = await supabase
+    .from("time_entries")
+    .insert({
+      task_key: fields.taskKey,
+      task_title: fields.taskTitle,
+      person,
+      minutes,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("time_entries")) {
+      return { error: "Falta correr la migración 008 en la base (registro de tiempo)." };
+    }
+    return { error: error?.message ?? "No se pudo registrar el tiempo." };
+  }
+
+  revalidatePath("/tareas");
+  return { entry: data as TimeEntry };
+}
+
+export async function deleteTimeEntryAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("time_entries").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tareas");
+  return null;
+}
+
+// ---------------- Subtareas (migración 009) ----------------
+
+export async function addSubtaskAction(fields: {
+  taskId: string;
+  title: string;
+  dueDate: string | null;
+}): Promise<{ error: string } | { subtask: Subtask }> {
+  const title = fields.title.trim();
+  if (!title) return { error: "Escribe la subtarea." };
+
+  const supabase = await createSupabase();
+
+  const { count } = await supabase
+    .from("subtasks")
+    .select("id", { count: "exact", head: true })
+    .eq("task_id", fields.taskId);
+
+  const { data, error } = await supabase
+    .from("subtasks")
+    .insert({
+      task_id: fields.taskId,
+      title,
+      due_date: fields.dueDate || null,
+      position: count ?? 0,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("subtasks")) {
+      return { error: "Falta correr la migración 009 en la base (subtareas)." };
+    }
+    return { error: error?.message ?? "No se pudo agregar la subtarea." };
+  }
+
+  revalidatePath("/tareas");
+  return { subtask: data as Subtask };
+}
+
+export async function toggleSubtaskAction(id: string, done: boolean): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("subtasks").update({ done }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function deleteSubtaskAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("subtasks").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tareas");
+  return null;
 }

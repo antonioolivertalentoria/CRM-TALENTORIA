@@ -18,26 +18,42 @@ export function SessionsTable({
   trainingId,
   sessions,
   people = [],
+  facilitators,
 }: {
   trainingId: string;
   sessions: Session[];
   people?: string[];
+  /** Sugerencias del catálogo de facilitadores; si no llegan, se usa el respaldo fijo. */
+  facilitators?: string[];
 }) {
-  const facilitatorSuggestions = [...people, ...EXTRA_FACILITATORS];
+  const facilitatorSuggestions = facilitators ?? [...people, ...EXTRA_FACILITATORS];
   const [pending, startTransition] = useTransition();
 
   const save = (id: string, field: string) => (value: string) =>
     updateSessionField(id, trainingId, field, value);
 
+  const totalHours = sessions
+    .filter((s) => s.status !== "Cancelada")
+    .reduce((acc, s) => acc + (Number(s.duration_hours) || 0), 0);
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
           Sesiones ({sessions.length})
+          {totalHours > 0 && (
+            <span
+              className="ml-2 rounded-full bg-brand-cyan/10 px-2.5 py-0.5 text-xs font-bold normal-case tracking-normal text-brand-cyan-dark"
+              title="Suma de las horas de todas las sesiones no canceladas (cada una se calcula sola con su hora de inicio y cierre)"
+            >
+              ⏱ {totalHours} h en total
+            </span>
+          )}
         </h2>
         <button
           disabled={pending}
           onClick={() => startTransition(() => addSessionAction(trainingId))}
+          title="La sesión nueva copia horario, facilitador, modalidad y plataforma de la última sesión"
           className="rounded-lg bg-brand-cyan px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-brand-cyan-dark disabled:opacity-60"
         >
           + Agregar sesión
@@ -59,6 +75,7 @@ export function SessionsTable({
                 <th className="w-36 px-2 py-2 font-semibold">Fecha</th>
                 <th className="w-24 px-2 py-2 font-semibold">Inicio</th>
                 <th className="w-24 px-2 py-2 font-semibold">Cierre</th>
+                <th className="w-20 px-2 py-2 font-semibold" title="Se calcula sola con inicio y cierre">Horas</th>
                 <th className="min-w-28 px-2 py-2 font-semibold">Facilitador/a</th>
                 <th className="w-32 px-2 py-2 font-semibold">Modalidad</th>
                 <th className="w-36 px-2 py-2 font-semibold">Plataforma</th>
@@ -92,6 +109,12 @@ export function SessionsTable({
                   </td>
                   <td className="px-1 py-1.5">
                     <EditableField value={s.end_time?.slice(0, 5) ?? ""} type="time" onSave={save(s.id, "end_time")} />
+                  </td>
+                  <td
+                    className="px-3 py-1.5 pt-2.5 text-xs font-semibold text-brand-cyan-dark"
+                    title="Se calcula sola con la hora de inicio y cierre"
+                  >
+                    {Number(s.duration_hours) > 0 ? `${Number(s.duration_hours)} h` : "—"}
                   </td>
                   <td className="px-1 py-1.5">
                     <EditableField

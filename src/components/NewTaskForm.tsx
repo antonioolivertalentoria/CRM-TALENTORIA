@@ -145,7 +145,26 @@ export function NewTaskForm({
         </div>
 
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-xs font-semibold text-slate-500">Archivos adjuntos (opcional)</label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              name="notify_on_complete"
+              className="h-4 w-4 rounded border-slate-300 accent-brand-cyan"
+            />
+            🔔 Avisarme por correo cuando se complete
+          </label>
+          <p className="mt-0.5 pl-6 text-[11px] text-slate-400">
+            Útil cuando le pides algo a alguien más; para tus propias tareas no hace falta.
+          </p>
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-xs font-semibold text-slate-500">
+            Archivos de insumo (opcional)
+          </label>
+          <p className="-mt-0.5 mb-1 text-[11px] text-slate-400">
+            Lo que se necesita para trabajar la tarea. Los entregables se suben después, abriendo la tarea.
+          </p>
           {files.length > 0 && (
             <ul className="mb-2 space-y-1">
               {files.map((f, i) => (

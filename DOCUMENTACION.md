@@ -76,8 +76,12 @@ clients ──< trainings ──< sessions
    │            └──────< materials ──< material_comments
    └──< clients (subclientes, via parent_id)
 custom_tasks ──< task_attachments   (archivos en Supabase Storage)
+   │        └──< subtasks             (partes de una tarea, con medidor de avance)
    └── clients (opcional)
 profiles (1 por usuario de auth)
+facilitators  (catálogo de facilitadores)
+time_entries  (tiempo invertido por tarea; task_key referencia lógica)
+activity_log  (quién hizo qué; se limpia a 90 días desde el cron)
 ```
 
 | Tabla | Qué guarda | Campos clave |
@@ -87,8 +91,12 @@ profiles (1 por usuario de auth)
 | `sessions` | Sesiones de cada capacitación | `training_id`, número, fecha, horario (inicio/cierre, duración calculada), **facilitador propio por sesión**, modalidad (Online/Presencial/Híbrida), plataforma, liga, inscritos/asistentes |
 | `materials` | Materiales del proyecto (links a Drive) | tipo (PPT, manuales…), quién lo hace (`maker`), quién lo revisa (`reviewer`), estado (Pendiente → En proceso → Por revisar → Listo), fecha límite |
 | `material_comments` | Comentarios de revisión | autor, texto |
-| `custom_tasks` | Tareas capturadas a mano | título, detalles, para quién (`assignee`), quién la pidió (`requested_by`), `client_id` opcional (`null` = "marca blanca / interno"), fecha límite, estado (Pendiente/Completada) |
-| `task_attachments` | Archivos adjuntos de una tarea propia | `task_id`, `storage_path` (ruta en el bucket), nombre original, tamaño, tipo, quién lo subió |
+| `custom_tasks` | Tareas capturadas a mano | título, detalles, para quién (`assignee`), quién la pidió (`requested_by`), `client_id` opcional (`null` = "marca blanca / interno"), fecha límite, estado (Pendiente/Completada), **`notify_on_complete`** (correo a quien la pidió al completarse) |
+| `task_attachments` | Archivos adjuntos de una tarea propia | `task_id`, `storage_path` (ruta en el bucket), nombre original, tamaño, tipo, quién lo subió, **`category`** (`insumo` = material para trabajar, `entregable` = resultado que se entrega) |
+| `subtasks` | Partes de una tarea propia | `task_id`, título, fecha opcional, `done`, `position`; alimentan el medidor de avance ("2 de 5") |
+| `facilitators` | Catálogo de facilitadores | nombre, `is_internal` (interno = contenido a 7 días; externo = 14) y `active`; se administra en `/facilitadores` |
+| `time_entries` | Tiempo invertido por tarea | `task_key` (clave lógica de la tarea, derivada o personal), título, persona, minutos; sobrevive aunque la tarea se complete o borre, para sumar tiempos |
+| `activity_log` | Registro de actividad | actor, acción, entidad y resumen legible; el cron diario borra lo de más de 90 días |
 | `profiles` | Perfil por usuario de auth | nombre, correo, `reminder_prefs` (JSON: recordatorios on/off y tipos de tarea) |
 
 Seguridad: **RLS activado en todas las tablas** con política simple: cualquier usuario

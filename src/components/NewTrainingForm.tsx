@@ -10,11 +10,14 @@ const input =
 export function NewTrainingForm({
   clientId,
   people = [],
+  facilitators,
   currentUser = "",
   recipients,
 }: {
   clientId: string;
   people?: string[];
+  /** Sugerencias del catálogo de facilitadores; si no llegan, se usa el respaldo fijo. */
+  facilitators?: string[];
   currentUser?: string;
   /**
    * Para clientes con subclientes: opciones de quién recibe la capacitación
@@ -120,7 +123,7 @@ export function NewTrainingForm({
             className={input}
           />
           <datalist id="facilitadores">
-            {[...people, ...EXTRA_FACILITATORS].map((p) => (
+            {(facilitators ?? [...people, ...EXTRA_FACILITATORS]).map((p) => (
               <option key={p} value={p} />
             ))}
           </datalist>
@@ -165,7 +168,8 @@ export function NewTrainingForm({
             </label>
             <p className="mb-2 text-[11px] text-slate-400">
               Cada sesión puede tener su propia fecha, horario y facilitador(a). Lo que dejes
-              vacío hereda los datos generales de arriba; todo se puede ajustar después.
+              vacío toma lo general de arriba: el horario general y el/la facilitador(a)
+              general se copian solos a cada sesión. Todo se puede ajustar después.
             </p>
             <div className="space-y-2">
               {Array.from({ length: total }, (_, i) => (

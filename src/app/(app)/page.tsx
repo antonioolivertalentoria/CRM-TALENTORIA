@@ -4,7 +4,7 @@ import { TRAINING_STATUSES, PRIORITIES } from "@/lib/constants";
 import { StatusSelect } from "@/components/StatusSelect";
 import { updateTrainingField } from "@/lib/actions";
 import { formatDate, formatTime, todayISO } from "@/lib/format";
-import type { TrainingWithSessions, Session } from "@/lib/types";
+import type { ActivityEvent, TrainingWithSessions, Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +18,31 @@ const GROUP_ACCENT: Record<string, string> = {
   Cancelada: "border-l-red-400",
 };
 
+/** "2026-08-18T19:32:00Z" → "18 ago, 13:32" en horario de México. */
+function formatTimestamp(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("es-MX", {
+      timeZone: "America/Mexico_City",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(iso));
+  } catch {
+    return iso.slice(0, 16).replace("T", " ");
+  }
+}
+
+const ACTION_ICON: Record<string, string> = {
+  creó: "✨",
+  completó: "✅",
+  editó: "✏️",
+  eliminó: "🗑️",
+  cambió: "🔁",
+  reabrió: "↩️",
+  subió: "📎",
+};
+
 function nextSession(sessions: Session[]): Session | null {
   const today = todayISO();
   const upcoming = sessions
@@ -28,10 +53,20 @@ function nextSession(sessions: Session[]): Session | null {
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("trainings")
-    .select("*, clients(id, company), sessions(*)")
-    .order("created_at", { ascending: false });
+  const [{ data }, { data: activityData }] = await Promise.all([
+    supabase
+      .from("trainings")
+      .select("*, clients(id, company), sessions(*)")
+      .order("created_at", { ascending: false }),
+    // Registro de actividad (migración 010); si la tabla no existe aún,
+    // data llega null y el panel simplemente no se muestra.
+    supabase
+      .from("activity_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(12),
+  ]);
+  const activity = (activityData ?? []) as unknown as ActivityEvent[];
 
   const trainings = (data ?? []) as unknown as TrainingWithSessions[];
 
@@ -101,6 +136,30 @@ export default async function DashboardPage() {
               </Link>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* Actividad reciente: quién hizo los últimos cambios */}
+      {activity.length > 0 && (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
+            Actividad reciente
+          </h2>
+          <ul className="space-y-1.5">
+            {activity.map((a) => (
+              <li key={a.id} className="flex items-baseline gap-2 text-sm">
+                <span className="shrink-0 text-xs">{ACTION_ICON[a.action] ?? "•"}</span>
+                <span className="min-w-0 flex-1 text-slate-600">
+                  <span className="font-semibold text-brand-navy">{a.actor || "Alguien"}</span>{" "}
+                  {a.summary || `${a.action} ${a.entity_type}`}
+                </span>
+                <span className="shrink-0 text-xs text-slate-400">{formatTimestamp(a.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-[11px] text-slate-300">
+            Se guardan los movimientos importantes (crear, completar, editar y eliminar); los de más de 90 días se limpian solos.
+          </p>
         </section>
       )}
 

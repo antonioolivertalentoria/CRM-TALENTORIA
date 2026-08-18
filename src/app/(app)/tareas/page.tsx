@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { computeTasks, customToComputed, sortByDue } from "@/lib/tasks";
 import { todayISO } from "@/lib/format";
-import { EXTRA_FACILITATORS } from "@/lib/constants";
+import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { TasksList } from "@/components/TasksList";
 import { NewTaskForm } from "@/components/NewTaskForm";
 import { CompletedCustomTasks } from "@/components/CompletedCustomTasks";
@@ -12,7 +12,9 @@ import type {
   Material,
   Profile,
   Session,
+  Subtask,
   TaskAttachment,
+  TimeEntry,
   Training,
 } from "@/lib/types";
 
@@ -29,6 +31,9 @@ export default async function TasksPage() {
     { data: clientsData },
     { data: attachmentsData },
     userRes,
+    facilitators,
+    { data: timeData },
+    { data: subtasksData },
   ] = await Promise.all([
     supabase
       .from("trainings")
@@ -45,6 +50,11 @@ export default async function TasksPage() {
     supabase.from("clients").select("id, company").order("company"),
     supabase.from("task_attachments").select("*").order("created_at"),
     supabase.auth.getUser(),
+    fetchFacilitators(supabase),
+    // Tolerantes a que las migraciones 008/009 no hayan corrido aún:
+    // si la tabla no existe, data llega null y seguimos con listas vacías.
+    supabase.from("time_entries").select("*").order("created_at"),
+    supabase.from("subtasks").select("*").order("position"),
   ]);
 
   const trainings = (trainingsData ?? []) as unknown as (Training & {
@@ -67,8 +77,25 @@ export default async function TasksPage() {
   }
   const clientNameById = Object.fromEntries(clients.map((c) => [c.id, c.company]));
 
+  // Tiempo invertido agrupado por tarea (y completo, para la sumatoria)
+  const timeEntries = (timeData ?? []) as unknown as TimeEntry[];
+  const timeByTask: Record<string, TimeEntry[]> = {};
+  for (const e of timeEntries) {
+    (timeByTask[e.task_key] ??= []).push(e);
+  }
+
+  // Subtareas agrupadas por tarea propia
+  const subtasks = (subtasksData ?? []) as unknown as Subtask[];
+  const subtasksByTask: Record<string, Subtask[]> = {};
+  for (const s of subtasks) {
+    (subtasksByTask[s.task_id] ??= []).push(s);
+  }
+
   const currentProfile = profiles.find((p) => p.id === userRes.data.user?.id);
-  const internalNames = [...profiles.map((p) => p.full_name), ...EXTRA_FACILITATORS];
+  const internalNames = internalFacilitatorNames(
+    profiles.map((p) => p.full_name),
+    facilitators
+  );
   const tasks = sortByDue([
     ...computeTasks(trainings, internalNames),
     ...customToComputed(customTasks, clientNameById),
@@ -85,13 +112,6 @@ export default async function TasksPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <a
-            href="/api/reporte-semanal"
-            title="PDF con las tareas de los próximos 5 días hábiles, para enviar a dirección"
-            className="inline-flex items-center gap-1.5 rounded-full border border-brand-magenta/40 bg-brand-magenta/10 px-3 py-1.5 text-xs font-semibold text-brand-magenta transition hover:bg-brand-magenta/20"
-          >
-            📄 Reporte semanal (PDF)
-          </a>
           <ReminderSettings
             prefs={
               currentProfile?.reminder_prefs ?? {
@@ -122,6 +142,9 @@ export default async function TasksPage() {
         people={profiles.map((p) => p.full_name)}
         clients={clients}
         attachmentsByTask={attachmentsByTask}
+        timeByTask={timeByTask}
+        allTimeEntries={timeEntries}
+        subtasksByTask={subtasksByTask}
         currentUser={currentProfile?.full_name ?? "Todas"}
         today={todayISO()}
       />
