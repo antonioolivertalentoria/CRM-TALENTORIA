@@ -5,6 +5,7 @@ import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/
 import { computeConsultingTasks } from "@/lib/consulting-tasks";
 import { addDays, formatDate, todayISO } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
+import { canSeeConsulting } from "@/lib/consulting-access";
 import type { CustomTask, ReminderPrefs } from "@/lib/types";
 
 /**
@@ -140,7 +141,7 @@ export async function GET(request: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...computeTasks(trainingsWithRequests as any, internalNames),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ...computeConsultingTasks(consultingProjects as any),
+    ...(canSeeConsulting(user.email) ? computeConsultingTasks(consultingProjects as any) : []),
 
     ...customToComputed((customData ?? []) as (CustomTask & { clients: { id: string; company: string } | null })[]),
   ]);

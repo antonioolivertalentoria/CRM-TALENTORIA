@@ -3,6 +3,7 @@ import { computeTasks, customToComputed, sortByDue } from "@/lib/tasks";
 import { computeConsultingTasks, type ConsultingProjectFull } from "@/lib/consulting-tasks";
 import { todayISO } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
+import { canSeeConsulting } from "@/lib/consulting-access";
 import { TasksList } from "@/components/TasksList";
 import { NewTaskForm } from "@/components/NewTaskForm";
 import { CompletedCustomTasks } from "@/components/CompletedCustomTasks";
@@ -129,7 +130,11 @@ export default async function TasksPage() {
 
   const tasks = sortByDue([
     ...computeTasks(trainings, internalNames),
-    ...computeConsultingTasks(consultingProjects),
+    // Mientras el módulo esté en estreno, sus tareas solo se mezclan
+    // para quien puede verlo (misma lista que la pantalla de construcción)
+    ...(canSeeConsulting(userRes.data.user?.email)
+      ? computeConsultingTasks(consultingProjects)
+      : []),
     ...customToComputed(customTasks, clientNameById),
   ]);
 

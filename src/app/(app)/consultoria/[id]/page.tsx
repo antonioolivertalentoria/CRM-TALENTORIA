@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { canSeeConsulting } from "@/lib/consulting-access";
+import { UnderConstruction } from "@/components/UnderConstruction";
 import { updateConsultingField } from "@/lib/actions";
 import {
   CONSULTING_STATUSES,
@@ -41,6 +43,11 @@ export default async function ConsultingDetailPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
+
+  const { data: userData } = await supabase.auth.getUser();
+  if (!canSeeConsulting(userData.user?.email)) {
+    return <UnderConstruction moduleName="Consultoría" />;
+  }
 
   const { data } = await supabase
     .from("consulting_projects")

@@ -6,6 +6,7 @@ import { NewClientForm } from "@/components/NewClientForm";
 import { NewTrainingForm } from "@/components/NewTrainingForm";
 import { NewConsultingForm } from "@/components/NewConsultingForm";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
+import { canSeeConsulting } from "@/lib/consulting-access";
 import { statusColor } from "@/lib/constants";
 import type { Client, ConsultingProject, Training, Session } from "@/lib/types";
 
@@ -124,6 +125,7 @@ export default async function ClientDetailPage({
     .eq("client_id", id)
     .order("created_at", { ascending: false });
   const consulting = (consultingData ?? []) as unknown as ConsultingProject[];
+  const showConsulting = canSeeConsulting(userRes.data.user?.email);
 
   // Capacitaciones que este cliente dio a sus subclientes
   let subTrainings: TrainingCard[] = [];
@@ -189,7 +191,9 @@ export default async function ClientDetailPage({
             recipients={recipients}
             kind="Team building"
           />
-          <NewConsultingForm clientId={client.id} people={people} currentUser={currentUser} />
+          {showConsulting && (
+            <NewConsultingForm clientId={client.id} people={people} currentUser={currentUser} />
+          )}
         </div>
       </header>
 
@@ -258,7 +262,7 @@ export default async function ClientDetailPage({
         </section>
       )}
 
-      {consulting.length > 0 && (
+      {showConsulting && consulting.length > 0 && (
         <section>
           <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
             Consultorías ({consulting.length})

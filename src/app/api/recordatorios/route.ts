@@ -4,6 +4,7 @@ import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/
 import { computeConsultingTasks } from "@/lib/consulting-tasks";
 import { todayISO, formatDate } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
+import { canSeeConsulting } from "@/lib/consulting-access";
 import type { ReminderPrefs } from "@/lib/types";
 
 /**
@@ -145,6 +146,8 @@ export async function GET(request: Request) {
       (t) =>
         (t.assignee === p.full_name || !t.assignee) &&
         kinds.includes(t.kind) &&
+        // Consultoría en estreno: sus tareas solo a quien ve el módulo
+        (t.kind !== "Consultoría" || canSeeConsulting(p.email)) &&
         t.due !== null &&
         t.due <= today
     );

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { canSeeConsulting } from "@/lib/consulting-access";
+import { UnderConstruction } from "@/components/UnderConstruction";
 import { statusColor, CONSULTING_STATUSES } from "@/lib/constants";
 import { formatDate, todayISO } from "@/lib/format";
 import type { Client, ConsultingMilestone, ConsultingProject, TimeEntry } from "@/lib/types";
@@ -15,6 +17,12 @@ type ProjectRow = ConsultingProject & { clients: Pick<Client, "id" | "company"> 
  */
 export default async function ConsultingPage() {
   const supabase = await createClient();
+
+  // Estreno controlado: el resto del equipo ve "en construcción"
+  const { data: userData } = await supabase.auth.getUser();
+  if (!canSeeConsulting(userData.user?.email)) {
+    return <UnderConstruction moduleName="Consultoría" />;
+  }
 
   const [{ data, error }, { data: milestonesData }, { data: timeData }] = await Promise.all([
     supabase
