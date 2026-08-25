@@ -9,6 +9,10 @@ import {
   deleteCustomTaskAction,
   updateCustomTaskAction,
   toggleTrainingRequestAction,
+  updateConsultingField,
+  updateConsultingMilestoneField,
+  setConsultingInputReceived,
+  updateConsultingChangeField,
   addTimeEntryAction,
   deleteTimeEntryAction,
   addSubtaskAction,
@@ -401,6 +405,7 @@ const KIND_STYLE: Record<string, string> = {
   Seguimiento: "bg-emerald-100 text-emerald-700",
   Personal: "bg-rose-100 text-rose-700",
   Petición: "bg-orange-100 text-orange-700",
+  Consultoría: "bg-indigo-100 text-indigo-700",
 };
 
 export function TasksList({
@@ -469,6 +474,23 @@ export function TasksList({
         );
       } else if (task.complete.type === "training_request") {
         await toggleTrainingRequestAction(task.complete.requestId, true);
+      } else if (task.complete.type === "consulting_field") {
+        const res = await updateConsultingField(task.complete.projectId, task.complete.field, "Listo");
+        if (res?.error) {
+          alert(res.error);
+          return;
+        }
+      } else if (task.complete.type === "consulting_milestone") {
+        await updateConsultingMilestoneField(
+          task.complete.milestoneId,
+          "",
+          "status",
+          task.complete.nextStatus
+        );
+      } else if (task.complete.type === "consulting_input") {
+        await setConsultingInputReceived(task.complete.inputId, true);
+      } else if (task.complete.type === "consulting_change") {
+        await updateConsultingChangeField(task.complete.changeId, "", "status", "Cotizado");
       } else {
         await completeCustomTaskAction(task.complete.taskId);
       }

@@ -4,9 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { ClientEditForm } from "@/components/ClientEditForm";
 import { NewClientForm } from "@/components/NewClientForm";
 import { NewTrainingForm } from "@/components/NewTrainingForm";
+import { NewConsultingForm } from "@/components/NewConsultingForm";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { statusColor } from "@/lib/constants";
-import type { Client, Training, Session } from "@/lib/types";
+import type { Client, ConsultingProject, Training, Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +117,14 @@ export default async function ClientDetailPage({
   const courses = trainings.filter((t) => t.kind !== "Team building");
   const teamBuildings = trainings.filter((t) => t.kind === "Team building");
 
+  // Proyectos de consultoría del cliente (tolerante a que falte la migración 013)
+  const { data: consultingData } = await supabase
+    .from("consulting_projects")
+    .select("*")
+    .eq("client_id", id)
+    .order("created_at", { ascending: false });
+  const consulting = (consultingData ?? []) as unknown as ConsultingProject[];
+
   // Capacitaciones que este cliente dio a sus subclientes
   let subTrainings: TrainingCard[] = [];
   if (subclients.length > 0) {
@@ -180,6 +189,7 @@ export default async function ClientDetailPage({
             recipients={recipients}
             kind="Team building"
           />
+          <NewConsultingForm clientId={client.id} people={people} currentUser={currentUser} />
         </div>
       </header>
 
@@ -243,6 +253,36 @@ export default async function ClientDetailPage({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {teamBuildings.map((t) => (
               <TrainingCardLink key={t.id} t={t} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {consulting.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+            Consultorías ({consulting.length})
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {consulting.map((p) => (
+              <Link
+                key={p.id}
+                href={`/consultoria/${p.id}`}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-cyan hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-brand-navy">{p.name}</p>
+                  <span
+                    className={`${statusColor(p.status)} shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white`}
+                  >
+                    {p.status}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  {p.leader ? `Líder: ${p.leader}` : "Sin líder asignado"}
+                  {p.contracted_hours ? ` · ${p.contracted_hours} h contratadas` : ""}
+                </p>
+              </Link>
             ))}
           </div>
         </section>

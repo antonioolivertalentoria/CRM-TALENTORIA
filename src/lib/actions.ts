@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, todayISO } from "@/lib/format";
-import { syncSessionEvent, syncTrainingEvents } from "@/lib/calendar";
-import type { Subtask, TaskAttachment, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
+import { syncConsultingMeeting, syncSessionEvent, syncTrainingEvents } from "@/lib/calendar";
+import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, Subtask, TaskAttachment, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
 
@@ -1370,6 +1370,503 @@ export async function getTrainingAttachmentUrlAction(
 
   const { data: file } = await supabase
     .from("training_attachments")
+    .select("storage_path, file_name")
+    .eq("id", id)
+    .single();
+
+  if (!file) return { error: "No se encontró el archivo." };
+
+  const { data, error } = await supabase.storage
+    .from(ATTACHMENTS_BUCKET)
+    .createSignedUrl(file.storage_path, 3600, { download: file.file_name });
+
+  if (error || !data) return { error: error?.message ?? "No se pudo abrir el archivo." };
+  return { url: data.signedUrl };
+}
+
+// ================= Consultoría (migración 013) =================
+
+export async function createConsultingProjectAction(
+  _prev: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const clientId = str(formData, "client_id");
+  const name = str(formData, "name");
+  if (!clientId || !name) return { error: "El nombre del proyecto es obligatorio." };
+
+  const supabase = await createSupabase();
+
+  const hours = str(formData, "contracted_hours");
+  const { data, error } = await supabase
+    .from("consulting_projects")
+    .insert({
+      client_id: clientId,
+      name,
+      status: str(formData, "status") || "Transferido",
+      leader: str(formData, "leader"),
+      team: str(formData, "team"),
+      comercial: str(formData, "comercial") || "Perla Torres",
+      internal_owner: str(formData, "internal_owner"),
+      authorized_at: str(formData, "authorized_at") || null,
+      alcance: str(formData, "alcance"),
+      entregables: str(formData, "entregables"),
+      contracted_hours: hours ? Number(hours) || null : null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("consulting_projects")) {
+      return { error: "Falta correr la migración 013 en la base (módulo de consultoría)." };
+    }
+    return { error: `No se pudo crear el proyecto: ${error?.message}` };
+  }
+
+  await logActivity(supabase, "creó", "consultoría", data.id, `creó el proyecto de consultoría "${name}"`);
+  revalidatePath("/consultoria");
+  revalidatePath("/tareas");
+  redirect(`/consultoria/${data.id}`);
+}
+
+const CONSULTING_FIELDS = new Set([
+  "name",
+  "status",
+  "priority",
+  "leader",
+  "team",
+  "comercial",
+  "internal_owner",
+  "authorized_at",
+  "alcance",
+  "entregables",
+  "contracted_hours",
+  "whatsapp_group",
+  "drive_folder_url",
+  "kickoff_date",
+  "kickoff_start",
+  "kickoff_end",
+  "delivery_date",
+  "delivery_start",
+  "delivery_end",
+  "expediente_completo",
+  "grupo_wa",
+  "ficha_interna",
+  "minuta_arranque",
+  "plan_trabajo",
+  "plan_validado",
+  "entregables_enviados",
+  "aceptacion_cliente",
+  "factura",
+  "encuesta",
+  "cierre_interno",
+  "seguimiento_20",
+  "notes",
+  "internal_notes",
+]);
+
+export async function updateConsultingField(
+  id: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  // La tarea "Agendar reunión de arranque" no se palomea: se completa
+  // capturando la fecha en la ficha del proyecto (así desaparece sola).
+  if (field === "kickoff_pending") {
+    return {
+      error:
+        "Esta tarea se completa capturando la fecha de la reunión de arranque en la ficha del proyecto.",
+    };
+  }
+  if (!CONSULTING_FIELDS.has(field)) return { error: "Campo no permitido." };
+
+  let parsed: string | number | null = value;
+  const nullableWhenEmpty = new Set([
+    "authorized_at",
+    "kickoff_date",
+    "kickoff_start",
+    "kickoff_end",
+    "delivery_date",
+    "delivery_start",
+    "delivery_end",
+    "contracted_hours",
+  ]);
+  if (field === "contracted_hours" && value) {
+    parsed = Number(value);
+    if (Number.isNaN(parsed)) parsed = null;
+  }
+  if (nullableWhenEmpty.has(field) && !value) parsed = null;
+
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("consulting_projects")
+    .update({ [field]: parsed })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  // Actividad: cambios de fase y checklist completado
+  if (field === "status" || value === "Listo" || value === "No aplica") {
+    const { data: pr } = await supabase
+      .from("consulting_projects")
+      .select("name")
+      .eq("id", id)
+      .maybeSingle();
+    const name = pr?.name ?? "";
+    await logActivity(
+      supabase,
+      field === "status" ? "cambió" : "completó",
+      "consultoría",
+      id,
+      field === "status"
+        ? `puso el proyecto "${name}" en ${value}`
+        : `marcó "${field.replaceAll("_", " ")}" como ${value} en "${name}"`
+    );
+  }
+
+  // Calendario: capturar o mover la reunión de arranque/entrega manda
+  // (o actualiza) la invitación al equipo; quitar la fecha la cancela.
+  if (field.startsWith("kickoff_")) {
+    await syncConsultingMeeting(
+      supabase,
+      id,
+      "kickoff",
+      field === "kickoff_date" && parsed === null ? "cancel" : "request"
+    );
+  }
+  if (field.startsWith("delivery_")) {
+    await syncConsultingMeeting(
+      supabase,
+      id,
+      "delivery",
+      field === "delivery_date" && parsed === null ? "cancel" : "request"
+    );
+  }
+
+  revalidatePath(`/consultoria/${id}`);
+  revalidatePath("/consultoria");
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function deleteConsultingProjectAction(id: string, clientId: string) {
+  const supabase = await createSupabase();
+  const { data: pr } = await supabase.from("consulting_projects").select("name").eq("id", id).maybeSingle();
+
+  // Cancela las reuniones del calendario y limpia archivos del bucket
+  await syncConsultingMeeting(supabase, id, "kickoff", "cancel");
+  await syncConsultingMeeting(supabase, id, "delivery", "cancel");
+  try {
+    const { data: files } = await supabase
+      .from("consulting_attachments")
+      .select("storage_path")
+      .eq("project_id", id);
+    const paths = (files ?? []).map((f: { storage_path: string }) => f.storage_path);
+    if (paths.length > 0) await supabase.storage.from(ATTACHMENTS_BUCKET).remove(paths);
+  } catch {
+    // sin archivos que borrar
+  }
+
+  await supabase.from("consulting_projects").delete().eq("id", id);
+  await logActivity(supabase, "eliminó", "consultoría", id, `eliminó el proyecto de consultoría "${pr?.name ?? ""}"`);
+  revalidatePath("/consultoria");
+  redirect(clientId ? `/clientes/${clientId}` : "/consultoria");
+}
+
+// ---------------- Hitos del plan de trabajo ----------------
+
+export async function addConsultingMilestoneAction(fields: {
+  projectId: string;
+  title: string;
+  responsible: string;
+  dueDate: string | null;
+  estHours: number | null;
+}): Promise<{ error: string } | { milestone: ConsultingMilestone }> {
+  const title = fields.title.trim();
+  if (!title) return { error: "Escribe el hito." };
+
+  const supabase = await createSupabase();
+  const { count } = await supabase
+    .from("consulting_milestones")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", fields.projectId);
+
+  const { data, error } = await supabase
+    .from("consulting_milestones")
+    .insert({
+      project_id: fields.projectId,
+      title,
+      responsible: fields.responsible.trim(),
+      due_date: fields.dueDate || null,
+      est_hours: fields.estHours,
+      position: count ?? 0,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "No se pudo agregar el hito." };
+  revalidatePath(`/consultoria/${fields.projectId}`);
+  revalidatePath("/tareas");
+  return { milestone: data as ConsultingMilestone };
+}
+
+export async function updateConsultingMilestoneField(
+  id: string,
+  projectId: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!new Set(["title", "responsible", "due_date", "est_hours", "status"]).has(field))
+    return { error: "Campo no permitido." };
+
+  let parsed: string | number | null = value;
+  if (field === "est_hours") parsed = value ? Number(value) || null : null;
+  if (field === "due_date" && !value) parsed = null;
+
+  const update: Record<string, string | number | null> = { [field]: parsed };
+  // El plazo de la revisión técnica corre desde que el hito quedó listo
+  if (field === "status") {
+    update.review_requested_at = value === "Por revisar" ? todayISO() : null;
+  }
+
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("consulting_milestones").update(update).eq("id", id);
+  if (error) return { error: error.message };
+
+  if (field === "status" && (value === "Entregado" || value === "Por revisar")) {
+    const { data: m } = await supabase.from("consulting_milestones").select("title").eq("id", id).maybeSingle();
+    await logActivity(
+      supabase,
+      value === "Entregado" ? "completó" : "cambió",
+      "consultoría",
+      projectId,
+      value === "Entregado"
+        ? `entregó el hito "${m?.title ?? ""}"`
+        : `mandó a revisión técnica el hito "${m?.title ?? ""}"`
+    );
+  }
+
+  revalidatePath(`/consultoria/${projectId}`);
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function deleteConsultingMilestoneAction(id: string, projectId: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("consulting_milestones").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath(`/consultoria/${projectId}`);
+  revalidatePath("/tareas");
+  return null;
+}
+
+// ---------------- Insumos del cliente ----------------
+
+export async function addConsultingInputAction(fields: {
+  projectId: string;
+  title: string;
+  dueDate: string | null;
+}): Promise<{ error: string } | { input: ConsultingInput }> {
+  const title = fields.title.trim();
+  if (!title) return { error: "Escribe el insumo." };
+
+  const supabase = await createSupabase();
+  const { data, error } = await supabase
+    .from("consulting_inputs")
+    .insert({ project_id: fields.projectId, title, due_date: fields.dueDate || null })
+    .select("*")
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "No se pudo agregar el insumo." };
+  revalidatePath(`/consultoria/${fields.projectId}`);
+  revalidatePath("/tareas");
+  return { input: data as ConsultingInput };
+}
+
+export async function setConsultingInputReceived(
+  id: string,
+  received: boolean
+): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { data: input } = await supabase
+    .from("consulting_inputs")
+    .select("title, project_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("consulting_inputs")
+    .update({ received, received_at: received ? todayISO() : null })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  if (received && input) {
+    await logActivity(supabase, "completó", "consultoría", input.project_id, `registró recibido el insumo "${input.title}"`);
+  }
+  if (input) revalidatePath(`/consultoria/${input.project_id}`);
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function deleteConsultingInputAction(id: string, projectId: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("consulting_inputs").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath(`/consultoria/${projectId}`);
+  revalidatePath("/tareas");
+  return null;
+}
+
+// ---------------- Cambios de alcance ----------------
+
+export async function addConsultingChangeAction(fields: {
+  projectId: string;
+  title: string;
+  inScope: boolean;
+  amount: number | null;
+  notes: string;
+}): Promise<{ error: string } | { change: ConsultingChange }> {
+  const title = fields.title.trim();
+  if (!title) return { error: "Describe la solicitud de cambio." };
+
+  const supabase = await createSupabase();
+  const { data, error } = await supabase
+    .from("consulting_changes")
+    .insert({
+      project_id: fields.projectId,
+      title,
+      in_scope: fields.inScope,
+      status: fields.inScope ? "Aprobado" : "En evaluación",
+      amount: fields.amount,
+      notes: fields.notes.trim(),
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "No se pudo registrar el cambio." };
+  await logActivity(
+    supabase,
+    "creó",
+    "consultoría",
+    fields.projectId,
+    `registró ${fields.inScope ? "un ajuste incluido en alcance" : "una solicitud de cambio de alcance"}: "${title}"`
+  );
+  revalidatePath(`/consultoria/${fields.projectId}`);
+  revalidatePath("/tareas");
+  return { change: data as ConsultingChange };
+}
+
+export async function updateConsultingChangeField(
+  id: string,
+  projectId: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!new Set(["title", "status", "amount", "notes", "in_scope"]).has(field))
+    return { error: "Campo no permitido." };
+
+  let parsed: string | number | boolean | null = value;
+  if (field === "amount") parsed = value ? Number(value) || null : null;
+  if (field === "in_scope") parsed = value === "true";
+
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("consulting_changes")
+    .update({ [field]: parsed })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  if (field === "status") {
+    const { data: c } = await supabase.from("consulting_changes").select("title").eq("id", id).maybeSingle();
+    await logActivity(supabase, "cambió", "consultoría", projectId, `puso el cambio "${c?.title ?? ""}" en ${value}`);
+  }
+
+  revalidatePath(`/consultoria/${projectId}`);
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function deleteConsultingChangeAction(id: string, projectId: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("consulting_changes").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath(`/consultoria/${projectId}`);
+  revalidatePath("/tareas");
+  return null;
+}
+
+// ---------------- Archivos de consultoría ----------------
+
+export async function registerConsultingAttachmentAction(fields: {
+  projectId: string;
+  storagePath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  category?: string;
+}): Promise<{ error: string } | { attachment: ConsultingAttachment }> {
+  const supabase = await createSupabase();
+  const uploadedBy = await currentUserName(supabase);
+
+  const { data, error } = await supabase
+    .from("consulting_attachments")
+    .insert({
+      project_id: fields.projectId,
+      storage_path: fields.storagePath,
+      file_name: fields.fileName,
+      file_size: fields.fileSize,
+      mime_type: fields.mimeType,
+      uploaded_by: uploadedBy,
+      category: fields.category === "entregable" ? "entregable" : "insumo",
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "No se pudo registrar el archivo." };
+  await logActivity(
+    supabase,
+    "subió",
+    "consultoría",
+    fields.projectId,
+    `subió el archivo "${fields.fileName}" (${fields.category === "entregable" ? "entregable" : "insumo"})`
+  );
+  revalidatePath(`/consultoria/${fields.projectId}`);
+  return { attachment: data as ConsultingAttachment };
+}
+
+export async function setConsultingAttachmentCategoryAction(
+  id: string,
+  category: string
+): Promise<FormState> {
+  const value = category === "entregable" ? "entregable" : "insumo";
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("consulting_attachments").update({ category: value }).eq("id", id);
+  if (error) return { error: error.message };
+  return null;
+}
+
+export async function deleteConsultingAttachmentAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { data: file } = await supabase
+    .from("consulting_attachments")
+    .select("storage_path, project_id")
+    .eq("id", id)
+    .single();
+
+  if (file?.storage_path) {
+    await supabase.storage.from(ATTACHMENTS_BUCKET).remove([file.storage_path]);
+  }
+  const { error } = await supabase.from("consulting_attachments").delete().eq("id", id);
+  if (error) return { error: error.message };
+  if (file) revalidatePath(`/consultoria/${file.project_id}`);
+  return null;
+}
+
+export async function getConsultingAttachmentUrlAction(
+  id: string
+): Promise<{ url: string } | { error: string }> {
+  const supabase = await createSupabase();
+  const { data: file } = await supabase
+    .from("consulting_attachments")
     .select("storage_path, file_name")
     .eq("id", id)
     .single();

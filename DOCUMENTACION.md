@@ -99,6 +99,11 @@ activity_log  (quién hizo qué; se limpia a 90 días desde el cron)
 | `activity_log` | Registro de actividad | actor, acción, entidad y resumen legible; el cron diario borra lo de más de 90 días |
 | `training_requests` | Peticiones de un team building (gafetes, tarjetas…) | `training_id`, título, responsable, fecha, `done`; las pendientes salen en "Mis tareas" como tipo "Petición" |
 | `training_attachments` | Archivos de un team building | igual que `task_attachments` pero colgado de `trainings`; bucket "adjuntos", ruta `teambuildings/<id>/` |
+| `consulting_projects` | Proyecto de consultoría (módulo propio, migración 013) | cliente, fase, líder/equipo/comercial/operaciones, alcance, horas contratadas, reuniones de arranque y entrega (con invitación de calendario) y checklist del Mapa del Proceso |
+| `consulting_milestones` | Hitos del plan de trabajo | responsable, fecha, horas estimadas, estado (Pendiente→En curso→Por revisar→Entregado); "Por revisar" dispara la revisión técnica de Operaciones |
+| `consulting_inputs` | Insumos del cliente | fecha acordada y recibido; vencido genera seguimiento al líder y escalamiento al comercial a las 48h |
+| `consulting_changes` | Cambios de alcance | en alcance sí/no, estado (En evaluación→Cotizado→Aprobado/Rechazado→Aplicado) y monto de cotización |
+| `consulting_attachments` | Archivos del proyecto | insumo/entregable; bucket "adjuntos", ruta `consultoria/<id>/` |
 | `profiles` | Perfil por usuario de auth | nombre, correo, `reminder_prefs` (JSON: recordatorios on/off y tipos de tarea) |
 
 Seguridad: **RLS activado en todas las tablas** con política simple: cualquier usuario

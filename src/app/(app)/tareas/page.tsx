@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { computeTasks, customToComputed, sortByDue } from "@/lib/tasks";
+import { computeConsultingTasks, type ConsultingProjectFull } from "@/lib/consulting-tasks";
 import { todayISO } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { TasksList } from "@/components/TasksList";
@@ -36,6 +37,10 @@ export default async function TasksPage() {
     { data: timeData },
     { data: subtasksData },
     { data: requestsData },
+    { data: consultingData },
+    { data: cMilestonesData },
+    { data: cInputsData },
+    { data: cChangesData },
   ] = await Promise.all([
     supabase
       .from("trainings")
@@ -58,6 +63,10 @@ export default async function TasksPage() {
     supabase.from("time_entries").select("*").order("created_at"),
     supabase.from("subtasks").select("*").order("position"),
     supabase.from("training_requests").select("*").order("position"),
+    supabase.from("consulting_projects").select("*, clients(id, company)"),
+    supabase.from("consulting_milestones").select("*"),
+    supabase.from("consulting_inputs").select("*"),
+    supabase.from("consulting_changes").select("*"),
   ]);
 
   // Peticiones de team building, colgadas de su training para el motor de tareas
@@ -106,8 +115,21 @@ export default async function TasksPage() {
     profiles.map((p) => p.full_name),
     facilitators
   );
+  // Proyectos de consultoría con sus hitos/insumos/cambios colgados
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const consultingProjects: ConsultingProjectFull[] = ((consultingData ?? []) as any[]).map(
+    (pr) => ({
+      ...pr,
+      milestones: ((cMilestonesData ?? []) as any[]).filter((m) => m.project_id === pr.id),
+      inputs: ((cInputsData ?? []) as any[]).filter((i) => i.project_id === pr.id),
+      changes: ((cChangesData ?? []) as any[]).filter((c) => c.project_id === pr.id),
+    })
+  );
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
   const tasks = sortByDue([
     ...computeTasks(trainings, internalNames),
+    ...computeConsultingTasks(consultingProjects),
     ...customToComputed(customTasks, clientNameById),
   ]);
 
@@ -117,7 +139,7 @@ export default async function TasksPage() {
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">Mis tareas</h1>
           <p className="text-sm text-slate-500">
-            Se generan solas a partir de las capacitaciones y se mezclan con las tareas que
+            Se generan solas a partir de capacitaciones, team buildings y consultorías, y se mezclan con las tareas que
             capturen tú o Arianna. Al completarlas aquí, todo se actualiza también (y al revés).
           </p>
         </div>
@@ -135,6 +157,7 @@ export default async function TasksPage() {
                   "Seguimiento",
                   "Personal",
                   "Petición",
+                  "Consultoría",
                 ],
               }
             }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
+import { computeConsultingTasks } from "@/lib/consulting-tasks";
 import { todayISO, formatDate } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import type { ReminderPrefs } from "@/lib/types";
@@ -59,14 +60,33 @@ export async function GET(request: Request) {
     { data: customData },
     facilitators,
     { data: requestsData },
+    { data: consultingData },
+    { data: cMilestonesData },
+    { data: cInputsData },
+    { data: cChangesData },
   ] = await Promise.all([
     supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
     supabase.from("custom_tasks").select("*, clients(id, company)").eq("status", "Pendiente"),
     fetchFacilitators(supabase),
-    // Peticiones de team building (tolerante a que falte la migración 011)
+    // Peticiones de team building y consultoría (tolerantes a migraciones faltantes)
     supabase.from("training_requests").select("*"),
+    supabase.from("consulting_projects").select("*, clients(id, company)"),
+    supabase.from("consulting_milestones").select("*"),
+    supabase.from("consulting_inputs").select("*"),
+    supabase.from("consulting_changes").select("*"),
   ]);
+
+  // Consultoría: proyectos con hitos/insumos/cambios para el motor de tareas
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const consultingProjects = ((consultingData ?? []) as any[]).map((pr) => ({
+    ...pr,
+    milestones: ((cMilestonesData ?? []) as any[]).filter((m) => m.project_id === pr.id),
+    inputs: ((cInputsData ?? []) as any[]).filter((i) => i.project_id === pr.id),
+    changes: ((cChangesData ?? []) as any[]).filter((c) => c.project_id === pr.id),
+  }));
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
 
   const requestsByTraining: Record<string, unknown[]> = {};
   for (const r of (requestsData ?? []) as { training_id: string }[]) {
@@ -101,6 +121,8 @@ export async function GET(request: Request) {
   const tasks = sortByDue([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...computeTasks(trainingsWithRequests as any, internalNames),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...computeConsultingTasks(consultingProjects as any),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...customToComputed((customData ?? []) as any),
   ]);

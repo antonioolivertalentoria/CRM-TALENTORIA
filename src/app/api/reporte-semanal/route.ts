@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { createClient } from "@/lib/supabase/server";
 import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
+import { computeConsultingTasks } from "@/lib/consulting-tasks";
 import { addDays, formatDate, todayISO } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import type { CustomTask, ReminderPrefs } from "@/lib/types";
@@ -84,15 +85,40 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Inicia sesión para descargar el reporte." }, { status: 401 });
   }
 
-  const [{ data: trainingsData }, { data: profilesData }, { data: customData }, facilitators, { data: requestsData }] =
+  const [
+    { data: trainingsData },
+    { data: profilesData },
+    { data: customData },
+    facilitators,
+    { data: requestsData },
+    { data: consultingData },
+    { data: cMilestonesData },
+    { data: cInputsData },
+    { data: cChangesData },
+  ] =
     await Promise.all([
       supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
       supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
       supabase.from("custom_tasks").select("*, clients(id, company)").eq("status", "Pendiente"),
       fetchFacilitators(supabase),
-      // Peticiones de team building (tolerante a que falte la migración 011)
+      // Peticiones de team building y consultoría (tolerantes a migraciones faltantes)
       supabase.from("training_requests").select("*"),
+      supabase.from("consulting_projects").select("*, clients(id, company)"),
+      supabase.from("consulting_milestones").select("*"),
+      supabase.from("consulting_inputs").select("*"),
+      supabase.from("consulting_changes").select("*"),
     ]);
+
+  // Consultoría: proyectos con hitos/insumos/cambios para el motor de tareas
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const consultingProjects = ((consultingData ?? []) as any[]).map((pr) => ({
+    ...pr,
+    milestones: ((cMilestonesData ?? []) as any[]).filter((m) => m.project_id === pr.id),
+    inputs: ((cInputsData ?? []) as any[]).filter((i) => i.project_id === pr.id),
+    changes: ((cChangesData ?? []) as any[]).filter((c) => c.project_id === pr.id),
+  }));
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
 
   const requestsByTraining: Record<string, unknown[]> = {};
   for (const r of (requestsData ?? []) as { training_id: string }[]) {
@@ -113,6 +139,8 @@ export async function GET(request: Request) {
   const allTasks = sortByDue([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...computeTasks(trainingsWithRequests as any, internalNames),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...computeConsultingTasks(consultingProjects as any),
 
     ...customToComputed((customData ?? []) as (CustomTask & { clients: { id: string; company: string } | null })[]),
   ]);

@@ -208,3 +208,91 @@ export type ActivityEvent = {
 
 export type TrainingWithClient = Training & { clients: Pick<Client, "id" | "company"> };
 export type TrainingWithSessions = TrainingWithClient & { sessions: Session[] };
+
+// ---------------- Consultoría (migración 013) ----------------
+
+export type ConsultingProject = {
+  id: string;
+  client_id: string;
+  name: string;
+  status: string;
+  priority: string;
+  leader: string;
+  team: string;
+  comercial: string;
+  internal_owner: string;
+  authorized_at: string | null;
+  alcance: string;
+  entregables: string;
+  contracted_hours: number | null;
+  whatsapp_group: string;
+  drive_folder_url: string;
+  kickoff_date: string | null;
+  kickoff_start: string | null;
+  kickoff_end: string | null;
+  delivery_date: string | null;
+  delivery_start: string | null;
+  delivery_end: string | null;
+  expediente_completo: string;
+  grupo_wa: string;
+  ficha_interna: string;
+  minuta_arranque: string;
+  plan_trabajo: string;
+  plan_validado: string;
+  entregables_enviados: string;
+  aceptacion_cliente: string;
+  factura: string;
+  encuesta: string;
+  cierre_interno: string;
+  seguimiento_20: string;
+  notes: string;
+  internal_notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ConsultingMilestone = {
+  id: string;
+  project_id: string;
+  title: string;
+  responsible: string;
+  due_date: string | null;
+  est_hours: number | null;
+  status: string;
+  review_requested_at: string | null;
+  position: number;
+  created_at: string;
+};
+
+export type ConsultingInput = {
+  id: string;
+  project_id: string;
+  title: string;
+  due_date: string | null;
+  received: boolean;
+  received_at: string | null;
+  created_at: string;
+};
+
+export type ConsultingChange = {
+  id: string;
+  project_id: string;
+  title: string;
+  in_scope: boolean;
+  status: string;
+  amount: number | null;
+  notes: string;
+  created_at: string;
+};
+
+export type ConsultingAttachment = {
+  id: string;
+  project_id: string;
+  storage_path: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  uploaded_by: string;
+  category: string;
+  created_at: string;
+};
