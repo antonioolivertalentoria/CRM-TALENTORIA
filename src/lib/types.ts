@@ -148,6 +148,8 @@ export type Facilitator = {
   name: string;
   is_internal: boolean;
   active: boolean;
+  /** Para invitarlo a los eventos de calendario (migración 012). */
+  email?: string;
   created_at: string;
 };
 

@@ -20,6 +20,7 @@ const input =
  */
 export function FacilitatorsManager({ facilitators }: { facilitators: Facilitator[] }) {
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [isInternal, setIsInternal] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -28,18 +29,19 @@ export function FacilitatorsManager({ facilitators }: { facilitators: Facilitato
   const add = () => {
     setError("");
     startTransition(async () => {
-      const res = await addFacilitatorAction(name, isInternal);
+      const res = await addFacilitatorAction(name, isInternal, email);
       if (res?.error) {
         setError(res.error);
       } else {
         setName("");
+        setEmail("");
         setIsInternal(false);
         router.refresh();
       }
     });
   };
 
-  const update = (id: string, fields: { is_internal?: boolean; active?: boolean }) => {
+  const update = (id: string, fields: { is_internal?: boolean; active?: boolean; email?: string }) => {
     setError("");
     startTransition(async () => {
       const res = await updateFacilitatorAction(id, fields);
@@ -76,6 +78,19 @@ export function FacilitatorsManager({ facilitators }: { facilitators: Facilitato
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && add()}
               placeholder="Ej. Rocío Hernández"
+              className={input}
+            />
+          </div>
+          <div className="min-w-52 flex-1">
+            <label className="mb-1 block text-xs font-semibold text-slate-500">
+              Correo (para invitarle a los eventos de calendario)
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && add()}
+              placeholder="opcional@talentoria.com"
               className={input}
             />
           </div>
@@ -128,7 +143,21 @@ export function FacilitatorsManager({ facilitators }: { facilitators: Facilitato
                     .join("")
                     .toUpperCase()}
                 </span>
-                <span className="min-w-40 flex-1 text-sm font-medium text-slate-800">{f.name}</span>
+                <div className="min-w-40 flex-1">
+                  <p className="text-sm font-medium text-slate-800">{f.name}</p>
+                  <input
+                    type="email"
+                    defaultValue={f.email ?? ""}
+                    placeholder="Sin correo (no recibe eventos de calendario)"
+                    title="Correo al que le llegan las invitaciones de calendario de sus sesiones; se guarda al salir del campo"
+                    onBlur={(e) => {
+                      if (e.target.value.trim() !== (f.email ?? "").trim()) {
+                        update(f.id, { email: e.target.value });
+                      }
+                    }}
+                    className="mt-0.5 w-full max-w-72 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-500 outline-none transition hover:border-slate-300 focus:border-brand-cyan"
+                  />
+                </div>
 
                 <label
                   className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-500"

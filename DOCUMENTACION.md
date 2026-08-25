@@ -94,7 +94,7 @@ activity_log  (quién hizo qué; se limpia a 90 días desde el cron)
 | `custom_tasks` | Tareas capturadas a mano | título, detalles, para quién (`assignee`), quién la pidió (`requested_by`), `client_id` opcional (`null` = "marca blanca / interno"), fecha límite, estado (Pendiente/Completada), **`notify_on_complete`** (correo a quien la pidió al completarse) |
 | `task_attachments` | Archivos adjuntos de una tarea propia | `task_id`, `storage_path` (ruta en el bucket), nombre original, tamaño, tipo, quién lo subió, **`category`** (`insumo` = material para trabajar, `entregable` = resultado que se entrega) |
 | `subtasks` | Partes de una tarea propia | `task_id`, título, fecha opcional, `done`, `position`; alimentan el medidor de avance ("2 de 5") |
-| `facilitators` | Catálogo de facilitadores | nombre, `is_internal` (interno = contenido a 7 días; externo = 14) y `active`; se administra en `/facilitadores` |
+| `facilitators` | Catálogo de facilitadores | nombre, `is_internal` (interno = contenido a 7 días; externo = 14), `active` y **`email`** (para invitarle a los eventos de calendario); se administra en `/facilitadores` |
 | `time_entries` | Tiempo invertido por tarea | `task_key` (clave lógica de la tarea, derivada o personal), título, persona, minutos; sobrevive aunque la tarea se complete o borre, para sumar tiempos |
 | `activity_log` | Registro de actividad | actor, acción, entidad y resumen legible; el cron diario borra lo de más de 90 días |
 | `training_requests` | Peticiones de un team building (gafetes, tarjetas…) | `training_id`, título, responsable, fecha, `done`; las pendientes salen en "Mis tareas" como tipo "Petición" |
@@ -138,6 +138,20 @@ Completar una tarea actualiza el campo correspondiente (y viceversa). Reglas de 
 
 Las tareas de `custom_tasks` (tipo "Personal") se mezclan en la misma lista, en los
 recordatorios por correo y en el reporte semanal.
+
+### Invitaciones de Google Calendar (src/lib/calendar.ts)
+
+Al crear una capacitación o team building con sesiones fechadas, cada sesión
+manda por Resend una invitación de calendario estándar (.ics, METHOD:REQUEST,
+zona America/Mexico_City): Gmail/Google Calendar la agrega al calendario del
+invitado con todos los datos. Mover fecha/horario/facilitador manda la
+actualización (mismo UID, SEQUENCE creciente) y cancelar o borrar la sesión
+(o el proyecto) manda la cancelación (METHOD:CANCEL). Invitados: el equipo
+base (ALWAYS_INVITED en calendar.ts: Antonio y Arianna), quien creó el
+proyecto, el responsable interno y el/la facilitador(a) de la sesión —
+correos resueltos vía profiles, facilitators.email y el mapa EXTRA_EMAILS
+(Carolina, Adrián Hernández). Todo es best-effort: sin RESEND_API_KEY o ante
+cualquier error, la acción original no se afecta.
 
 ## 6. Endpoints y procesos automáticos
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, todayISO } from "@/lib/format";
+import { syncSessionEvent, syncTrainingEvents } from "@/lib/calendar";
 import type { Subtask, TaskAttachment, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
@@ -328,6 +329,8 @@ export async function createTrainingAction(
     data.id,
     `creó ${isTeamBuilding ? "el team building" : "la capacitación"} "${shortName}"`
   );
+  // Invitaciones de Google Calendar por correo para las sesiones ya fechadas
+  await syncTrainingEvents(supabase, data.id, "request");
   if (isTeamBuilding) revalidatePath("/teambuildings");
   revalidatePath("/");
   revalidatePath("/tareas");
@@ -418,6 +421,9 @@ export async function updateTrainingField(
 export async function deleteTrainingAction(id: string, clientId: string) {
   const supabase = await createSupabase();
   const { data: tr } = await supabase.from("trainings").select("short_name").eq("id", id).maybeSingle();
+
+  // Quita de los calendarios los eventos de sus sesiones fechadas
+  await syncTrainingEvents(supabase, id, "cancel");
 
   // Los archivos del bucket no se borran solos con la fila (team buildings)
   try {
@@ -546,6 +552,14 @@ export async function updateSessionField(
     await logActivity(supabase, "cambió", "sesión", trainingId, `puso la sesión ${s?.session_number ?? ""} en ${value}`);
   }
 
+  // Calendario: mover fecha/horario/facilitador manda la actualización del
+  // evento; cancelar la sesión manda la cancelación. (Solo si hay fecha+hora.)
+  if (field === "status" && value === "Cancelada") {
+    await syncSessionEvent(supabase, id, "cancel");
+  } else if (["session_date", "start_time", "end_time", "facilitator"].includes(field)) {
+    await syncSessionEvent(supabase, id, "request");
+  }
+
   revalidatePath(`/capacitaciones/${trainingId}`);
   revalidatePath("/");
   return null;
@@ -554,6 +568,7 @@ export async function updateSessionField(
 export async function deleteSessionAction(id: string, trainingId: string) {
   const supabase = await createSupabase();
   const { data: s } = await supabase.from("sessions").select("session_number").eq("id", id).maybeSingle();
+  await syncSessionEvent(supabase, id, "cancel"); // quita el evento de los calendarios
   await supabase.from("sessions").delete().eq("id", id);
   await logActivity(supabase, "eliminó", "sesión", trainingId, `eliminó la sesión ${s?.session_number ?? ""}`);
   revalidatePath(`/capacitaciones/${trainingId}`);
@@ -1013,7 +1028,8 @@ export async function getAttachmentUrlAction(
 
 export async function addFacilitatorAction(
   name: string,
-  isInternal: boolean
+  isInternal: boolean,
+  email = ""
 ): Promise<FormState> {
   const clean = name.trim();
   if (!clean) return { error: "Escribe el nombre del facilitador." };
@@ -1028,11 +1044,20 @@ export async function addFacilitatorAction(
     .maybeSingle();
   if (existing) return { error: `"${existing.name}" ya está en el catálogo.` };
 
-  const { data, error } = await supabase
+  const facPayload: Record<string, string | boolean> = { name: clean, is_internal: isInternal };
+  if (email.trim()) facPayload.email = email.trim();
+
+  let { data, error } = await supabase
     .from("facilitators")
-    .insert({ name: clean, is_internal: isInternal })
+    .insert(facPayload)
     .select("id")
     .single();
+
+  // Respaldo mientras la migración 012 no esté corrida en la base
+  if (error && facPayload.email && error.message.includes("email")) {
+    delete facPayload.email;
+    ({ data, error } = await supabase.from("facilitators").insert(facPayload).select("id").single());
+  }
 
   if (error || !data) {
     if (error?.message.includes("facilitators")) {
@@ -1048,7 +1073,7 @@ export async function addFacilitatorAction(
 
 export async function updateFacilitatorAction(
   id: string,
-  fields: { name?: string; is_internal?: boolean; active?: boolean }
+  fields: { name?: string; is_internal?: boolean; active?: boolean; email?: string }
 ): Promise<FormState> {
   const supabase = await createSupabase();
   const payload: Record<string, string | boolean> = {};
@@ -1059,6 +1084,7 @@ export async function updateFacilitatorAction(
   }
   if (fields.is_internal !== undefined) payload.is_internal = fields.is_internal;
   if (fields.active !== undefined) payload.active = fields.active;
+  if (fields.email !== undefined) payload.email = fields.email.trim();
 
   const { error } = await supabase.from("facilitators").update(payload).eq("id", id);
   if (error) return { error: error.message };
