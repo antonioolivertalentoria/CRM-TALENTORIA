@@ -22,7 +22,7 @@ import {
 } from "@/components/ConsultingSections";
 import { ConsultingAttachments } from "@/components/ConsultingAttachments";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
-import { formatMinutes } from "@/components/TasksList";
+import { formatMinutes } from "@/lib/format";
 import type {
   Client,
   ConsultingAttachment,

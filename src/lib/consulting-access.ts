@@ -9,7 +9,7 @@
  * Para abrir el módulo a todo el equipo: cambia CONSULTING_OPEN_TO_ALL
  * a true (un solo cambio, un deploy).
  */
-export const CONSULTING_OPEN_TO_ALL = false;
+export const CONSULTING_OPEN_TO_ALL = true;
 
 const ALLOWED_EMAILS = ["antoniooliver@talentoria.com"];
 

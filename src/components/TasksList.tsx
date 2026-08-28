@@ -19,20 +19,13 @@ import {
   toggleSubtaskAction,
   deleteSubtaskAction,
 } from "@/lib/actions";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMinutes } from "@/lib/format";
 import { TaskAttachments } from "./TaskAttachments";
 import type { ComputedTask } from "@/lib/tasks";
 import type { CustomTask, Subtask, TaskAttachment, TimeEntry } from "@/lib/types";
 
 const inputCls =
   "w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
-
-/** "90" minutos → "1.5 h"; menos de una hora → "45 min". */
-export function formatMinutes(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`;
-  const h = Math.round((minutes / 60) * 10) / 10;
-  return `${h % 1 === 0 ? h.toFixed(0) : h} h`;
-}
 
 /**
  * Cuadrito de tiempo por tarea: muestra el total registrado y, al abrirlo,

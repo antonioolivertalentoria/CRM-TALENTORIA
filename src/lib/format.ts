@@ -52,3 +52,10 @@ export function addBusinessDays(iso: string, days: number): string {
   }
   return toISO(d);
 }
+
+/** "90" minutos → "1.5 h"; menos de una hora → "45 min". */
+export function formatMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.round((minutes / 60) * 10) / 10;
+  return `${h % 1 === 0 ? h.toFixed(0) : h} h`;
+}
