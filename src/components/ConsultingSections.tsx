@@ -17,7 +17,8 @@ import { MILESTONE_STATUSES, CHANGE_STATUSES } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import { EditableField } from "./EditableField";
 import { StatusSelect } from "./StatusSelect";
-import type { ConsultingChange, ConsultingInput, ConsultingMilestone } from "@/lib/types";
+import { ConsultingItemFiles } from "./ConsultingAttachments";
+import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone } from "@/lib/types";
 
 const inputCls =
   "rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
@@ -33,10 +34,12 @@ export function MilestonesSection({
   projectId,
   milestones,
   people,
+  filesByMilestone = {},
 }: {
   projectId: string;
   milestones: ConsultingMilestone[];
   people: string[];
+  filesByMilestone?: Record<string, ConsultingAttachment[]>;
 }) {
   const [title, setTitle] = useState("");
   const [responsible, setResponsible] = useState("");
@@ -95,7 +98,8 @@ export function MilestonesSection({
       <div className="p-4">
         <p className="mb-3 text-xs text-slate-400">
           Cada hito genera su tarea al responsable. Al ponerlo &quot;Por revisar&quot; se crea la tarea de
-          revisión técnica de Operaciones (1 día hábil); al aprobarla queda &quot;Entregado&quot;.
+          revisión técnica de Operaciones (1 día hábil); al aprobarla queda &quot;Entregado&quot;. Con el
+          clip 📎 sube lo que ya está listo de cada hito (queda como entregable del proyecto).
         </p>
 
         {milestones.length > 0 && (
@@ -108,6 +112,7 @@ export function MilestonesSection({
                   <th className="w-36 px-2 py-2 font-semibold">Fecha</th>
                   <th className="w-24 px-2 py-2 font-semibold">Horas est.</th>
                   <th className="w-36 px-2 py-2 font-semibold">Estado</th>
+                  <th className="w-16 px-2 py-2 font-semibold" title="Entregables listos de este hito">📎</th>
                   <th className="w-10 px-2 py-2"></th>
                 </tr>
               </thead>
@@ -133,6 +138,14 @@ export function MilestonesSection({
                     </td>
                     <td className="px-2 py-1.5 pt-2">
                       <StatusSelect value={m.status} options={MILESTONE_STATUSES} onChange={save(m.id, "status")} small />
+                    </td>
+                    <td className="px-2 py-1.5 pt-2">
+                      <ConsultingItemFiles
+                        projectId={projectId}
+                        category="entregable"
+                        milestoneId={m.id}
+                        files={filesByMilestone[m.id] ?? []}
+                      />
                     </td>
                     <td className="px-2 py-1.5 pt-2.5">
                       <button onClick={() => remove(m)} disabled={pending} title="Eliminar hito" className="text-slate-300 transition hover:text-red-500">
@@ -186,9 +199,11 @@ export function MilestonesSection({
 export function InputsSection({
   projectId,
   inputs,
+  filesByInput = {},
 }: {
   projectId: string;
   inputs: ConsultingInput[];
+  filesByInput?: Record<string, ConsultingAttachment[]>;
 }) {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
@@ -221,6 +236,7 @@ export function InputsSection({
         <p className="mb-3 text-xs text-slate-400">
           Información, accesos o disponibilidad que el cliente debe entregar. Si un insumo se
           vence, el líder recibe la tarea de seguimiento y a las 48 horas se escala al comercial.
+          Con el clip 📎 sube el documento que entregó el cliente.
         </p>
         {inputs.length > 0 && (
           <ul className="mb-3 space-y-1.5">
@@ -254,6 +270,12 @@ export function InputsSection({
                   <span className={`min-w-0 flex-1 text-sm font-medium ${i.received ? "text-slate-400 line-through" : "text-slate-800"}`}>
                     {i.title}
                   </span>
+                  <ConsultingItemFiles
+                    projectId={projectId}
+                    category="insumo"
+                    inputId={i.id}
+                    files={filesByInput[i.id] ?? []}
+                  />
                   {i.due_date && (
                     <span className={`shrink-0 text-xs font-semibold ${overdue ? "text-red-600" : "text-slate-500"}`}>
                       {i.received && i.received_at ? `Recibido ${formatDate(i.received_at)}` : formatDate(i.due_date)}

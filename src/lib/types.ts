@@ -288,6 +288,9 @@ export type ConsultingChange = {
 export type ConsultingAttachment = {
   id: string;
   project_id: string;
+  /** Si el archivo cuelga de un hito (entregable) o insumo (migración 014). */
+  milestone_id?: string | null;
+  input_id?: string | null;
   storage_path: string;
   file_name: string;
   file_size: number;

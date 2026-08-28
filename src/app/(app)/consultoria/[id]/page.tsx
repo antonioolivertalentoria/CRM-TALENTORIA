@@ -84,6 +84,24 @@ export default async function ConsultingDetailPage({
   const people = profiles.map((p) => p.full_name);
   const suggestions = facilitatorSuggestions(people, catalog);
 
+  // Archivos agrupados por hito e insumo para los clips 📎 de cada renglón,
+  // y etiqueta de origen para la lista general
+  const filesByMilestone: Record<string, typeof files> = {};
+  const filesByInput: Record<string, typeof files> = {};
+  const itemLabels: Record<string, string> = {};
+  const milestoneTitle = Object.fromEntries(milestones.map((m) => [m.id, m.title]));
+  const inputTitle = Object.fromEntries(inputs.map((i) => [i.id, i.title]));
+  for (const f of files) {
+    if (f.milestone_id) {
+      (filesByMilestone[f.milestone_id] ??= []).push(f);
+      if (milestoneTitle[f.milestone_id]) itemLabels[f.id] = `Hito: ${milestoneTitle[f.milestone_id]}`;
+    }
+    if (f.input_id) {
+      (filesByInput[f.input_id] ??= []).push(f);
+      if (inputTitle[f.input_id]) itemLabels[f.id] = `Insumo: ${inputTitle[f.input_id]}`;
+    }
+  }
+
   // Tiempo ⏱ invertido en el proyecto (todas sus tareas llevan cons-<id>-)
   const spentMinutes = ((timeData ?? []) as unknown as Pick<TimeEntry, "task_key" | "minutes">[])
     .filter((e) => e.task_key.startsWith(`cons-${id}-`))
@@ -247,11 +265,18 @@ export default async function ConsultingDetailPage({
         </div>
       </section>
 
-      <MilestonesSection projectId={project.id} milestones={milestones} people={suggestions} />
+      <MilestonesSection
+        projectId={project.id}
+        milestones={milestones}
+        people={suggestions}
+        filesByMilestone={filesByMilestone}
+      />
 
-      <InputsSection projectId={project.id} inputs={inputs} />
+      <InputsSection projectId={project.id} inputs={inputs} filesByInput={filesByInput} />
 
       <ChangesSection projectId={project.id} changes={changes} />
+
+      <ConsultingAttachments projectId={project.id} attachments={files} itemLabels={itemLabels} />
 
       {/* Checklist del proceso */}
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -282,8 +307,6 @@ export default async function ConsultingDetailPage({
           ))}
         </div>
       </section>
-
-      <ConsultingAttachments projectId={project.id} attachments={files} />
 
       {/* Notas */}
       <section className="grid gap-4 lg:grid-cols-2">

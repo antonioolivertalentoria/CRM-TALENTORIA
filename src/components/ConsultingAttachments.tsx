@@ -39,9 +39,12 @@ function fileIcon(mime: string, name: string): string {
 export function ConsultingAttachments({
   projectId,
   attachments,
+  itemLabels = {},
 }: {
   projectId: string;
   attachments: ConsultingAttachment[];
+  /** Etiqueta del hito/insumo del que cuelga cada archivo (por id de archivo). */
+  itemLabels?: Record<string, string>;
 }) {
   const [items, setItems] = useState<ConsultingAttachment[]>(attachments);
   const [uploading, setUploading] = useState<string[]>([]);
@@ -145,6 +148,14 @@ export function ConsultingAttachments({
           >
             {att.file_name}
           </button>
+          {itemLabels[att.id] && (
+            <span
+              className="max-w-28 shrink-0 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500"
+              title={itemLabels[att.id]}
+            >
+              {itemLabels[att.id]}
+            </span>
+          )}
           <span className="shrink-0 text-[11px] text-slate-400">{formatSize(att.file_size)}</span>
           <button
             onClick={() => move(att)}
@@ -265,5 +276,166 @@ export function ConsultingAttachments({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * Clip 📎 por renglón: sube y baja los documentos de UN hito (entregables
+ * listos) o de UN insumo (lo que entregó el cliente). Los archivos también
+ * aparecen en la sección "Archivos" del proyecto, ya clasificados.
+ */
+export function ConsultingItemFiles({
+  projectId,
+  category,
+  milestoneId,
+  inputId,
+  files,
+}: {
+  projectId: string;
+  category: "insumo" | "entregable";
+  milestoneId?: string;
+  inputId?: string;
+  files: ConsultingAttachment[];
+}) {
+  const [items, setItems] = useState<ConsultingAttachment[]>(files);
+  const [open, setOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const upload = async (list: FileList) => {
+    setError("");
+    const ok = Array.from(list).filter((f) => f.size <= MAX_ATTACHMENT_MB * 1024 * 1024);
+    if (Array.from(list).length > ok.length) {
+      setError(`Máximo ${MAX_ATTACHMENT_MB} MB por archivo; para pesados usa Drive.`);
+    }
+    if (ok.length === 0) return;
+
+    setUploading(true);
+    const supabase = createClient();
+    for (const file of ok) {
+      const path = `consultoria/${projectId}/${crypto.randomUUID()}-${safeName(file.name)}`;
+      const { error: upErr } = await supabase.storage
+        .from(ATTACHMENTS_BUCKET)
+        .upload(path, file, { contentType: file.type || "application/octet-stream" });
+      if (upErr) {
+        setError(`No se pudo subir ${file.name}: ${upErr.message}`);
+        continue;
+      }
+      const res = await registerConsultingAttachmentAction({
+        projectId,
+        storagePath: path,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type || "",
+        category,
+        milestoneId,
+        inputId,
+      });
+      if ("error" in res) {
+        setError(res.error);
+        continue;
+      }
+      setItems((prev) => [...prev, res.attachment]);
+    }
+    setUploading(false);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const openFile = (att: ConsultingAttachment) => {
+    startTransition(async () => {
+      const res = await getConsultingAttachmentUrlAction(att.id);
+      if ("error" in res) setError(res.error);
+      else window.open(res.url, "_blank", "noopener,noreferrer");
+    });
+  };
+
+  const remove = (att: ConsultingAttachment) => {
+    if (!confirm(`¿Eliminar el archivo "${att.file_name}"?`)) return;
+    startTransition(async () => {
+      const res = await deleteConsultingAttachmentAction(att.id);
+      if (res?.error) {
+        setError(res.error);
+        return;
+      }
+      setItems((prev) => prev.filter((x) => x.id !== att.id));
+    });
+  };
+
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setOpen(!open)}
+        title={
+          category === "insumo"
+            ? "Documentos que entregó el cliente para este insumo"
+            : "Documentos listos de este hito (entregables)"
+        }
+        className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold transition ${
+          items.length > 0
+            ? "border-brand-cyan/40 bg-brand-cyan/10 text-brand-cyan-dark hover:bg-brand-cyan/20"
+            : "border-slate-200 bg-white text-slate-400 hover:border-brand-cyan hover:text-brand-cyan-dark"
+        }`}
+      >
+        📎 {items.length || "+"}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-7 z-20 w-72 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-lg">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {category === "insumo" ? "📥 Documentos del insumo" : "📤 Entregables del hito"}
+          </p>
+          {items.length > 0 && (
+            <ul className="mb-2 space-y-1">
+              {items.map((att) => (
+                <li key={att.id} className="flex items-center gap-2 text-xs">
+                  <span className="shrink-0">{fileIcon(att.mime_type, att.file_name)}</span>
+                  <button
+                    onClick={() => openFile(att)}
+                    disabled={pending}
+                    className="min-w-0 flex-1 truncate text-left font-medium text-brand-cyan-dark hover:underline disabled:opacity-60"
+                    title={`Abrir ${att.file_name}`}
+                  >
+                    {att.file_name}
+                  </button>
+                  <span className="shrink-0 text-[10px] text-slate-400">{formatSize(att.file_size)}</span>
+                  <button
+                    onClick={() => remove(att)}
+                    disabled={pending}
+                    title="Eliminar archivo"
+                    className="shrink-0 text-slate-300 transition hover:text-red-500"
+                  >
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="w-full rounded-lg border-2 border-dashed border-slate-300 px-2 py-1.5 text-[11px] text-slate-400 transition hover:border-brand-cyan hover:text-brand-cyan-dark disabled:opacity-60"
+          >
+            {uploading ? "Subiendo…" : `📎 Subir ${category === "insumo" ? "documento del cliente" : "entregable listo"}`}
+          </button>
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) upload(e.target.files);
+            }}
+          />
+          {error && <p className="mt-1.5 text-[11px] text-amber-600">{error}</p>}
+          <button onClick={() => setOpen(false)} className="mt-2 text-[11px] text-slate-400 hover:text-slate-600">
+            Cerrar
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

@@ -1803,23 +1803,37 @@ export async function registerConsultingAttachmentAction(fields: {
   fileSize: number;
   mimeType: string;
   category?: string;
+  /** Para colgar el archivo de un hito (entregable) o insumo del cliente. */
+  milestoneId?: string;
+  inputId?: string;
 }): Promise<{ error: string } | { attachment: ConsultingAttachment }> {
   const supabase = await createSupabase();
   const uploadedBy = await currentUserName(supabase);
 
-  const { data, error } = await supabase
+  const payload: Record<string, string | number | null> = {
+    project_id: fields.projectId,
+    storage_path: fields.storagePath,
+    file_name: fields.fileName,
+    file_size: fields.fileSize,
+    mime_type: fields.mimeType,
+    uploaded_by: uploadedBy,
+    category: fields.category === "entregable" ? "entregable" : "insumo",
+  };
+  if (fields.milestoneId) payload.milestone_id = fields.milestoneId;
+  if (fields.inputId) payload.input_id = fields.inputId;
+
+  let { data, error } = await supabase
     .from("consulting_attachments")
-    .insert({
-      project_id: fields.projectId,
-      storage_path: fields.storagePath,
-      file_name: fields.fileName,
-      file_size: fields.fileSize,
-      mime_type: fields.mimeType,
-      uploaded_by: uploadedBy,
-      category: fields.category === "entregable" ? "entregable" : "insumo",
-    })
+    .insert(payload)
     .select("*")
     .single();
+
+  // Respaldo mientras la migración 014 no esté corrida en la base
+  if (error && (error.message.includes("milestone_id") || error.message.includes("input_id"))) {
+    delete payload.milestone_id;
+    delete payload.input_id;
+    ({ data, error } = await supabase.from("consulting_attachments").insert(payload).select("*").single());
+  }
 
   if (error || !data) return { error: error?.message ?? "No se pudo registrar el archivo." };
   await logActivity(
