@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, todayISO } from "@/lib/format";
@@ -46,17 +47,26 @@ async function logActivity(
   entityId: string,
   summary: string
 ) {
+  // El registro se escribe DESPUÉS de responderle al usuario: averiguar
+  // quién es (auth + perfil) e insertar la bitácora son tres viajes al
+  // servidor que no tienen por qué hacer esperar al que dio clic.
   try {
-    const actor = await currentUserName(supabase);
-    await supabase.from("activity_log").insert({
-      actor,
-      action,
-      entity_type: entityType,
-      entity_id: entityId,
-      summary,
+    after(async () => {
+      try {
+        const actor = await currentUserName(supabase);
+        await supabase.from("activity_log").insert({
+          actor,
+          action,
+          entity_type: entityType,
+          entity_id: entityId,
+          summary,
+        });
+      } catch {
+        // Nunca debe tumbar la acción que lo llamó.
+      }
     });
   } catch {
-    // Nunca debe tumbar la acción que lo llamó.
+    // Fuera de un request (scripts, pruebas): simplemente no se registra.
   }
 }
 
@@ -872,20 +882,26 @@ async function notifyTaskCompleted(
 export async function completeCustomTaskAction(id: string): Promise<FormState> {
   const supabase = await createSupabase();
 
-  // Se lee antes de actualizar para saber título y si hay que avisar.
-  // select("*") tolera que notify_on_complete aún no exista en la base.
-  const { data: task } = await supabase.from("custom_tasks").select("*").eq("id", id).maybeSingle();
-
-  const { error } = await supabase
+  // Un solo viaje: actualiza y devuelve la fila ya guardada (título y
+  // notify_on_complete). select("*") tolera que la columna aún no exista.
+  const { data: task, error } = await supabase
     .from("custom_tasks")
     .update({ status: "Completada", completed_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("*")
+    .maybeSingle();
   if (error) return { error: error.message };
 
   if (task) {
     await logActivity(supabase, "completó", "tarea", id, `completó la tarea "${task.title}"`);
+    // El correo de aviso sale después de responder: mandarlo por Resend
+    // tarda y no debe dejar al usuario mirando la palomita a medias.
     if (task.notify_on_complete) {
-      await notifyTaskCompleted(supabase, task);
+      try {
+        after(() => notifyTaskCompleted(supabase, task));
+      } catch {
+        await notifyTaskCompleted(supabase, task);
+      }
     }
   }
 

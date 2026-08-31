@@ -435,7 +435,8 @@ export function TasksList({
   const [filter, setFilter] = useState<string>(currentUser || "Todas");
   const [done, setDone] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [listError, setListError] = useState("");
+  const [, startTransition] = useTransition();
 
   // Las tareas sin responsable aparecen en el perfil de todos,
   // marcadas "sin asignar", para que nada se pierda.
@@ -461,40 +462,53 @@ export function TasksList({
     ].filter((g) => g.items.length > 0);
   }, [visible, done, today]);
 
-  const complete = (task: ComputedTask) => {
+  const markDone = (key: string) => setDone((prev) => new Set(prev).add(key));
+  const undoDone = (key: string) =>
+    setDone((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+
+  /** Manda la acción al servidor y deshace la palomita si algo falló. */
+  const runOptimistic = (key: string, run: () => Promise<{ error: string } | null | void>) => {
+    markDone(key);
+    setListError("");
     startTransition(async () => {
-      if (task.complete.type === "training_field") {
-        await updateTrainingField(task.trainingId, task.complete.field, task.complete.value);
-      } else if (task.complete.type === "material_status") {
-        await updateMaterialField(
-          task.complete.materialId,
-          task.trainingId,
-          "status",
-          task.complete.nextStatus
-        );
-      } else if (task.complete.type === "training_request") {
-        await toggleTrainingRequestAction(task.complete.requestId, true);
-      } else if (task.complete.type === "consulting_field") {
-        const res = await updateConsultingField(task.complete.projectId, task.complete.field, "Listo");
-        if (res?.error) {
-          alert(res.error);
-          return;
+      try {
+        const res = await run();
+        if (res && "error" in res && res.error) {
+          undoDone(key);
+          setListError(res.error);
         }
-      } else if (task.complete.type === "consulting_milestone") {
-        await updateConsultingMilestoneField(
-          task.complete.milestoneId,
-          "",
-          "status",
-          task.complete.nextStatus
-        );
-      } else if (task.complete.type === "consulting_input") {
-        await setConsultingInputReceived(task.complete.inputId, true);
-      } else if (task.complete.type === "consulting_change") {
-        await updateConsultingChangeField(task.complete.changeId, "", "status", "Cotizado");
-      } else {
-        await completeCustomTaskAction(task.complete.taskId);
+      } catch {
+        undoDone(key);
+        setListError("No se pudo guardar: revisa tu conexión y vuelve a intentarlo.");
       }
-      setDone((prev) => new Set(prev).add(task.key));
+    });
+  };
+
+  // La palomita se pinta de inmediato y la tarea se mueve a "Completadas
+  // ahora"; el guardado viaja en segundo plano y solo se revierte si falla.
+  const complete = (task: ComputedTask) => {
+    const c = task.complete;
+    runOptimistic(task.key, () => {
+      if (c.type === "training_field") {
+        return updateTrainingField(task.trainingId, c.field, c.value);
+      } else if (c.type === "material_status") {
+        return updateMaterialField(c.materialId, task.trainingId, "status", c.nextStatus);
+      } else if (c.type === "training_request") {
+        return toggleTrainingRequestAction(c.requestId, true);
+      } else if (c.type === "consulting_field") {
+        return updateConsultingField(c.projectId, c.field, "Listo");
+      } else if (c.type === "consulting_milestone") {
+        return updateConsultingMilestoneField(c.milestoneId, "", "status", c.nextStatus);
+      } else if (c.type === "consulting_input") {
+        return setConsultingInputReceived(c.inputId, true);
+      } else if (c.type === "consulting_change") {
+        return updateConsultingChangeField(c.changeId, "", "status", "Cotizado");
+      }
+      return completeCustomTaskAction(c.taskId);
     });
   };
 
@@ -502,10 +516,7 @@ export function TasksList({
     if (task.complete.type !== "custom_task") return;
     const taskId = task.complete.taskId;
     if (!confirm(`¿Eliminar la tarea "${task.title}"?`)) return;
-    startTransition(async () => {
-      await deleteCustomTaskAction(taskId);
-      setDone((prev) => new Set(prev).add(task.key));
-    });
+    runOptimistic(task.key, () => deleteCustomTaskAction(taskId));
   };
 
   const totalMinutes = allTimeEntries
@@ -554,6 +565,12 @@ export function TasksList({
         </span>
       </div>
 
+      {listError && (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">
+          {listError}
+        </p>
+      )}
+
       {groups.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-slate-300 bg-white p-12 text-center">
           <p className="text-lg font-semibold text-slate-600">🎉 Sin pendientes</p>
@@ -584,7 +601,7 @@ export function TasksList({
                       }`}
                     >
                       <button
-                        disabled={pending || isDone}
+                        disabled={isDone}
                         onClick={() => complete(t)}
                         title="Marcar como completada"
                         className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition ${
@@ -705,7 +722,6 @@ export function TasksList({
                       {t.complete.type === "custom_task" && !isDone && (
                         <button
                           title="Eliminar tarea"
-                          disabled={pending}
                           onClick={() => removeCustom(t)}
                           className="shrink-0 text-slate-300 transition hover:text-red-500"
                         >
