@@ -307,16 +307,23 @@ function CustomTaskEditor({
 
   const save = () =>
     startTransition(async () => {
-      const res = await updateCustomTaskAction(task.id, {
-        title,
-        details,
-        assignee,
-        client_id: clientId || null,
-        due_date: dueDate || null,
-        notify_on_complete: notify,
-      });
-      if (res?.error) setError(res.error);
-      else onClose();
+      setError("");
+      try {
+        const res = await updateCustomTaskAction(task.id, {
+          title,
+          details,
+          assignee,
+          client_id: clientId || null,
+          due_date: dueDate || null,
+          notify_on_complete: notify,
+        });
+        if (res?.error) setError(res.error);
+        else onClose();
+      } catch {
+        // Si se cae la conexión a media guardada, el botón no se queda
+        // colgado en "Guardando…": se avisa y se puede reintentar.
+        setError("No se pudo guardar: revisa tu conexión y vuelve a intentarlo.");
+      }
     });
 
   return (
