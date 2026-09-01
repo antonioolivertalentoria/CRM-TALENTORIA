@@ -24,6 +24,29 @@ export const LOGISTICS_ONLINE = `Para preparar adecuadamente la capacitación en
 Por último, ¿hay alguna indicación adicional que debamos considerar, como políticas de grabación o permisos de su área de sistemas para el uso de la plataforma?
 Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que la capacitación se desarrolle de la mejor manera.`;
 
+// Mensajes de seguimiento posteriores al curso (días 20 y 30 del proceso).
+// El de los 20 días pregunta cómo les ha ido aplicando lo aprendido; el de
+// los 30 cierra el acompañamiento, invita a seguir trabajando juntos y es
+// con el que se clausura el grupo de WhatsApp.
+
+export const SEGUIMIENTO_20 = `Hola, [nombre]. Esperamos que estés muy bien 😊
+
+Ya pasaron algunas semanas desde la capacitación y nos quedamos con las ganas de saber cómo les ha ido: ¿qué han podido aplicar de lo que vieron? ¿Han notado algún cambio en el equipo, aunque sea pequeño?
+
+Y también nos sirve mucho lo otro: si algo no ha terminado de aterrizar o si hay alguna herramienta que se les está complicando llevar a la práctica, con gusto les echamos la mano.
+
+No hace falta que nos escribas nada formal, con que nos cuentes por aquí es más que suficiente. ¡Nos encantará conocer su experiencia! 🙌`;
+
+export const CIERRE_30 = `Hola, [nombre]. ¡Gracias por todo el apoyo durante estas semanas! 😊
+
+Con este mensaje cerramos formalmente el acompañamiento de la capacitación. Fue un gusto trabajar con tu equipo y esperamos que las herramientas les sigan sumando en el día a día.
+
+Si más adelante quieren reforzar lo aprendido o dar el siguiente paso, con gusto les armamos una propuesta a la medida: desde una sesión de refuerzo hasta los temas que suelen complementar muy bien lo que ya vieron.
+
+Antes de cerrar el grupo, ¿hay algo pendiente en lo que podamos apoyarles?
+
+Quedamos a tus órdenes y te deseamos mucho éxito. 🙌`;
+
 /** Decide la plantilla según las modalidades de las sesiones. */
 export function pickTemplate(modalities: string[]): "Presencial" | "Online" {
   const clean = modalities.filter(Boolean);

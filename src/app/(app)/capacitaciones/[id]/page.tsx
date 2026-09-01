@@ -15,6 +15,8 @@ import { SessionsTable } from "@/components/SessionsTable";
 import { MaterialsSection } from "@/components/MaterialsSection";
 import { DeleteTrainingButton } from "@/components/DeleteTrainingButton";
 import { LogisticsMessage } from "@/components/LogisticsMessage";
+import { FollowUpMessage } from "@/components/FollowUpMessage";
+import { SEGUIMIENTO_20, CIERRE_30 } from "@/lib/templates";
 import { OwnerSelect } from "@/components/OwnerSelect";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { RequestsSection } from "@/components/RequestsSection";
@@ -290,9 +292,32 @@ export default async function TrainingDetailPage({
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
           Entregas y seguimiento
         </h2>
-        <p className="mb-4 mt-0.5 text-xs text-slate-400">
+        <p className="mt-0.5 text-xs text-slate-400">
           Según el proceso Talentoría: entregas en máximo 48h después del curso, cierre administrativo y seguimiento a 20 y 30 días.
         </p>
+        {/* Los dos mensajes de seguimiento, listos para copiar o mandar por
+            WhatsApp; al marcarlos como enviados se palomea su punto del
+            checklist y desaparece la tarea de "Mis tareas". */}
+        <div className="mb-4 mt-3 flex flex-wrap items-center gap-2">
+          <FollowUpMessage
+            trainingId={training.id}
+            field="seguimiento_20"
+            label="Mensaje día 20"
+            title="Seguimiento día 20: cómo les ha ido aplicando lo aprendido"
+            text={SEGUIMIENTO_20}
+            whatsapp={training.clients.whatsapp}
+            status={training.seguimiento_20}
+          />
+          <FollowUpMessage
+            trainingId={training.id}
+            field="seguimiento_30"
+            label="Mensaje día 30"
+            title="Cierre día 30: cierre del acompañamiento y clausura del grupo"
+            text={CIERRE_30}
+            whatsapp={training.clients.whatsapp}
+            status={training.seguimiento_30}
+          />
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {CHECKLIST_FIELDS.map((f) => (
             <div
