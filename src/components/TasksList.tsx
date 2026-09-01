@@ -13,6 +13,9 @@ import {
   updateConsultingMilestoneField,
   setConsultingInputReceived,
   updateConsultingChangeField,
+  updateRecruitmentField,
+  stampRecruitmentDateAction,
+  updateCandidateField,
   addTimeEntryAction,
   deleteTimeEntryAction,
   addSubtaskAction,
@@ -406,6 +409,7 @@ const KIND_STYLE: Record<string, string> = {
   Personal: "bg-rose-100 text-rose-700",
   Petición: "bg-orange-100 text-orange-700",
   Consultoría: "bg-indigo-100 text-indigo-700",
+  Reclutamiento: "bg-fuchsia-100 text-fuchsia-700",
 };
 
 export function TasksList({
@@ -507,6 +511,12 @@ export function TasksList({
         return setConsultingInputReceived(c.inputId, true);
       } else if (c.type === "consulting_change") {
         return updateConsultingChangeField(c.changeId, "", "status", "Cotizado");
+      } else if (c.type === "recruitment_field") {
+        return updateRecruitmentField(c.vacancyId, c.field, c.value ?? "Listo");
+      } else if (c.type === "recruitment_stamp") {
+        return stampRecruitmentDateAction(c.vacancyId, c.field);
+      } else if (c.type === "recruitment_candidate") {
+        return updateCandidateField(c.candidateId, c.vacancyId, c.field, c.value);
       }
       return completeCustomTaskAction(c.taskId);
     });

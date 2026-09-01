@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, todayISO } from "@/lib/format";
 import { syncConsultingMeeting, syncSessionEvent, syncTrainingEvents } from "@/lib/calendar";
-import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, Subtask, TaskAttachment, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
+import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
 
@@ -1897,6 +1897,490 @@ export async function getConsultingAttachmentUrlAction(
   const supabase = await createSupabase();
   const { data: file } = await supabase
     .from("consulting_attachments")
+    .select("storage_path, file_name")
+    .eq("id", id)
+    .single();
+
+  if (!file) return { error: "No se encontró el archivo." };
+
+  const { data, error } = await supabase.storage
+    .from(ATTACHMENTS_BUCKET)
+    .createSignedUrl(file.storage_path, 3600, { download: file.file_name });
+
+  if (error || !data) return { error: error?.message ?? "No se pudo abrir el archivo." };
+  return { url: data.signedUrl };
+}
+
+// ================= Reclutamiento (migración 015) =================
+
+export async function createVacancyAction(
+  _prev: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const clientId = str(formData, "client_id");
+  const position = str(formData, "position");
+  if (!clientId || !position) return { error: "El puesto es obligatorio." };
+
+  const supabase = await createSupabase();
+  const budget = str(formData, "budget");
+  const guarantee = intOrNull(formData, "guarantee_days");
+
+  const { data, error } = await supabase
+    .from("recruitment_vacancies")
+    .insert({
+      client_id: clientId,
+      position,
+      status: "Requisición",
+      recruiter: str(formData, "recruiter"),
+      comercial: str(formData, "comercial") || "Perla Torres",
+      internal_owner: str(formData, "internal_owner"),
+      openings: intOrNull(formData, "openings") ?? 1,
+      salary: str(formData, "salary"),
+      location: str(formData, "location"),
+      modality: str(formData, "modality"),
+      perfil: str(formData, "perfil"),
+      quote_authorized_at: str(formData, "quote_authorized_at") || null,
+      requisition_at: str(formData, "requisition_at") || null,
+      guarantee_days: guarantee ?? 90,
+      budget: budget ? Number(budget) || null : null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("recruitment_vacancies")) {
+      return { error: "Falta correr la migración 015 en la base (módulo de reclutamiento)." };
+    }
+    return { error: `No se pudo crear la vacante: ${error?.message}` };
+  }
+
+  await logActivity(supabase, "creó", "reclutamiento", data.id, `abrió la vacante "${position}"`);
+  revalidatePath("/reclutamiento");
+  revalidatePath("/tareas");
+  redirect(`/reclutamiento/${data.id}`);
+}
+
+const VACANCY_FIELDS = new Set([
+  "position",
+  "status",
+  "priority",
+  "recruiter",
+  "comercial",
+  "internal_owner",
+  "openings",
+  "salary",
+  "location",
+  "modality",
+  "perfil",
+  "publication_media",
+  "budget",
+  "vacancy_url",
+  "whatsapp_group",
+  "drive_folder_url",
+  "quote_authorized_at",
+  "requisition_at",
+  "profile_meeting_date",
+  "profile_authorized_at",
+  "published_at",
+  "candidates_sent_at",
+  "hire_date",
+  "guarantee_days",
+  "levantamiento_autorizado",
+  "continua_persona",
+  "factura_anticipo",
+  "requisicion_enviada",
+  "contacto_cliente",
+  "levantamiento_perfil",
+  "levantamiento_enviado",
+  "estrategia_publicacion",
+  "dashboard_actualizado",
+  "filtrado_entrevistas",
+  "factura_cobertura",
+  "factura_enviada",
+  "factura_confirmada",
+  "ingreso_confirmado",
+  "aviso_candidatos",
+  "seguimiento_cliente",
+  "correo_garantia",
+  "notes",
+  "internal_notes",
+]);
+
+/** Fases del proceso en orden, para que la vacante avance sola. */
+const VACANCY_PHASES = [
+  "Requisición",
+  "Levantamiento",
+  "Publicada",
+  "Terna enviada",
+  "Validación",
+  "Contratado",
+  "En garantía",
+  "Cerrada",
+];
+
+/** Adelanta la fase solo si la nueva va más avanzada (nunca retrocede). */
+async function advanceVacancyPhase(
+  supabase: Awaited<ReturnType<typeof createSupabase>>,
+  id: string,
+  phase: string
+) {
+  const { data } = await supabase
+    .from("recruitment_vacancies")
+    .select("status")
+    .eq("id", id)
+    .maybeSingle();
+  const current = (data as { status: string } | null)?.status ?? "";
+  if (current === "Cancelada") return;
+  if (VACANCY_PHASES.indexOf(phase) > VACANCY_PHASES.indexOf(current)) {
+    await supabase.from("recruitment_vacancies").update({ status: phase }).eq("id", id);
+  }
+}
+
+export async function updateRecruitmentField(
+  id: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  // La tarea "Acordar fecha de ingreso" no se palomea: se completa
+  // capturando la fecha en la ficha (así desaparece sola).
+  if (field === "hire_date_pending") {
+    return {
+      error: "Esta tarea se completa capturando la fecha de ingreso en la ficha de la vacante.",
+    };
+  }
+
+  const supabase = await createSupabase();
+
+  // Reposición de garantía: la persona ya no continúa, así que el proceso
+  // se reinicia desde la publicación conservando candidatos e historial.
+  if (field === "reposicion") {
+    const { error: repoError } = await supabase
+      .from("recruitment_vacancies")
+      .update({
+        status: "Publicada",
+        published_at: todayISO(),
+        candidates_sent_at: null,
+        hire_date: null,
+        continua_persona: "Pendiente",
+        filtrado_entrevistas: "Pendiente",
+        ingreso_confirmado: "Pendiente",
+        aviso_candidatos: "Pendiente",
+        seguimiento_cliente: "Pendiente",
+        correo_garantia: "Pendiente",
+        factura_cobertura: "No aplica",
+        factura_enviada: "No aplica",
+        factura_confirmada: "No aplica",
+      })
+      .eq("id", id);
+    if (repoError) return { error: repoError.message };
+    await logActivity(
+      supabase,
+      "cambió",
+      "reclutamiento",
+      id,
+      "reinició la búsqueda por reposición de garantía"
+    );
+    revalidatePath(`/reclutamiento/${id}`);
+    revalidatePath("/reclutamiento");
+    revalidatePath("/tareas");
+    return null;
+  }
+
+  if (!VACANCY_FIELDS.has(field)) return { error: "Campo no permitido." };
+
+  let parsed: string | number | null = value;
+  const numeric = new Set(["openings", "guarantee_days", "budget"]);
+  const nullableWhenEmpty = new Set([
+    "quote_authorized_at",
+    "requisition_at",
+    "profile_meeting_date",
+    "profile_authorized_at",
+    "published_at",
+    "candidates_sent_at",
+    "hire_date",
+    "budget",
+  ]);
+  if (numeric.has(field) && value) {
+    parsed = Number(value);
+    if (Number.isNaN(parsed)) parsed = null;
+  }
+  if (nullableWhenEmpty.has(field) && !value) parsed = null;
+
+  const update: Record<string, string | number | null> = { [field]: parsed };
+  // El cliente autoriza el levantamiento: se sella la fecha del paso 8
+  if (field === "levantamiento_autorizado" && value === "Autorizado") {
+    update.profile_authorized_at = todayISO();
+  }
+
+  const { error } = await supabase.from("recruitment_vacancies").update(update).eq("id", id);
+  if (error) return { error: error.message };
+
+  // La fase avanza sola con los hitos del flujo
+  if (field === "levantamiento_perfil" && value === "Listo")
+    await advanceVacancyPhase(supabase, id, "Levantamiento");
+  if (field === "published_at" && parsed) await advanceVacancyPhase(supabase, id, "Publicada");
+  if (field === "candidates_sent_at" && parsed)
+    await advanceVacancyPhase(supabase, id, "Terna enviada");
+  if (field === "hire_date" && parsed) await advanceVacancyPhase(supabase, id, "Contratado");
+  if (field === "ingreso_confirmado" && value === "Listo")
+    await advanceVacancyPhase(supabase, id, "En garantía");
+  if (field === "continua_persona" && value === "Sí")
+    await advanceVacancyPhase(supabase, id, "Cerrada");
+
+  // Actividad: cambios de fase y checklist completado
+  if (field === "status" || value === "Listo" || value === "No aplica") {
+    const { data: vac } = await supabase
+      .from("recruitment_vacancies")
+      .select("position")
+      .eq("id", id)
+      .maybeSingle();
+    const position = (vac as { position: string } | null)?.position ?? "";
+    await logActivity(
+      supabase,
+      field === "status" ? "cambió" : "completó",
+      "reclutamiento",
+      id,
+      field === "status"
+        ? `puso la vacante "${position}" en ${value}`
+        : `marcó "${field.replaceAll("_", " ")}" como ${value} en "${position}"`
+    );
+  }
+
+  revalidatePath(`/reclutamiento/${id}`);
+  revalidatePath("/reclutamiento");
+  revalidatePath("/tareas");
+  return null;
+}
+
+/** Sella con la fecha de hoy un hito del proceso (publicación, terna). */
+export async function stampRecruitmentDateAction(id: string, field: string): Promise<FormState> {
+  if (!new Set(["published_at", "candidates_sent_at", "profile_authorized_at"]).has(field)) {
+    return { error: "Campo no permitido." };
+  }
+  return updateRecruitmentField(id, field, todayISO());
+}
+
+export async function deleteVacancyAction(id: string, clientId: string) {
+  const supabase = await createSupabase();
+  const { data: vac } = await supabase
+    .from("recruitment_vacancies")
+    .select("position")
+    .eq("id", id)
+    .maybeSingle();
+
+  try {
+    const { data: files } = await supabase
+      .from("recruitment_attachments")
+      .select("storage_path")
+      .eq("vacancy_id", id);
+    const paths = (files ?? []).map((f: { storage_path: string }) => f.storage_path);
+    if (paths.length > 0) await supabase.storage.from(ATTACHMENTS_BUCKET).remove(paths);
+  } catch {
+    // sin archivos que borrar
+  }
+
+  await supabase.from("recruitment_vacancies").delete().eq("id", id);
+  await logActivity(
+    supabase,
+    "eliminó",
+    "reclutamiento",
+    id,
+    `eliminó la vacante "${(vac as { position: string } | null)?.position ?? ""}"`
+  );
+  revalidatePath("/reclutamiento");
+  redirect(clientId ? `/clientes/${clientId}` : "/reclutamiento");
+}
+
+// ---------------- Candidatos ----------------
+
+export async function addCandidateAction(fields: {
+  vacancyId: string;
+  name: string;
+  phone: string;
+  email: string;
+  source: string;
+}): Promise<{ error: string } | { candidate: RecruitmentCandidate }> {
+  const name = fields.name.trim();
+  if (!name) return { error: "Escribe el nombre del candidato." };
+
+  const supabase = await createSupabase();
+  const { count } = await supabase
+    .from("recruitment_candidates")
+    .select("id", { count: "exact", head: true })
+    .eq("vacancy_id", fields.vacancyId);
+
+  const { data, error } = await supabase
+    .from("recruitment_candidates")
+    .insert({
+      vacancy_id: fields.vacancyId,
+      name,
+      phone: fields.phone.trim(),
+      email: fields.email.trim(),
+      source: fields.source.trim(),
+      position: count ?? 0,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("recruitment_candidates")) {
+      return { error: "Falta correr la migración 015 en la base (módulo de reclutamiento)." };
+    }
+    return { error: error?.message ?? "No se pudo agregar el candidato." };
+  }
+  revalidatePath(`/reclutamiento/${fields.vacancyId}`);
+  revalidatePath("/tareas");
+  return { candidate: data as RecruitmentCandidate };
+}
+
+export async function updateCandidateField(
+  id: string,
+  vacancyId: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  const allowed = new Set([
+    "name",
+    "phone",
+    "email",
+    "source",
+    "cv_url",
+    "status",
+    "interviewed_at",
+    "sent_at",
+    "client_interview_at",
+    "psychometrics",
+    "references_status",
+    "notes",
+  ]);
+  if (!allowed.has(field)) return { error: "Campo no permitido." };
+
+  const today = todayISO();
+  const parsed: string | null =
+    ["interviewed_at", "sent_at", "client_interview_at"].includes(field) && !value ? null : value;
+
+  const update: Record<string, string | null> = { [field]: parsed };
+
+  // Las fechas del embudo se sellan solas al mover el estado
+  if (field === "status") {
+    if (value === "Entrevistado") update.interviewed_at = today;
+    if (value === "Enviado al cliente") update.sent_at = today;
+  }
+  // Rombo 18: si no pasa la psicometría, el candidato queda rechazado
+  if (field === "psychometrics") {
+    if (value === "Aprobada" || value === "No aprobada") update.psychometrics_at = today;
+    if (value === "Aprobada") update.status = "Psicometría";
+    if (value === "No aprobada") update.status = "Rechazado";
+  }
+  // Paso 19: referencias enviadas → el candidato es el finalista
+  if (field === "references_status" && value === "Enviadas") {
+    update.status = "Referencias";
+  }
+
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("recruitment_candidates").update(update).eq("id", id);
+  if (error) return { error: error.message };
+
+  if (field === "status" || field === "psychometrics" || field === "references_status") {
+    const { data: c } = await supabase
+      .from("recruitment_candidates")
+      .select("name")
+      .eq("id", id)
+      .maybeSingle();
+    const name = (c as { name: string } | null)?.name ?? "";
+    await logActivity(
+      supabase,
+      "cambió",
+      "reclutamiento",
+      vacancyId,
+      `puso a ${name} en "${update.status ?? value}"`
+    );
+    // Contratar al candidato pone la vacante en fase Contratado
+    if (update.status === "Contratado" || value === "Contratado") {
+      await advanceVacancyPhase(supabase, vacancyId, "Contratado");
+    }
+  }
+
+  revalidatePath(`/reclutamiento/${vacancyId}`);
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function deleteCandidateAction(id: string, vacancyId: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("recruitment_candidates").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath(`/reclutamiento/${vacancyId}`);
+  revalidatePath("/tareas");
+  return null;
+}
+
+// ---------------- Archivos de reclutamiento ----------------
+
+export async function registerRecruitmentAttachmentAction(fields: {
+  vacancyId: string;
+  storagePath: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  category?: string;
+  candidateId?: string;
+}): Promise<{ error: string } | { attachment: RecruitmentAttachment }> {
+  const supabase = await createSupabase();
+  const uploadedBy = await currentUserName(supabase);
+
+  const payload: Record<string, string | number | null> = {
+    vacancy_id: fields.vacancyId,
+    storage_path: fields.storagePath,
+    file_name: fields.fileName,
+    file_size: fields.fileSize,
+    mime_type: fields.mimeType,
+    uploaded_by: uploadedBy,
+    category: fields.category === "proceso" ? "proceso" : "candidato",
+  };
+  if (fields.candidateId) payload.candidate_id = fields.candidateId;
+
+  const { data, error } = await supabase
+    .from("recruitment_attachments")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "No se pudo registrar el archivo." };
+  await logActivity(
+    supabase,
+    "subió",
+    "reclutamiento",
+    fields.vacancyId,
+    `subió el archivo "${fields.fileName}"`
+  );
+  revalidatePath(`/reclutamiento/${fields.vacancyId}`);
+  return { attachment: data as RecruitmentAttachment };
+}
+
+export async function deleteRecruitmentAttachmentAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { data: file } = await supabase
+    .from("recruitment_attachments")
+    .select("storage_path, vacancy_id")
+    .eq("id", id)
+    .single();
+
+  if (file?.storage_path) {
+    await supabase.storage.from(ATTACHMENTS_BUCKET).remove([file.storage_path]);
+  }
+  const { error } = await supabase.from("recruitment_attachments").delete().eq("id", id);
+  if (error) return { error: error.message };
+  if (file) revalidatePath(`/reclutamiento/${file.vacancy_id}`);
+  return null;
+}
+
+export async function getRecruitmentAttachmentUrlAction(
+  id: string
+): Promise<{ url: string } | { error: string }> {
+  const supabase = await createSupabase();
+  const { data: file } = await supabase
+    .from("recruitment_attachments")
     .select("storage_path, file_name")
     .eq("id", id)
     .single();

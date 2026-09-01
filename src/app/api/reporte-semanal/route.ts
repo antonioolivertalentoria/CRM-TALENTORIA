@@ -3,9 +3,11 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf
 import { createClient } from "@/lib/supabase/server";
 import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
 import { computeConsultingTasks } from "@/lib/consulting-tasks";
+import { computeRecruitmentTasks } from "@/lib/recruitment-tasks";
 import { addDays, formatDate, todayISO } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
+import { canSeeRecruitment } from "@/lib/recruitment-access";
 import type { CustomTask, ReminderPrefs } from "@/lib/types";
 
 /**
@@ -96,6 +98,8 @@ export async function GET(request: Request) {
     { data: cMilestonesData },
     { data: cInputsData },
     { data: cChangesData },
+    { data: vacanciesData },
+    { data: rCandidatesData },
   ] =
     await Promise.all([
       supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
@@ -108,6 +112,8 @@ export async function GET(request: Request) {
       supabase.from("consulting_milestones").select("*"),
       supabase.from("consulting_inputs").select("*"),
       supabase.from("consulting_changes").select("*"),
+      supabase.from("recruitment_vacancies").select("*, clients(id, company)"),
+      supabase.from("recruitment_candidates").select("*"),
     ]);
 
   // Consultoría: proyectos con hitos/insumos/cambios para el motor de tareas
@@ -117,6 +123,14 @@ export async function GET(request: Request) {
     milestones: ((cMilestonesData ?? []) as any[]).filter((m) => m.project_id === pr.id),
     inputs: ((cInputsData ?? []) as any[]).filter((i) => i.project_id === pr.id),
     changes: ((cChangesData ?? []) as any[]).filter((c) => c.project_id === pr.id),
+  }));
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  // Reclutamiento: vacantes con sus candidatos para el motor de tareas
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const vacancies = ((vacanciesData ?? []) as any[]).map((v) => ({
+    ...v,
+    candidates: ((rCandidatesData ?? []) as any[]).filter((c) => c.vacancy_id === v.id),
   }));
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -142,6 +156,8 @@ export async function GET(request: Request) {
     ...computeTasks(trainingsWithRequests as any, internalNames),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...(canSeeConsulting(user.email) ? computeConsultingTasks(consultingProjects as any) : []),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...(canSeeRecruitment(user.email) ? computeRecruitmentTasks(vacancies as any) : []),
 
     ...customToComputed((customData ?? []) as (CustomTask & { clients: { id: string; company: string } | null })[]),
   ]);

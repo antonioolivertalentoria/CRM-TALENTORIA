@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
 import { computeConsultingTasks } from "@/lib/consulting-tasks";
+import { computeRecruitmentTasks } from "@/lib/recruitment-tasks";
 import { todayISO, formatDate } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
+import { canSeeRecruitment } from "@/lib/recruitment-access";
 import type { ReminderPrefs } from "@/lib/types";
 
 /**
@@ -65,6 +67,8 @@ export async function GET(request: Request) {
     { data: cMilestonesData },
     { data: cInputsData },
     { data: cChangesData },
+    { data: vacanciesData },
+    { data: rCandidatesData },
   ] = await Promise.all([
     supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
@@ -76,6 +80,8 @@ export async function GET(request: Request) {
     supabase.from("consulting_milestones").select("*"),
     supabase.from("consulting_inputs").select("*"),
     supabase.from("consulting_changes").select("*"),
+    supabase.from("recruitment_vacancies").select("*, clients(id, company)"),
+    supabase.from("recruitment_candidates").select("*"),
   ]);
 
   // Consultoría: proyectos con hitos/insumos/cambios para el motor de tareas
@@ -85,6 +91,14 @@ export async function GET(request: Request) {
     milestones: ((cMilestonesData ?? []) as any[]).filter((m) => m.project_id === pr.id),
     inputs: ((cInputsData ?? []) as any[]).filter((i) => i.project_id === pr.id),
     changes: ((cChangesData ?? []) as any[]).filter((c) => c.project_id === pr.id),
+  }));
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  // Reclutamiento: vacantes con sus candidatos para el motor de tareas
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const vacancies = ((vacanciesData ?? []) as any[]).map((v) => ({
+    ...v,
+    candidates: ((rCandidatesData ?? []) as any[]).filter((c) => c.vacancy_id === v.id),
   }));
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -125,6 +139,8 @@ export async function GET(request: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...computeConsultingTasks(consultingProjects as any),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...computeRecruitmentTasks(vacancies as any),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...customToComputed((customData ?? []) as any),
   ]);
 
@@ -148,6 +164,8 @@ export async function GET(request: Request) {
         kinds.includes(t.kind) &&
         // Consultoría en estreno: sus tareas solo a quien ve el módulo
         (t.kind !== "Consultoría" || canSeeConsulting(p.email)) &&
+        // Reclutamiento en construcción: igual, solo a quien lo ve
+        (t.kind !== "Reclutamiento" || canSeeRecruitment(p.email)) &&
         t.due !== null &&
         t.due <= today
     );

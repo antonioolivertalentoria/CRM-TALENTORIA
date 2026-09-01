@@ -299,3 +299,89 @@ export type ConsultingAttachment = {
   category: string;
   created_at: string;
 };
+
+// ---------------- Reclutamiento (migración 015) ----------------
+
+export type RecruitmentVacancy = {
+  id: string;
+  client_id: string;
+  position: string;
+  status: string;
+  priority: string;
+  recruiter: string;
+  comercial: string;
+  internal_owner: string;
+  openings: number;
+  salary: string;
+  location: string;
+  modality: string;
+  perfil: string;
+  publication_media: string;
+  budget: number | null;
+  vacancy_url: string;
+  whatsapp_group: string;
+  drive_folder_url: string;
+  quote_authorized_at: string | null;
+  /** Paso 4 del flujo: desde aquí corren TODOS los plazos. */
+  requisition_at: string | null;
+  profile_meeting_date: string | null;
+  profile_authorized_at: string | null;
+  published_at: string | null;
+  candidates_sent_at: string | null;
+  hire_date: string | null;
+  guarantee_days: number;
+  levantamiento_autorizado: string;
+  continua_persona: string;
+  factura_anticipo: string;
+  requisicion_enviada: string;
+  contacto_cliente: string;
+  levantamiento_perfil: string;
+  levantamiento_enviado: string;
+  estrategia_publicacion: string;
+  dashboard_actualizado: string;
+  filtrado_entrevistas: string;
+  factura_cobertura: string;
+  factura_enviada: string;
+  factura_confirmada: string;
+  ingreso_confirmado: string;
+  aviso_candidatos: string;
+  seguimiento_cliente: string;
+  correo_garantia: string;
+  notes: string;
+  internal_notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RecruitmentCandidate = {
+  id: string;
+  vacancy_id: string;
+  name: string;
+  phone: string;
+  email: string;
+  source: string;
+  cv_url: string;
+  status: string;
+  interviewed_at: string | null;
+  sent_at: string | null;
+  client_interview_at: string | null;
+  psychometrics: string;
+  psychometrics_at: string | null;
+  references_status: string;
+  notes: string;
+  position: number;
+  created_at: string;
+};
+
+export type RecruitmentAttachment = {
+  id: string;
+  vacancy_id: string;
+  candidate_id?: string | null;
+  storage_path: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  uploaded_by: string;
+  category: string;
+  created_at: string;
+};

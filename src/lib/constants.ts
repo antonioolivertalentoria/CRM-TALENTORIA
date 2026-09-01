@@ -144,3 +144,93 @@ STATUS_COLORS["Cotizado"] = "bg-violet-500";
 STATUS_COLORS["Aprobado"] = "bg-emerald-500";
 STATUS_COLORS["Rechazado"] = "bg-red-500";
 STATUS_COLORS["Aplicado"] = "bg-emerald-600";
+
+// ---------------- Reclutamiento (migración 015) ----------------
+
+export const VACANCY_STATUSES = [
+  "Requisición",
+  "Levantamiento",
+  "Publicada",
+  "Terna enviada",
+  "Validación",
+  "Contratado",
+  "En garantía",
+  "Cerrada",
+  "Cancelada",
+] as const;
+
+// Embudo del candidato (pasos 12-19 del flujo)
+export const CANDIDATE_STATUSES = [
+  "Prospecto",
+  "Entrevistado",
+  "Enviado al cliente",
+  "Aprobado por cliente",
+  "Psicometría",
+  "Referencias",
+  "Contratado",
+  "Rechazado",
+  "Descartado",
+] as const;
+
+// Rombo 18: si es "No aprobada", el candidato queda Rechazado solo
+export const PSYCHOMETRICS_STATUSES = ["Pendiente", "Aprobada", "No aprobada", "No aplica"] as const;
+
+export const REFERENCES_STATUSES = ["Pendiente", "Enviadas", "No aplica"] as const;
+
+// Rombo 8: autorización del levantamiento de perfil
+export const PROFILE_AUTH_STATUSES = ["Pendiente", "Autorizado", "Cambios solicitados"] as const;
+
+// Rombo final: ¿la persona continúa al terminar la garantía?
+export const CONTINUES_STATUSES = ["Pendiente", "Sí", "No"] as const;
+
+export const VACANCY_MODALITIES = ["Por definir", "Presencial", "Híbrida", "Remoto"] as const;
+
+// Checklist del proceso de reclutamiento (con el paso y SLA del flujo)
+export const RECRUITMENT_CHECKLIST: { key: string; label: string; hint: string }[] = [
+  { key: "factura_anticipo", label: "Factura de anticipo", hint: "Paso 2 — Comercial envía la factura de anticipo al cliente (inmediato)" },
+  { key: "requisicion_enviada", label: "Requisición al reclutador", hint: "Paso 3 — Comercial envía la requisición al reclutador (inmediato)" },
+  { key: "contacto_cliente", label: "Contacto para agendar", hint: "Paso 5 — Contactar al cliente para agendar la reunión (máx. 24h)" },
+  { key: "levantamiento_perfil", label: "Levantamiento de perfil", hint: "Paso 6 — Levantamiento con el cliente (máx. 48h desde la requisición)" },
+  { key: "levantamiento_enviado", label: "Levantamiento enviado", hint: "Paso 7 — Enviar el levantamiento al cliente para autorización (mismo día)" },
+  { key: "estrategia_publicacion", label: "Estrategia de publicación", hint: "Paso 9 — Medios acordes al perfil, cuidando el presupuesto (inmediato)" },
+  { key: "dashboard_actualizado", label: "Información en el dashboard", hint: "Paso 11 — Subir la información de la vacante (mismo día de la publicación)" },
+  { key: "filtrado_entrevistas", label: "Filtro de CVs y entrevistas", hint: "Pasos 12-14 — Recibir, filtrar, capturar y entrevistar candidatos (continuo)" },
+  { key: "factura_cobertura", label: "Solicitud de factura de cobertura", hint: "Paso 21 — Solicitar la factura a Finanzas (antes o el mismo día del ingreso)" },
+  { key: "factura_enviada", label: "Factura enviada por Finanzas", hint: "Paso 21 — Finanzas envía la factura de cobertura al cliente (mismo día)" },
+  { key: "factura_confirmada", label: "Factura confirmada con el cliente", hint: "Paso 21 — Confirmar con el cliente que le llegó la factura (mismo día)" },
+  { key: "ingreso_confirmado", label: "Ingreso confirmado", hint: "Paso 22 — Confirmar que el candidato se presentó y está contratado" },
+  { key: "aviso_candidatos", label: "Aviso a los demás candidatos", hint: "Paso 22 — Informar a los candidatos no seleccionados (máx. 24h desde el ingreso)" },
+  { key: "seguimiento_cliente", label: "Seguimiento con el cliente", hint: "Paso 22 — Seguimiento durante la garantía (continuo)" },
+  { key: "correo_garantia", label: "Correo de término de garantía", hint: "Cierre — Notificar término de garantía y cierre del proceso (1 semana antes)" },
+];
+
+// Colores de estados de reclutamiento (se suman a STATUS_COLORS)
+STATUS_COLORS["Requisición"] = "bg-slate-400";
+STATUS_COLORS["Levantamiento"] = "bg-amber-400";
+STATUS_COLORS["Publicada"] = "bg-brand-cyan";
+STATUS_COLORS["Terna enviada"] = "bg-violet-500";
+STATUS_COLORS["Validación"] = "bg-sky-500";
+STATUS_COLORS["Contratado"] = "bg-emerald-500";
+STATUS_COLORS["En garantía"] = "bg-emerald-600";
+STATUS_COLORS["Cerrada"] = "bg-slate-500";
+STATUS_COLORS["Por definir"] = "bg-slate-300 !text-slate-600";
+STATUS_COLORS["Remoto"] = "bg-sky-500";
+STATUS_COLORS["Presencial"] = "bg-brand-cyan";
+STATUS_COLORS["Híbrida"] = "bg-violet-500";
+// Embudo de candidatos
+STATUS_COLORS["Prospecto"] = "bg-slate-400";
+STATUS_COLORS["Entrevistado"] = "bg-amber-400";
+STATUS_COLORS["Enviado al cliente"] = "bg-brand-cyan";
+STATUS_COLORS["Aprobado por cliente"] = "bg-sky-500";
+STATUS_COLORS["Psicometría"] = "bg-violet-500";
+STATUS_COLORS["Referencias"] = "bg-indigo-500";
+STATUS_COLORS["Rechazado"] = "bg-red-500";
+STATUS_COLORS["Descartado"] = "bg-slate-300 !text-slate-600";
+// Rombos del flujo
+STATUS_COLORS["Autorizado"] = "bg-emerald-500";
+STATUS_COLORS["Cambios solicitados"] = "bg-amber-500";
+STATUS_COLORS["Aprobada"] = "bg-emerald-500";
+STATUS_COLORS["No aprobada"] = "bg-red-500";
+STATUS_COLORS["Enviadas"] = "bg-emerald-500";
+STATUS_COLORS["Sí"] = "bg-emerald-500";
+STATUS_COLORS["No"] = "bg-red-500";

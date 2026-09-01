@@ -104,6 +104,9 @@ activity_log  (quién hizo qué; se limpia a 90 días desde el cron)
 | `consulting_inputs` | Insumos del cliente | fecha acordada y recibido; vencido genera seguimiento al líder y escalamiento al comercial a las 48h |
 | `consulting_changes` | Cambios de alcance | en alcance sí/no, estado (En evaluación→Cotizado→Aprobado/Rechazado→Aplicado) y monto de cotización |
 | `consulting_attachments` | Archivos del proyecto | insumo/entregable; bucket "adjuntos", ruta `consultoria/<id>/` |
+| `recruitment_vacancies` | Vacante = un proceso de reclutamiento (módulo propio, migración 015) | cliente, puesto, fase, reclutador/comercial/operaciones, plazas, sueldo, perfil, medios y presupuesto, las fechas que mueven los relojes (`requisition_at` = inicio de tiempos, autorización del perfil, publicación, terna, ingreso), días de garantía y checklist del Flujo del Proceso |
+| `recruitment_candidates` | Base de candidatos de la vacante | contacto y medio, estado del embudo (Prospecto→Entrevistado→Enviado al cliente→Aprobado→Psicometría→Referencias→Contratado, o Rechazado/Descartado), fecha en que el cliente lo entrevistó, resultado de psicometría y referencias |
+| `recruitment_attachments` | Archivos del proceso | CV/psicometría/referencias por candidato o documentos de la vacante; bucket "adjuntos", ruta `reclutamiento/<id>/` |
 | `profiles` | Perfil por usuario de auth | nombre, correo, `reminder_prefs` (JSON: recordatorios on/off y tipos de tarea) |
 
 Seguridad: **RLS activado en todas las tablas** con política simple: cualquier usuario
@@ -143,6 +146,30 @@ Completar una tarea actualiza el campo correspondiente (y viceversa). Reglas de 
 
 Las tareas de `custom_tasks` (tipo "Personal") se mezclan en la misma lista, en los
 recordatorios por correo y en el reporte semanal.
+
+### Motor de reclutamiento (src/lib/recruitment-tasks.ts)
+
+Mismo criterio, pero sobre el **Flujo del Proceso de Reclutamiento** (22 pasos). Todos los
+plazos cuelgan de `requisition_at` (paso 4, "inicio de tiempos"); los rombos del diagrama son
+estados, no tareas:
+
+- Comercial: factura de anticipo y envío de la requisición (inmediato).
+- Contacto con el cliente 24h; levantamiento de perfil 48h; envío a autorización el mismo día.
+- Autorización del perfil (rombo 8): si el cliente pide cambios, revive la tarea de reagendar.
+- Estrategia inmediata, publicación 24h después de la autorización, dashboard el mismo día.
+- Filtro de CVs y entrevistas a 3 días de publicar; terna de 3 a 5 a 10 días **hábiles**.
+- Por candidato: decisión del cliente 24h, psicometrías 24h, referencias 24h. Psicometría "No
+  aprobada" manda al candidato a Rechazado solo (rombo 18).
+- Con fecha de ingreso: factura de cobertura (solicitud, envío de Finanzas y confirmación),
+  confirmación de contratación, aviso a los demás candidatos (24h) y seguimiento.
+- Cierre: correo de término de garantía 1 semana antes de que venza. Si la persona ya no
+  continúa, la tarea de **reposición** regresa la vacante a "Publicada" con fecha de hoy,
+  conservando candidatos e historial.
+
+El módulo está **en construcción** (`src/lib/recruitment-access.ts`): solo los correos de la
+lista lo ven; el resto del equipo ve la pantalla de estreno y sus tareas de reclutamiento no se
+les mezclan en "Mis tareas" ni en los recordatorios. Para abrirlo a todos:
+`RECRUITMENT_OPEN_TO_ALL = true` y un deploy.
 
 ### Invitaciones de Google Calendar (src/lib/calendar.ts)
 

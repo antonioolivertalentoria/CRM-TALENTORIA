@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { computeTasks, customToComputed, sortByDue } from "@/lib/tasks";
 import { computeConsultingTasks, type ConsultingProjectFull } from "@/lib/consulting-tasks";
+import { computeRecruitmentTasks, type RecruitmentVacancyFull } from "@/lib/recruitment-tasks";
 import { todayISO } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
+import { canSeeRecruitment } from "@/lib/recruitment-access";
 import { TasksList } from "@/components/TasksList";
 import { NewTaskForm } from "@/components/NewTaskForm";
 import { CompletedCustomTasks } from "@/components/CompletedCustomTasks";
@@ -42,6 +44,8 @@ export default async function TasksPage() {
     { data: cMilestonesData },
     { data: cInputsData },
     { data: cChangesData },
+    { data: vacanciesData },
+    { data: rCandidatesData },
   ] = await Promise.all([
     supabase
       .from("trainings")
@@ -68,6 +72,9 @@ export default async function TasksPage() {
     supabase.from("consulting_milestones").select("*"),
     supabase.from("consulting_inputs").select("*"),
     supabase.from("consulting_changes").select("*"),
+    // Reclutamiento (migración 015): tolerante a que aún no exista
+    supabase.from("recruitment_vacancies").select("*, clients(id, company)"),
+    supabase.from("recruitment_candidates").select("*"),
   ]);
 
   // Peticiones de team building, colgadas de su training para el motor de tareas
@@ -128,12 +135,24 @@ export default async function TasksPage() {
   );
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
+  // Vacantes de reclutamiento con sus candidatos colgados
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const vacancies: RecruitmentVacancyFull[] = ((vacanciesData ?? []) as any[]).map((v) => ({
+    ...v,
+    candidates: ((rCandidatesData ?? []) as any[]).filter((c) => c.vacancy_id === v.id),
+  }));
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
   const tasks = sortByDue([
     ...computeTasks(trainings, internalNames),
     // Mientras el módulo esté en estreno, sus tareas solo se mezclan
     // para quien puede verlo (misma lista que la pantalla de construcción)
     ...(canSeeConsulting(userRes.data.user?.email)
       ? computeConsultingTasks(consultingProjects)
+      : []),
+    // Reclutamiento en construcción: igual, solo para quien ve el módulo
+    ...(canSeeRecruitment(userRes.data.user?.email)
+      ? computeRecruitmentTasks(vacancies)
       : []),
     ...customToComputed(customTasks, clientNameById),
   ]);
@@ -144,7 +163,7 @@ export default async function TasksPage() {
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">Mis tareas</h1>
           <p className="text-sm text-slate-500">
-            Se generan solas a partir de capacitaciones, team buildings y consultorías, y se mezclan con las tareas que
+            Se generan solas a partir de capacitaciones, team buildings, consultorías y vacantes, y se mezclan con las tareas que
             capturen tú o Arianna. Al completarlas aquí, todo se actualiza también (y al revés).
           </p>
         </div>
@@ -163,6 +182,7 @@ export default async function TasksPage() {
                   "Personal",
                   "Petición",
                   "Consultoría",
+                  "Reclutamiento",
                 ],
               }
             }

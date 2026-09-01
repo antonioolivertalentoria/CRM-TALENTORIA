@@ -5,10 +5,12 @@ import { ClientEditForm } from "@/components/ClientEditForm";
 import { NewClientForm } from "@/components/NewClientForm";
 import { NewTrainingForm } from "@/components/NewTrainingForm";
 import { NewConsultingForm } from "@/components/NewConsultingForm";
+import { NewVacancyForm } from "@/components/NewVacancyForm";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
+import { canSeeRecruitment } from "@/lib/recruitment-access";
 import { statusColor } from "@/lib/constants";
-import type { Client, ConsultingProject, Training, Session } from "@/lib/types";
+import type { Client, ConsultingProject, RecruitmentVacancy, Training, Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +129,15 @@ export default async function ClientDetailPage({
   const consulting = (consultingData ?? []) as unknown as ConsultingProject[];
   const showConsulting = canSeeConsulting(userRes.data.user?.email);
 
+  // Vacantes de reclutamiento del cliente (tolerante a que falte la migración 015)
+  const { data: vacanciesData } = await supabase
+    .from("recruitment_vacancies")
+    .select("*")
+    .eq("client_id", id)
+    .order("created_at", { ascending: false });
+  const vacancies = (vacanciesData ?? []) as unknown as RecruitmentVacancy[];
+  const showRecruitment = canSeeRecruitment(userRes.data.user?.email);
+
   // Capacitaciones que este cliente dio a sus subclientes
   let subTrainings: TrainingCard[] = [];
   if (subclients.length > 0) {
@@ -193,6 +204,9 @@ export default async function ClientDetailPage({
           />
           {showConsulting && (
             <NewConsultingForm clientId={client.id} people={people} currentUser={currentUser} />
+          )}
+          {showRecruitment && (
+            <NewVacancyForm clientId={client.id} people={people} currentUser={currentUser} />
           )}
         </div>
       </header>
@@ -285,6 +299,36 @@ export default async function ClientDetailPage({
                 <p className="mt-0.5 text-xs text-slate-400">
                   {p.leader ? `Líder: ${p.leader}` : "Sin líder asignado"}
                   {p.contracted_hours ? ` · ${p.contracted_hours} h contratadas` : ""}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {showRecruitment && vacancies.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+            Vacantes ({vacancies.length})
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {vacancies.map((v) => (
+              <Link
+                key={v.id}
+                href={`/reclutamiento/${v.id}`}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-magenta hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-brand-navy">{v.position}</p>
+                  <span
+                    className={`${statusColor(v.status)} shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white`}
+                  >
+                    {v.status}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  {v.recruiter ? `Reclutador: ${v.recruiter}` : "Sin reclutador asignado"}
+                  {v.openings > 1 ? ` · ${v.openings} plazas` : ""}
                 </p>
               </Link>
             ))}

@@ -18,7 +18,7 @@ import type { Client, CustomTask, Material, Session, Training, TrainingRequest }
 
 export type ComputedTask = {
   key: string;
-  kind: "Logística" | "Preparación" | "Material" | "Revisión" | "Entrega" | "Seguimiento" | "Personal" | "Petición" | "Consultoría";
+  kind: "Logística" | "Preparación" | "Material" | "Revisión" | "Entrega" | "Seguimiento" | "Personal" | "Petición" | "Consultoría" | "Reclutamiento";
   title: string;
   /** Vacío en tareas personales (no cuelgan de una capacitación). */
   trainingId: string;
@@ -38,7 +38,11 @@ export type ComputedTask = {
     | { type: "consulting_field"; projectId: string; field: string }
     | { type: "consulting_milestone"; milestoneId: string; nextStatus: string }
     | { type: "consulting_input"; inputId: string }
-    | { type: "consulting_change"; changeId: string };
+    | { type: "consulting_change"; changeId: string }
+    | { type: "recruitment_field"; vacancyId: string; field: string; value?: string }
+    /** Sella una fecha del proceso (publicación, terna) con el día de hoy. */
+    | { type: "recruitment_stamp"; vacancyId: string; field: string }
+    | { type: "recruitment_candidate"; candidateId: string; vacancyId: string; field: string; value: string };
 };
 
 type TrainingFull = Training & {
