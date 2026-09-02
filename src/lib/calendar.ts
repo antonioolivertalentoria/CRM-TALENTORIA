@@ -191,19 +191,30 @@ type SessionRow = Session & {
 };
 
 /**
+ * Qué pasó con el aviso. Antes esto era silencioso y por eso, cuando un
+ * correo no llegaba, no había forma de saber por qué. Ahora la razón se
+ * devuelve para poder enseñarla en pantalla.
+ */
+export type InviteResult =
+  | { sent: true; to: string[]; mode: "request" | "cancel" }
+  | { sent: false; reason: string };
+
+/**
  * Manda (o cancela) la invitación de calendario de UNA sesión.
- * Silencioso por diseño: cualquier falla se ignora para no romper la
- * acción que lo llamó. Solo actúa si la sesión tiene fecha y hora de
- * inicio y hay RESEND_API_KEY configurada.
+ * Nunca lanza: devuelve si se mandó y, si no, por qué, para que quien la
+ * llame pueda enseñarlo en pantalla. Solo actúa si la sesión tiene fecha
+ * y hora de inicio y hay RESEND_API_KEY configurada.
  */
 export async function syncSessionEvent(
   supabase: SupabaseLike,
   sessionId: string,
   mode: "request" | "cancel"
-): Promise<void> {
+): Promise<InviteResult> {
   try {
     const resendKey = process.env.RESEND_API_KEY;
-    if (!resendKey) return;
+    if (!resendKey) {
+      return { sent: false, reason: "No hay RESEND_API_KEY configurada: el CRM no puede mandar correos." };
+    }
 
     const { data: sessionData } = await supabase
       .from("sessions")
@@ -211,7 +222,13 @@ export async function syncSessionEvent(
       .eq("id", sessionId)
       .maybeSingle();
     const s = sessionData as SessionRow | null;
-    if (!s || !s.session_date || !s.start_time || !s.trainings) return;
+    if (!s || !s.trainings) return { sent: false, reason: "No se encontró la sesión." };
+    if (!s.session_date || !s.start_time) {
+      return {
+        sent: false,
+        reason: "La sesión necesita fecha y hora de inicio para poder mandar la invitación.",
+      };
+    }
 
     const t = s.trainings;
     const clientName = t.clients?.company ?? "";
@@ -237,7 +254,9 @@ export async function syncSessionEvent(
       })),
       ...resolveEmails([t.internal_owner, s.facilitator], profiles, facilitators),
     ]);
-    if (attendees.length === 0) return;
+    if (attendees.length === 0) {
+      return { sent: false, reason: "No hay a quién avisarle: nadie con correo conocido." };
+    }
 
     const startTime = s.start_time.slice(0, 5);
     const endTime = s.end_time ? s.end_time.slice(0, 5) : plusTwoHours(startTime);
@@ -298,25 +317,47 @@ export async function syncSessionEvent(
         </p>
       </div>`;
 
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from,
-        to: attendees.map((a) => a.email),
-        subject,
-        html,
-        attachments: [
-          {
-            filename: mode === "cancel" ? "cancelacion.ics" : "invitacion.ics",
-            content: Buffer.from(ics).toString("base64"),
-            content_type: `text/calendar; method=${mode === "cancel" ? "CANCEL" : "REQUEST"}; charset=UTF-8`,
-          },
-        ],
-      }),
+    const body = JSON.stringify({
+      from,
+      to: attendees.map((a) => a.email),
+      subject,
+      html,
+      attachments: [
+        {
+          filename: mode === "cancel" ? "cancelacion.ics" : "invitacion.ics",
+          content: Buffer.from(ics).toString("base64"),
+          content_type: `text/calendar; method=${mode === "cancel" ? "CANCEL" : "REQUEST"}; charset=UTF-8`,
+        },
+      ],
     });
-  } catch {
-    // Las invitaciones son cortesía: nunca rompen la acción original.
+    const post = () =>
+      fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+        body,
+      });
+
+    let res = await post();
+    // Resend acepta ~2 correos por segundo: si se movieron varias sesiones
+    // seguidas, el primer intento puede rebotar. Se reintenta una vez.
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 1200));
+      res = await post();
+    }
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      return { sent: false, reason: `Resend respondió ${res.status}: ${detail.slice(0, 300)}` };
+    }
+
+    return { sent: true, to: attendees.map((a) => a.email), mode };
+  } catch (e) {
+    // Las invitaciones son cortesía: nunca rompen la acción original,
+    // pero sí se dice qué pasó.
+    return {
+      sent: false,
+      reason: e instanceof Error ? e.message : "Error inesperado al mandar el aviso.",
+    };
   }
 }
 

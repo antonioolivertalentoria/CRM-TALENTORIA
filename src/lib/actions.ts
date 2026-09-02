@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, todayISO } from "@/lib/format";
-import { syncConsultingMeeting, syncSessionEvent, syncTrainingEvents } from "@/lib/calendar";
+import { syncConsultingMeeting, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
 import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
@@ -339,8 +339,11 @@ export async function createTrainingAction(
     data.id,
     `creó ${isTeamBuilding ? "el team building" : "la capacitación"} "${shortName}"`
   );
-  // Invitaciones de Google Calendar por correo para las sesiones ya fechadas
-  await syncTrainingEvents(supabase, data.id, "request");
+  // Invitaciones de Google Calendar por correo para las sesiones ya fechadas.
+  // Solo si se marcó la casilla: nunca se manda correo sin que alguien lo pida.
+  if (str(formData, "notify_calendar") === "on") {
+    await syncTrainingEvents(supabase, data.id, "request");
+  }
   if (isTeamBuilding) revalidatePath("/teambuildings");
   revalidatePath("/");
   revalidatePath("/tareas");
@@ -507,12 +510,19 @@ const SESSION_FIELDS = new Set([
   "notes",
 ]);
 
+/**
+ * Resultado de editar una sesión. Además del error, puede pedir que se le
+ * pregunte al usuario si quiere mandar el aviso por correo: el CRM ya no
+ * lo manda solo (antes se iba sin avisar y, si fallaba, nadie se enteraba).
+ */
+export type SessionUpdateResult = { error: string } | { askInvite: "request" | "cancel" } | null;
+
 export async function updateSessionField(
   id: string,
   trainingId: string,
   field: string,
   value: string
-): Promise<FormState> {
+): Promise<SessionUpdateResult> {
   if (!SESSION_FIELDS.has(field)) return { error: "Campo no permitido." };
 
   let parsed: string | number | null = value;
@@ -562,23 +572,51 @@ export async function updateSessionField(
     await logActivity(supabase, "cambió", "sesión", trainingId, `puso la sesión ${s?.session_number ?? ""} en ${value}`);
   }
 
-  // Calendario: mover fecha/horario/facilitador manda la actualización del
-  // evento; cancelar la sesión manda la cancelación. (Solo si hay fecha+hora.)
-  if (field === "status" && value === "Cancelada") {
-    await syncSessionEvent(supabase, id, "cancel");
-  } else if (["session_date", "start_time", "end_time", "facilitator"].includes(field)) {
-    await syncSessionEvent(supabase, id, "request");
-  }
-
   revalidatePath(`/capacitaciones/${trainingId}`);
   revalidatePath("/");
+
+  // Calendario: mover fecha/horario/facilitador o cancelar la sesión son los
+  // cambios que le importan al equipo. NO se manda nada aquí: se le avisa a
+  // la pantalla para que pregunte si se quiere mandar el correo.
+  if (field === "status" && value === "Cancelada") {
+    return { askInvite: "cancel" };
+  }
+  if (["session_date", "start_time", "end_time", "facilitator"].includes(field)) {
+    const { data: s } = await supabase
+      .from("sessions")
+      .select("session_date, start_time, status")
+      .eq("id", id)
+      .maybeSingle();
+    // Sin fecha y hora no hay invitación que mandar, y una sesión cancelada
+    // no se re-invita por mover un dato.
+    if (s?.session_date && s?.start_time && s?.status !== "Cancelada") {
+      return { askInvite: "request" };
+    }
+  }
+
   return null;
 }
 
-export async function deleteSessionAction(id: string, trainingId: string) {
+/**
+ * Manda el aviso por correo (invitación o cancelación de calendario) de una
+ * sesión. Se llama solo cuando la persona dice que sí, o desde el botón ✉️
+ * de la tabla de sesiones para reenviarlo cuando haga falta.
+ */
+export async function sendSessionInviteAction(
+  sessionId: string,
+  mode: "request" | "cancel"
+): Promise<InviteResult> {
+  const supabase = await createSupabase();
+  return syncSessionEvent(supabase, sessionId, mode);
+}
+
+export async function deleteSessionAction(id: string, trainingId: string, notify = false) {
   const supabase = await createSupabase();
   const { data: s } = await supabase.from("sessions").select("session_number").eq("id", id).maybeSingle();
-  await syncSessionEvent(supabase, id, "cancel"); // quita el evento de los calendarios
+  // El aviso de cancelación (que quita el evento de los calendarios) solo
+  // sale si se pidió: borrar una sesión que nadie tenía agendada no amerita
+  // llenarle el correo al equipo.
+  if (notify) await syncSessionEvent(supabase, id, "cancel");
   await supabase.from("sessions").delete().eq("id", id);
   await logActivity(supabase, "eliminó", "sesión", trainingId, `eliminó la sesión ${s?.session_number ?? ""}`);
   revalidatePath(`/capacitaciones/${trainingId}`);

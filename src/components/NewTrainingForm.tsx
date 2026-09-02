@@ -211,6 +211,20 @@ export function NewTrainingForm({
         <p className="sm:col-span-2 -mt-1 text-xs text-slate-400">
           El número de horas de cada sesión se calcula solo con sus horarios.
         </p>
+        <label className="sm:col-span-2 flex cursor-pointer items-start gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            name="notify_calendar"
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-brand-cyan"
+          />
+          <span>
+            📅 Mandar la invitación de calendario por correo al equipo
+            <span className="block text-xs text-slate-400">
+              Una por cada sesión con fecha y hora. Si no lo marcas ahora, puedes mandarla
+              después con el botón ✉️ de cada sesión.
+            </span>
+          </span>
+        </label>
         {state?.error && (
           <p className="sm:col-span-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
             {state.error}

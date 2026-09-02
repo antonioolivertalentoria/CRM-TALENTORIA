@@ -200,6 +200,18 @@ correos resueltos vía profiles, facilitators.email y el mapa EXTRA_EMAILS
 (Carolina, Adrián Hernández). Todo es best-effort: sin RESEND_API_KEY o ante
 cualquier error, la acción original no se afecta.
 
+
+**El correo ya no se manda solo (02-sep-2026).** Antes, mover fecha/horario/facilitador
+mandaba la invitación en automático y en silencio: si Resend fallaba (p. ej. 429 por su
+límite de ~2 correos por segundo al mover varias sesiones seguidas) nadie se enteraba.
+Ahora `syncSessionEvent` devuelve `InviteResult` (`{sent, to}` o `{sent:false, reason}`),
+reintenta una vez ante 429, y `updateSessionField` ya no envía: regresa `{askInvite}` para
+que la tabla de sesiones pregunte "¿Le mando el aviso por correo al equipo?" y enseñe el
+resultado (a quién se mandó, o por qué no se pudo). Cada sesión con fecha y hora tiene
+además un botón ✉️ para mandar o reenviar el aviso cuando se quiera, y borrar una sesión
+pregunta aparte si se avisa la cancelación. Al crear una capacitación, las invitaciones
+salen solo si se marca la casilla del formulario.
+
 ## 6. Endpoints y procesos automáticos
 
 | Endpoint | Método | Auth | Qué hace |
