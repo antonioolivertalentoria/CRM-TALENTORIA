@@ -173,6 +173,28 @@ export type Subtask = {
   created_at: string;
 };
 
+/** Avance de una tarea que ya se empezó pero no se puede cerrar (migración 016). */
+export type TaskProgress = {
+  task_key: string;
+  task_title: string;
+  /** "En proceso" | "En espera" */
+  status: string;
+  /** Solo en "En espera": de qué o de quién depende. */
+  waiting_for: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Una anotación de la bitácora: "esto fue lo que hice" (migración 016). */
+export type TaskProgressNote = {
+  id: string;
+  task_key: string;
+  note: string;
+  author: string;
+  created_at: string;
+};
+
 export type TrainingRequest = {
   id: string;
   training_id: string;

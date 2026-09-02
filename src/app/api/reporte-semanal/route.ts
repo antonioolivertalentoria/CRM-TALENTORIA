@@ -25,6 +25,7 @@ const CYAN = rgb(0, 0.682, 0.937); // #00aeef
 const MAGENTA = rgb(0.902, 0, 0.494); // #e6007e
 const SLATE = rgb(0.4, 0.45, 0.51);
 const RED = rgb(0.86, 0.15, 0.15);
+const AMBER = rgb(0.71, 0.33, 0.04); // #b45309, para las tareas en proceso
 
 /** Los 5 días hábiles de la semana del reporte (incluye hoy si es hábil). */
 function businessWindow(today: string): string[] {
@@ -100,6 +101,8 @@ export async function GET(request: Request) {
     { data: cChangesData },
     { data: vacanciesData },
     { data: rCandidatesData },
+    { data: progressData },
+    { data: progressNotesData },
   ] =
     await Promise.all([
       supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
@@ -114,7 +117,29 @@ export async function GET(request: Request) {
       supabase.from("consulting_changes").select("*"),
       supabase.from("recruitment_vacancies").select("*, clients(id, company)"),
       supabase.from("recruitment_candidates").select("*"),
+      // Avance de tareas (migración 016)
+      supabase.from("task_progress").select("*"),
+      supabase.from("task_progress_notes").select("*").order("created_at"),
     ]);
+
+  // Tareas empezadas pero sin cerrar: en el PDF salen marcadas y con la
+  // última anotación, para no repetir trabajo ni olvidar qué falta.
+  const lastNoteByKey: Record<string, string> = {};
+  for (const n of (progressNotesData ?? []) as { task_key: string; note: string }[]) {
+    lastNoteByKey[n.task_key] = n.note;
+  }
+  const progressByKey: Record<string, { status: string; waiting_for: string; note: string }> = {};
+  for (const pr of (progressData ?? []) as {
+    task_key: string;
+    status: string;
+    waiting_for: string;
+  }[]) {
+    progressByKey[pr.task_key] = {
+      status: pr.status,
+      waiting_for: pr.waiting_for,
+      note: lastNoteByKey[pr.task_key] ?? "",
+    };
+  }
 
   // Consultoría: proyectos con hitos/insumos/cambios para el motor de tareas
   /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -237,17 +262,39 @@ export async function GET(request: Request) {
       .join("  ·  ");
     const metaLines = wrap(meta, font, 8.5, width - 16);
 
-    const needed = titleLines.length * 12 + metaLines.length * 10 + 8;
+    const prog = progressByKey[t.key];
+    const progressText = prog
+      ? [
+          prog.status === "En espera" ? "EN ESPERA" : "EN PROCESO",
+          prog.waiting_for ? `falta: ${prog.waiting_for}` : "",
+          prog.note ? `ya hiciste: ${prog.note}` : "",
+        ]
+          .filter(Boolean)
+          .join("  ·  ")
+      : "";
+    const progressLines = progressText ? wrap(progressText, font, 8.5, width - 16) : [];
+
+    const needed =
+      titleLines.length * 12 + metaLines.length * 10 + progressLines.length * 10 + 8;
     ensureSpace(needed);
 
     // Viñeta
-    page.drawCircle({ x: margin + 3, y: y + 3, size: 2, color: showOverdue ? RED : CYAN });
+    page.drawCircle({
+      x: margin + 3,
+      y: y + 3,
+      size: 2,
+      color: prog ? AMBER : showOverdue ? RED : CYAN,
+    });
     for (const line of titleLines) {
       page.drawText(line, { x: margin + 12, y, size: 10, font: bold, color: rgb(0.12, 0.16, 0.23) });
       y -= 12;
     }
     for (const line of metaLines) {
       page.drawText(line, { x: margin + 12, y, size: 8.5, font, color: SLATE });
+      y -= 10;
+    }
+    for (const line of progressLines) {
+      page.drawText(line, { x: margin + 12, y, size: 8.5, font: bold, color: AMBER });
       y -= 10;
     }
     y -= 6;

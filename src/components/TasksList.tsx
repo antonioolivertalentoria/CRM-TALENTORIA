@@ -21,11 +21,21 @@ import {
   addSubtaskAction,
   toggleSubtaskAction,
   deleteSubtaskAction,
+  setTaskProgressAction,
+  clearTaskProgressAction,
+  deleteTaskProgressNoteAction,
 } from "@/lib/actions";
 import { formatDate, formatMinutes } from "@/lib/format";
 import { TaskAttachments } from "./TaskAttachments";
 import type { ComputedTask } from "@/lib/tasks";
-import type { CustomTask, Subtask, TaskAttachment, TimeEntry } from "@/lib/types";
+import type {
+  CustomTask,
+  Subtask,
+  TaskAttachment,
+  TaskProgress,
+  TaskProgressNote,
+  TimeEntry,
+} from "@/lib/types";
 
 const inputCls =
   "w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
@@ -399,6 +409,188 @@ function CustomTaskEditor({
   );
 }
 
+/**
+ * Avance de una tarea que ya se empezó pero todavía no se puede cerrar
+ * (p. ej. el mensaje de logística que no se manda porque comercial no ha
+ * creado el grupo de WhatsApp). La tarea se queda en la lista, pintada de
+ * amarillo, con la bitácora de lo que ya se hizo.
+ */
+function ProgressPanel({
+  taskKey,
+  taskTitle,
+  progress,
+  notes,
+  onSaved,
+  onCleared,
+  onNoteDeleted,
+  onClose,
+}: {
+  taskKey: string;
+  taskTitle: string;
+  progress?: TaskProgress;
+  notes: TaskProgressNote[];
+  onSaved: (progress: TaskProgress, note: TaskProgressNote | null) => void;
+  onCleared: () => void;
+  onNoteDeleted: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [status, setStatus] = useState(progress?.status ?? "En proceso");
+  const [waitingFor, setWaitingFor] = useState(progress?.waiting_for ?? "");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  const save = () =>
+    startTransition(async () => {
+      setError("");
+      try {
+        const res = await setTaskProgressAction({
+          taskKey,
+          taskTitle,
+          status,
+          waitingFor,
+          note,
+        });
+        if ("error" in res) setError(res.error);
+        else {
+          onSaved(res.progress, res.note);
+          setNote("");
+          onClose();
+        }
+      } catch {
+        setError("No se pudo guardar: revisa tu conexión y vuelve a intentarlo.");
+      }
+    });
+
+  const clear = () =>
+    startTransition(async () => {
+      setError("");
+      const res = await clearTaskProgressAction(taskKey);
+      if (res?.error) setError(res.error);
+      else {
+        onCleared();
+        onClose();
+      }
+    });
+
+  const removeNote = (id: string) =>
+    startTransition(async () => {
+      const res = await deleteTaskProgressNoteAction(id);
+      if (res?.error) setError(res.error);
+      else onNoteDeleted(id);
+    });
+
+  return (
+    <div className="mt-2 w-full rounded-lg border border-amber-300 bg-amber-50/70 p-3">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+        Avance de la tarea (sigue pendiente)
+      </p>
+
+      <div className="mb-2 flex flex-wrap gap-2">
+        {[
+          { value: "En proceso", label: "🟡 En proceso", hint: "Ya la empecé" },
+          { value: "En espera", label: "⏸ En espera", hint: "Hice mi parte, depende de alguien más" },
+        ].map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            title={opt.hint}
+            onClick={() => setStatus(opt.value)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              status === opt.value
+                ? "bg-amber-500 text-white shadow"
+                : "border border-amber-300 bg-white text-amber-700 hover:bg-amber-100"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {status === "En espera" && (
+        <div className="mb-2">
+          <label className="mb-0.5 block text-[11px] font-semibold text-slate-500">
+            ¿Qué falta o de quién depende?
+          </label>
+          <input
+            value={waitingFor}
+            onChange={(e) => setWaitingFor(e.target.value)}
+            placeholder="Ej. Que comercial cree el grupo de WhatsApp"
+            className={inputCls}
+          />
+        </div>
+      )}
+
+      <div>
+        <label className="mb-0.5 block text-[11px] font-semibold text-slate-500">
+          ¿Qué avanzaste? Queda apuntado con su fecha
+        </label>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          placeholder="Ej. Ya redacté el mensaje y lo dejé listo en el Drive"
+          className={inputCls + " resize-y"}
+        />
+      </div>
+
+      {notes.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {notes.map((n) => (
+            <li
+              key={n.id}
+              className="flex items-start gap-2 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-600"
+            >
+              <span className="shrink-0 font-semibold text-amber-700">
+                {formatDate(n.created_at.slice(0, 10))}
+              </span>
+              <span className="min-w-0 flex-1 whitespace-pre-wrap">{n.note}</span>
+              {n.author && <span className="shrink-0 text-slate-400">{n.author.split(" ")[0]}</span>}
+              <button
+                onClick={() => removeNote(n.id)}
+                disabled={pending}
+                title="Borrar esta anotación"
+                className="shrink-0 text-slate-300 transition hover:text-red-500"
+              >
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {error && (
+        <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-600">{error}</p>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button
+          disabled={pending}
+          onClick={save}
+          className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-amber-600 disabled:opacity-60"
+        >
+          {pending ? "Guardando…" : "Guardar avance"}
+        </button>
+        {progress && (
+          <button
+            disabled={pending}
+            onClick={clear}
+            title="Quitar el amarillo y dejarla como pendiente normal"
+            className="text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
+          >
+            Quitar el avance
+          </button>
+        )}
+        <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const KIND_STYLE: Record<string, string> = {
   Logística: "bg-cyan-100 text-cyan-700",
   Preparación: "bg-sky-100 text-sky-700",
@@ -420,6 +612,8 @@ export function TasksList({
   timeByTask = {},
   allTimeEntries = [],
   subtasksByTask = {},
+  progressByTask = {},
+  progressNotesByTask = {},
   currentUser,
   today,
 }: {
@@ -433,6 +627,10 @@ export function TasksList({
   allTimeEntries?: TimeEntry[];
   /** Subtareas agrupadas por id de tarea propia. */
   subtasksByTask?: Record<string, Subtask[]>;
+  /** Tareas empezadas pero no cerradas, por task_key (migración 016). */
+  progressByTask?: Record<string, TaskProgress>;
+  /** Bitácora de avances por task_key. */
+  progressNotesByTask?: Record<string, TaskProgressNote[]>;
   currentUser: string;
   today: string;
 }) {
@@ -442,15 +640,30 @@ export function TasksList({
   const [listError, setListError] = useState("");
   const [, startTransition] = useTransition();
 
+  // Avances: se guardan en el servidor pero también aquí, para que la fila
+  // se pinte de amarillo en el momento, sin esperar a recargar la página.
+  const [progress, setProgress] = useState<Record<string, TaskProgress>>(progressByTask);
+  const [progressNotes, setProgressNotes] =
+    useState<Record<string, TaskProgressNote[]>>(progressNotesByTask);
+  const [progressOpen, setProgressOpen] = useState<string | null>(null);
+  const [onlyProgress, setOnlyProgress] = useState(false);
+
+  /** La anotación más reciente de una tarea (la que se ve en la fila). */
+  const lastNote = (key: string): TaskProgressNote | undefined => {
+    const list = progressNotes[key];
+    return list && list.length > 0 ? list[list.length - 1] : undefined;
+  };
+
   // Las tareas sin responsable aparecen en el perfil de todos,
   // marcadas "sin asignar", para que nada se pierda.
   const visible = useMemo(
     () =>
       tasks.filter((t) => {
+        if (onlyProgress && !progress[t.key]) return false;
         if (filter === "Todas") return true;
         return t.assignee === filter || !t.assignee;
       }),
-    [tasks, filter]
+    [tasks, filter, onlyProgress, progress]
   );
 
   const groups = useMemo(() => {
@@ -475,7 +688,11 @@ export function TasksList({
     });
 
   /** Manda la acción al servidor y deshace la palomita si algo falló. */
-  const runOptimistic = (key: string, run: () => Promise<{ error: string } | null | void>) => {
+  const runOptimistic = (
+    key: string,
+    run: () => Promise<{ error: string } | null | void>,
+    onSuccess?: () => void
+  ) => {
     markDone(key);
     setListError("");
     startTransition(async () => {
@@ -484,6 +701,8 @@ export function TasksList({
         if (res && "error" in res && res.error) {
           undoDone(key);
           setListError(res.error);
+        } else {
+          onSuccess?.();
         }
       } catch {
         undoDone(key);
@@ -494,6 +713,22 @@ export function TasksList({
 
   // La palomita se pinta de inmediato y la tarea se mueve a "Completadas
   // ahora"; el guardado viaja en segundo plano y solo se revierte si falla.
+  /** Al cerrar la tarea de verdad, su avance ya no hace falta. */
+  const dropProgress = (key: string) => {
+    if (!progress[key]) return;
+    setProgress((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setProgressNotes((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    void clearTaskProgressAction(key);
+  };
+
   const complete = (task: ComputedTask) => {
     const c = task.complete;
     runOptimistic(task.key, () => {
@@ -519,19 +754,27 @@ export function TasksList({
         return updateCandidateField(c.candidateId, c.vacancyId, c.field, c.value);
       }
       return completeCustomTaskAction(c.taskId);
-    });
+    }, () => dropProgress(task.key));
   };
 
   const removeCustom = (task: ComputedTask) => {
     if (task.complete.type !== "custom_task") return;
     const taskId = task.complete.taskId;
     if (!confirm(`¿Eliminar la tarea "${task.title}"?`)) return;
-    runOptimistic(task.key, () => deleteCustomTaskAction(taskId));
+    runOptimistic(task.key, () => deleteCustomTaskAction(taskId), () => dropProgress(task.key));
   };
 
   const totalMinutes = allTimeEntries
     .filter((e) => filter === "Todas" || e.person === filter)
     .reduce((a, e) => a + e.minutes, 0);
+
+  // Cuántas tareas están empezadas pero sin cerrar (de la persona filtrada)
+  const inProgressCount = tasks.filter(
+    (t) =>
+      progress[t.key] &&
+      !done.has(t.key) &&
+      (filter === "Todas" || t.assignee === filter || !t.assignee)
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -557,6 +800,19 @@ export function TasksList({
         ))}
 
         <span className="ml-auto flex flex-wrap items-center gap-2">
+          {(inProgressCount > 0 || onlyProgress) && (
+            <button
+              onClick={() => setOnlyProgress(!onlyProgress)}
+              title="Tareas que ya empezaste pero que todavía no se pueden cerrar"
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                onlyProgress
+                  ? "border-amber-500 bg-amber-500 text-white"
+                  : "border-amber-400/50 bg-amber-100 text-amber-700 hover:bg-amber-200"
+              }`}
+            >
+              🟡 {inProgressCount} en proceso
+            </button>
+          )}
           {totalMinutes > 0 && (
             <span
               title={`Tiempo total registrado ${filter === "Todas" ? "por todo el equipo" : `por ${filter}`} (incluye tareas ya completadas)`}
@@ -603,11 +859,17 @@ export function TasksList({
                 {g.items.map((t) => {
                   const isDone = done.has(t.key);
                   const overdue = !isDone && t.due && t.due < today;
+                  const prog = !isDone ? progress[t.key] : undefined;
+                  const note = prog ? lastNote(t.key) : undefined;
                   return (
                     <li
                       key={t.key}
-                      className={`flex flex-wrap items-center gap-3 px-4 py-3 ${
-                        isDone ? "opacity-50" : "hover:bg-slate-50/70"
+                      className={`flex flex-wrap items-center gap-3 border-l-4 px-4 py-3 ${
+                        isDone
+                          ? "border-l-transparent opacity-50"
+                          : prog
+                            ? "border-l-amber-400 bg-amber-50/60 hover:bg-amber-50"
+                            : "border-l-transparent hover:bg-slate-50/70"
                       }`}
                     >
                       <button
@@ -632,6 +894,20 @@ export function TasksList({
                       >
                         {t.kind}
                       </span>
+
+                      {prog && (
+                        <button
+                          onClick={() => setProgressOpen(progressOpen === t.key ? null : t.key)}
+                          title={
+                            prog.status === "En espera"
+                              ? `En espera${prog.waiting_for ? `: ${prog.waiting_for}` : ""}`
+                              : "Ya empezada — ver el avance"
+                          }
+                          className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-800 transition hover:bg-amber-300"
+                        >
+                          {prog.status === "En espera" ? "⏸ En espera" : "🟡 En proceso"}
+                        </button>
+                      )}
 
                       <div className="min-w-48 flex-1">
                         {t.custom && !isDone ? (
@@ -664,6 +940,23 @@ export function TasksList({
                               <span className="ml-1.5 font-medium text-brand-cyan-dark">
                                 📎 {attachmentsByTask[t.custom.id].length}
                               </span>
+                            )}
+                          </p>
+                        )}
+                        {prog && (
+                          <p className="mt-0.5 text-xs text-amber-800">
+                            {prog.status === "En espera" && prog.waiting_for && (
+                              <span className="font-semibold">Falta: {prog.waiting_for}. </span>
+                            )}
+                            {note ? (
+                              <>
+                                Ya hice: {note.note}{" "}
+                                <span className="text-amber-600/80">
+                                  ({formatDate(note.created_at.slice(0, 10))})
+                                </span>
+                              </>
+                            ) : (
+                              !prog.waiting_for && "Empezada, sin notas de avance."
                             )}
                           </p>
                         )}
@@ -717,6 +1010,16 @@ export function TasksList({
                         entries={timeByTask[t.key] ?? []}
                       />
 
+                      {!isDone && !prog && (
+                        <button
+                          onClick={() => setProgressOpen(progressOpen === t.key ? null : t.key)}
+                          title="Ya la empecé pero no la puedo cerrar: apuntar el avance"
+                          className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-400 transition hover:border-amber-400 hover:text-amber-700"
+                        >
+                          🟡 Avance
+                        </button>
+                      )}
+
                       {t.custom && !isDone && (
                         <button
                           title="Abrir y editar la tarea"
@@ -739,6 +1042,43 @@ export function TasksList({
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         </button>
+                      )}
+
+                      {progressOpen === t.key && !isDone && (
+                        <ProgressPanel
+                          taskKey={t.key}
+                          taskTitle={t.title}
+                          progress={progress[t.key]}
+                          notes={progressNotes[t.key] ?? []}
+                          onSaved={(saved, newNote) => {
+                            setProgress((prev) => ({ ...prev, [t.key]: saved }));
+                            if (newNote) {
+                              setProgressNotes((prev) => ({
+                                ...prev,
+                                [t.key]: [...(prev[t.key] ?? []), newNote],
+                              }));
+                            }
+                          }}
+                          onCleared={() => {
+                            setProgress((prev) => {
+                              const next = { ...prev };
+                              delete next[t.key];
+                              return next;
+                            });
+                            setProgressNotes((prev) => {
+                              const next = { ...prev };
+                              delete next[t.key];
+                              return next;
+                            });
+                          }}
+                          onNoteDeleted={(id) =>
+                            setProgressNotes((prev) => ({
+                              ...prev,
+                              [t.key]: (prev[t.key] ?? []).filter((n) => n.id !== id),
+                            }))
+                          }
+                          onClose={() => setProgressOpen(null)}
+                        />
                       )}
 
                       {t.custom && editing === t.key && !isDone && (

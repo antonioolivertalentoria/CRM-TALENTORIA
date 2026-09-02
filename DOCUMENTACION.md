@@ -81,6 +81,7 @@ custom_tasks ──< task_attachments   (archivos en Supabase Storage)
 profiles (1 por usuario de auth)
 facilitators  (catálogo de facilitadores)
 time_entries  (tiempo invertido por tarea; task_key referencia lógica)
+task_progress ──< task_progress_notes  (tareas empezadas sin cerrar + bitácora)
 activity_log  (quién hizo qué; se limpia a 90 días desde el cron)
 ```
 
@@ -96,6 +97,8 @@ activity_log  (quién hizo qué; se limpia a 90 días desde el cron)
 | `subtasks` | Partes de una tarea propia | `task_id`, título, fecha opcional, `done`, `position`; alimentan el medidor de avance ("2 de 5") |
 | `facilitators` | Catálogo de facilitadores | nombre, `is_internal` (interno = contenido a 7 días; externo = 14), `active` y **`email`** (para invitarle a los eventos de calendario); se administra en `/facilitadores` |
 | `time_entries` | Tiempo invertido por tarea | `task_key` (clave lógica de la tarea, derivada o personal), título, persona, minutos; sobrevive aunque la tarea se complete o borre, para sumar tiempos |
+| `task_progress` | Tareas que ya se empezaron pero todavía no se pueden cerrar | `task_key` (la misma clave lógica de `time_entries`), `status` (`En proceso` / `En espera`), `waiting_for` (de qué o de quién depende), quién y cuándo lo actualizó. La tarea se pinta de amarillo y **sigue apareciendo como pendiente**; al completarse de verdad, la app borra su avance |
+| `task_progress_notes` | Bitácora de "esto fue lo que hice" | `task_key`, texto, autor y fecha; la última anotación se ve en la fila de la tarea, en el recordatorio diario y en el reporte semanal |
 | `activity_log` | Registro de actividad | actor, acción, entidad y resumen legible; el cron diario borra lo de más de 90 días |
 | `training_requests` | Peticiones de un team building (gafetes, tarjetas…) | `training_id`, título, responsable, fecha, `done`; las pendientes salen en "Mis tareas" como tipo "Petición" |
 | `training_attachments` | Archivos de un team building | igual que `task_attachments` pero colgado de `trainings`; bucket "adjuntos", ruta `teambuildings/<id>/` |
@@ -146,6 +149,18 @@ Completar una tarea actualiza el campo correspondiente (y viceversa). Reglas de 
 
 Las tareas de `custom_tasks` (tipo "Personal") se mezclan en la misma lista, en los
 recordatorios por correo y en el reporte semanal.
+
+### Tareas a medias: "En proceso" y "En espera" (migración 016)
+
+Hay tareas que ya se trabajaron pero no se pueden cerrar porque falta algo de fuera
+(el caso típico: no se puede mandar el mensaje de logística porque comercial todavía
+no crea el grupo de WhatsApp). Para no tener que elegir entre mentir ("completada")
+u olvidar lo hecho ("pendiente" a secas), cualquier tarea —derivada o propia— acepta
+un **avance**: se marca 🟡 *En proceso* o ⏸ *En espera de algo*, se apunta qué falta
+y se guarda una bitácora fechada de lo que ya se hizo. La tarea se queda en su grupo
+de siempre, pintada de amarillo, y el último avance se ve en la fila, en el
+recordatorio diario y en el PDF semanal. El chip "🟡 N en proceso" filtra solo esas.
+Al completarla de verdad, su avance se borra solo.
 
 ### Motor de reclutamiento (src/lib/recruitment-tasks.ts)
 

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, todayISO } from "@/lib/format";
 import { syncConsultingMeeting, syncSessionEvent, syncTrainingEvents } from "@/lib/calendar";
-import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
+import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
 
@@ -1163,6 +1163,91 @@ export async function addTimeEntryAction(fields: {
 export async function deleteTimeEntryAction(id: string): Promise<FormState> {
   const supabase = await createSupabase();
   const { error } = await supabase.from("time_entries").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/tareas");
+  return null;
+}
+
+// ---------------- Avance de tareas (migración 016) ----------------
+
+/**
+ * Marca una tarea como "En proceso" o "En espera" y le guarda una anotación
+ * de lo que ya se hizo. La tarea NO se completa: sigue apareciendo en la
+ * lista (en amarillo) hasta que de verdad se pueda cerrar.
+ */
+export async function setTaskProgressAction(fields: {
+  taskKey: string;
+  taskTitle: string;
+  status: string;
+  waitingFor: string;
+  note: string;
+}): Promise<{ error: string } | { progress: TaskProgress; note: TaskProgressNote | null }> {
+  const status = fields.status === "En espera" ? "En espera" : "En proceso";
+  const note = fields.note.trim();
+  const waitingFor = fields.waitingFor.trim();
+
+  const supabase = await createSupabase();
+  const person = await currentUserName(supabase);
+
+  const { data, error } = await supabase
+    .from("task_progress")
+    .upsert(
+      {
+        task_key: fields.taskKey,
+        task_title: fields.taskTitle,
+        status,
+        waiting_for: waitingFor,
+        updated_by: person,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "task_key" }
+    )
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("task_progress")) {
+      return { error: "Falta correr la migración 016 en la base (avance de tareas)." };
+    }
+    return { error: error?.message ?? "No se pudo guardar el avance." };
+  }
+
+  let saved: TaskProgressNote | null = null;
+  if (note) {
+    const { data: noteRow, error: noteError } = await supabase
+      .from("task_progress_notes")
+      .insert({ task_key: fields.taskKey, note, author: person })
+      .select("*")
+      .single();
+    if (noteError) return { error: noteError.message };
+    saved = noteRow as TaskProgressNote;
+  }
+
+  await logActivity(
+    supabase,
+    "avanzó",
+    "tarea",
+    fields.taskKey,
+    `dejó "${fields.taskTitle}" ${status.toLowerCase()}${note ? `: ${note}` : ""}`
+  );
+
+  revalidatePath("/tareas");
+  return { progress: data as TaskProgress, note: saved };
+}
+
+/** Regresa la tarea a pendiente normal: borra su estado y su bitácora. */
+export async function clearTaskProgressAction(taskKey: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  await supabase.from("task_progress_notes").delete().eq("task_key", taskKey);
+  const { error } = await supabase.from("task_progress").delete().eq("task_key", taskKey);
+  if (error) return { error: error.message };
+  revalidatePath("/tareas");
+  return null;
+}
+
+export async function deleteTaskProgressNoteAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("task_progress_notes").delete().eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/tareas");
   return null;

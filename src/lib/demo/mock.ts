@@ -138,7 +138,8 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
   private filters: ((r: Row) => boolean)[] = [];
   private orders: { field: string; asc: boolean }[] = [];
   private limitN?: number;
-  private mode: "select" | "insert" | "update" | "delete" = "select";
+  private mode: "select" | "insert" | "upsert" | "update" | "delete" = "select";
+  private conflictField = "id";
   private wantSingle = false;
   private maybe = false;
   private payload?: Row | Row[];
@@ -187,6 +188,12 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
     this.payload = payload;
     return this;
   }
+  upsert(payload: Row, opts?: { onConflict?: string }) {
+    this.mode = "upsert";
+    this.payload = payload;
+    this.conflictField = opts?.onConflict ?? "id";
+    return this;
+  }
   update(payload: Row) {
     this.mode = "update";
     this.payload = payload;
@@ -206,6 +213,10 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
 
   private exec(): { data: any; error: any } {
     const store = getDemoStore();
+    // Tablas que el store de ejemplo no trae (adjuntos, tiempo, subtareas,
+    // avance de tareas, consultoría, reclutamiento…) arrancan vacías en vez
+    // de tronar: así el modo demo sigue sirviendo aunque se agreguen módulos.
+    if (!(store as any)[this.table]) (store as any)[this.table] = [];
     const rows: Row[] = store[this.table] as Row[];
     const now = new Date().toISOString();
 
@@ -220,6 +231,29 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
       }));
       rows.push(...inserted);
       return this.finish(store, inserted);
+    }
+
+    if (this.mode === "upsert") {
+      const items = (Array.isArray(this.payload) ? this.payload : [this.payload]) as Row[];
+      const saved = items.map((item) => {
+        const existing = rows.find(
+          (r) => String(r[this.conflictField]) === String(item[this.conflictField])
+        );
+        if (existing) {
+          Object.assign(existing, item, { updated_at: now });
+          return existing;
+        }
+        const created = {
+          id: crypto.randomUUID(),
+          ...(DEFAULTS[this.table] ?? {}),
+          ...item,
+          created_at: now,
+          updated_at: now,
+        };
+        rows.push(created);
+        return created;
+      });
+      return this.finish(store, saved);
     }
 
     if (this.mode === "update") {

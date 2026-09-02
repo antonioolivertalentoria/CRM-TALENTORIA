@@ -18,6 +18,8 @@ import type {
   Session,
   Subtask,
   TaskAttachment,
+  TaskProgress,
+  TaskProgressNote,
   TimeEntry,
   Training,
   TrainingRequest,
@@ -46,6 +48,8 @@ export default async function TasksPage() {
     { data: cChangesData },
     { data: vacanciesData },
     { data: rCandidatesData },
+    { data: progressData },
+    { data: progressNotesData },
   ] = await Promise.all([
     supabase
       .from("trainings")
@@ -75,6 +79,9 @@ export default async function TasksPage() {
     // Reclutamiento (migración 015): tolerante a que aún no exista
     supabase.from("recruitment_vacancies").select("*, clients(id, company)"),
     supabase.from("recruitment_candidates").select("*"),
+    // Avance de tareas (migración 016): tolerante a que aún no exista
+    supabase.from("task_progress").select("*"),
+    supabase.from("task_progress_notes").select("*").order("created_at"),
   ]);
 
   // Peticiones de team building, colgadas de su training para el motor de tareas
@@ -116,6 +123,16 @@ export default async function TasksPage() {
   const subtasksByTask: Record<string, Subtask[]> = {};
   for (const s of subtasks) {
     (subtasksByTask[s.task_id] ??= []).push(s);
+  }
+
+  // Tareas empezadas pero sin cerrar, con su bitácora de avances
+  const progressByTask: Record<string, TaskProgress> = {};
+  for (const pr of (progressData ?? []) as unknown as TaskProgress[]) {
+    progressByTask[pr.task_key] = pr;
+  }
+  const progressNotesByTask: Record<string, TaskProgressNote[]> = {};
+  for (const n of (progressNotesData ?? []) as unknown as TaskProgressNote[]) {
+    (progressNotesByTask[n.task_key] ??= []).push(n);
   }
 
   const currentProfile = profiles.find((p) => p.id === userRes.data.user?.id);
@@ -204,6 +221,8 @@ export default async function TasksPage() {
         timeByTask={timeByTask}
         allTimeEntries={timeEntries}
         subtasksByTask={subtasksByTask}
+        progressByTask={progressByTask}
+        progressNotesByTask={progressNotesByTask}
         currentUser={currentProfile?.full_name ?? "Todas"}
         today={todayISO()}
       />

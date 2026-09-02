@@ -22,11 +22,22 @@ export const dynamic = "force-dynamic";
 
 const APP_URL = "https://crm-talentoria.vercel.app";
 
-function taskLine(t: ComputedTask, today: string): string {
+/** Lo que ya se avanzó en la tarea, si quedó marcada "En proceso"/"En espera". */
+type ProgressInfo = { status: string; waiting_for: string; note: string };
+
+function taskLine(
+  t: ComputedTask,
+  today: string,
+  progress: Record<string, ProgressInfo> = {}
+): string {
   const overdue = t.due && t.due < today;
+  const p = progress[t.key];
+  const progressLine = p
+    ? `<br/><span style="color:#b45309;font-size:13px;">${p.status === "En espera" ? "⏸ En espera" : "🟡 En proceso"}${p.waiting_for ? ` — falta: ${p.waiting_for}` : ""}${p.note ? ` · Ya hiciste: ${p.note}` : ""}</span>`
+    : "";
   return `<li style="margin-bottom:8px;">
     <strong style="color:${overdue ? "#dc2626" : "#16345f"};">${t.title}</strong><br/>
-    <span style="color:#64748b;font-size:13px;">${t.trainingName}${t.clientName ? " · " + t.clientName : ""} — vence ${t.due ? formatDate(t.due) : "sin fecha"}${overdue ? " ⚠️ VENCIDA" : ""}</span>
+    <span style="color:#64748b;font-size:13px;">${t.trainingName}${t.clientName ? " · " + t.clientName : ""} — vence ${t.due ? formatDate(t.due) : "sin fecha"}${overdue ? " ⚠️ VENCIDA" : ""}</span>${progressLine}
   </li>`;
 }
 
@@ -69,6 +80,8 @@ export async function GET(request: Request) {
     { data: cChangesData },
     { data: vacanciesData },
     { data: rCandidatesData },
+    { data: progressData },
+    { data: progressNotesData },
   ] = await Promise.all([
     supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
@@ -82,7 +95,28 @@ export async function GET(request: Request) {
     supabase.from("consulting_changes").select("*"),
     supabase.from("recruitment_vacancies").select("*, clients(id, company)"),
     supabase.from("recruitment_candidates").select("*"),
+    // Avance de tareas (migración 016)
+    supabase.from("task_progress").select("*"),
+    supabase.from("task_progress_notes").select("*").order("created_at"),
   ]);
+
+  // Estado de avance por tarea, con la última anotación de la bitácora
+  const lastNoteByKey: Record<string, string> = {};
+  for (const n of (progressNotesData ?? []) as { task_key: string; note: string }[]) {
+    lastNoteByKey[n.task_key] = n.note;
+  }
+  const progressByKey: Record<string, ProgressInfo> = {};
+  for (const pr of (progressData ?? []) as {
+    task_key: string;
+    status: string;
+    waiting_for: string;
+  }[]) {
+    progressByKey[pr.task_key] = {
+      status: pr.status,
+      waiting_for: pr.waiting_for,
+      note: lastNoteByKey[pr.task_key] ?? "",
+    };
+  }
 
   // Consultoría: proyectos con hitos/insumos/cambios para el motor de tareas
   /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -182,7 +216,7 @@ export async function GET(request: Request) {
         <div style="height:6px;background:linear-gradient(to right,#00aeef,#e6007e);border-radius:3px;"></div>
         <h2 style="color:#16345f;">Hola, ${p.full_name.split(" ")[0]} 👋</h2>
         <p style="color:#334155;">Esto es lo que tienes pendiente hoy en el CRM de capacitaciones:</p>
-        <ul style="padding-left:18px;">${mine.map((t) => taskLine(t, today)).join("")}</ul>
+        <ul style="padding-left:18px;">${mine.map((t) => taskLine(t, today, progressByKey)).join("")}</ul>
         <a href="${APP_URL}/tareas" style="display:inline-block;background:linear-gradient(to right,#00aeef,#e6007e);color:#fff;font-weight:bold;padding:10px 22px;border-radius:8px;text-decoration:none;margin-top:8px;">Abrir mis tareas</a>
         <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Puedes apagar estos correos o elegir qué tipos recibir desde "Mis tareas" → 🔔 Recordatorios.</p>
       </div>`;
