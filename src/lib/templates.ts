@@ -3,6 +3,7 @@
 // la online es su adaptación para sesiones a distancia.
 
 export const LOGISTICS_PRESENCIAL = `Para preparar adecuadamente la capacitación, ¿me podrías apoyar confirmándome algunos puntos logísticos?
+* ¿Me podrías confirmar la dirección completa de la sede (calle y número, colonia y ciudad) y, si es posible, compartirnos la ubicación por aquí? También nos ayuda saber en qué área o sala dentro de las instalaciones será la capacitación y alguna referencia para llegar.
 * ¿Hay alguna especificación especial para ingresar o permanecer en sus instalaciones, como ropa, calzado, equipo de seguridad o identificación?
 * ¿Podemos ingresar a la sala de capacitación 30min antes de la hora de inicio para instalarnos adecuadamente?
 * ¿Nos podrían apoyar con pantalla o proyector y conexión eléctrica? Algunos ejercicios requieren responder encuestas en línea, ¿tendremos acceso a una red WiFi?
