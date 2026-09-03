@@ -91,7 +91,13 @@ export const CHECKLIST_FIELDS: { key: string; label: string; hint: string }[] = 
   { key: "factura", label: "Factura", hint: "Solicitar emisión/envío de factura el mismo día del curso" },
   { key: "seguimiento_20", label: "Seguimiento día 20", hint: "Llamada/mensaje para validar aplicación de aprendizajes" },
   { key: "seguimiento_30", label: "Seguimiento día 30", hint: "Cierre formal de soporte y clausura del grupo de WhatsApp" },
+  { key: "cierre_comercial", label: "Cierre comercial", hint: "Comercial confirma que los entregables salieron y que la factura existe (48h después del curso)" },
+  { key: "postventa_comercial", label: "Fin de postventa", hint: "Comercial retoma al cliente al terminar el acompañamiento de 30 días" },
 ];
+
+// Quien recibe los avisos de cierre y postventa cuando la ficha no trae
+// comercial capturado (migración 018).
+export const COMMERCIAL_OWNER = "Perla Torres";
 
 // ---------------- Consultoría ----------------
 
@@ -105,6 +111,15 @@ export const CONSULTING_STATUSES = [
 ] as const;
 
 export const MILESTONE_STATUSES = ["Pendiente", "En curso", "Por revisar", "Entregado"] as const;
+
+// Sesiones de consultoría (migración 017): además de las reuniones fijas
+// de arranque y entrega, el proyecto puede tener las que haga falta.
+export const CONSULTING_SESSION_STATUSES = [
+  "Pendiente",
+  "Programada",
+  "Realizada",
+  "Cancelada",
+] as const;
 
 export const CHANGE_STATUSES = [
   "En evaluación",
@@ -131,6 +146,8 @@ export const CONSULTING_CHECKLIST: { key: string; label: string; hint: string }[
   { key: "encuesta", label: "Encuesta de satisfacción", hint: "Enviar encuesta y dar seguimiento (48h después de la entrega)" },
   { key: "cierre_interno", label: "Cierre interno", hint: "Horas, documentación y aprendizajes (3 días hábiles)" },
   { key: "seguimiento_20", label: "Seguimiento posproyecto", hint: "Seguimiento al cliente y cierre definitivo (20 días después)" },
+  { key: "cierre_comercial", label: "Cierre comercial", hint: "Comercial confirma que los entregables salieron y que la factura existe (48h después de la entrega)" },
+  { key: "postventa_comercial", label: "Fin de postventa", hint: "Comercial retoma al cliente al cumplirse los 20 días de seguimiento posproyecto" },
 ];
 
 // Colores de estados de consultoría (se suman a STATUS_COLORS)
@@ -144,6 +161,7 @@ STATUS_COLORS["Cotizado"] = "bg-violet-500";
 STATUS_COLORS["Aprobado"] = "bg-emerald-500";
 STATUS_COLORS["Rechazado"] = "bg-red-500";
 STATUS_COLORS["Aplicado"] = "bg-emerald-600";
+STATUS_COLORS["Realizada"] = "bg-emerald-500";
 
 // ---------------- Reclutamiento (migración 015) ----------------
 

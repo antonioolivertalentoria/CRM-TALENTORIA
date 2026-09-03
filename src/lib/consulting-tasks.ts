@@ -1,5 +1,5 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
-import { FINANCE_OWNER } from "./constants";
+import { COMMERCIAL_OWNER, FINANCE_OWNER } from "./constants";
 import type { ComputedTask } from "./tasks";
 import type {
   Client,
@@ -228,6 +228,31 @@ export function computeConsultingTasks(projects: ConsultingProjectFull[]): Compu
       const segDue = addDays(d, 20);
       if (p.seguimiento_20 === "Pendiente" && today >= addDays(segDue, -3)) {
         push("seguimiento", "Seguimiento posproyecto y cierre definitivo", p.leader, segDue, field("seguimiento_20"));
+      }
+
+      // ---- Avisos a Comercial (migración 018) ----
+      const comercial = p.comercial || COMMERCIAL_OWNER;
+      if (p.cierre_comercial === "Pendiente") {
+        push(
+          "cierre_comercial",
+          p.factura === "Pendiente"
+            ? "Cierre del proyecto: confirmar entregables y ⚠️ factura pendiente"
+            : "Cierre del proyecto: confirmar entregables enviados y factura",
+          comercial,
+          addBusinessDays(d, 2),
+          field("cierre_comercial")
+        );
+      }
+      // El día que se cumplen los 20 días de seguimiento posproyecto,
+      // Comercial se entera de que ya terminó el acompañamiento.
+      if (p.postventa_comercial === "Pendiente" && today >= segDue) {
+        push(
+          "postventa_comercial",
+          "Terminó el seguimiento posproyecto (20 días): retomar al cliente",
+          comercial,
+          segDue,
+          field("postventa_comercial")
+        );
       }
     }
   }

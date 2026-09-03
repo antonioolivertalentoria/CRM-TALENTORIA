@@ -18,8 +18,10 @@ import {
   MilestonesSection,
   InputsSection,
   ChangesSection,
+  ConsultingSessionsSection,
   DeleteConsultingButton,
 } from "@/components/ConsultingSections";
+import { SurveyReports } from "@/components/SurveyReports";
 import { ConsultingAttachments } from "@/components/ConsultingAttachments";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { formatMinutes } from "@/lib/format";
@@ -30,6 +32,7 @@ import type {
   ConsultingInput,
   ConsultingMilestone,
   ConsultingProject,
+  ConsultingSession,
   Profile,
   TimeEntry,
 } from "@/lib/types";
@@ -60,6 +63,7 @@ export default async function ConsultingDetailPage({
 
   const [
     { data: milestonesData },
+    { data: sessionsData },
     { data: inputsData },
     { data: changesData },
     { data: filesData },
@@ -68,6 +72,9 @@ export default async function ConsultingDetailPage({
     catalog,
   ] = await Promise.all([
     supabase.from("consulting_milestones").select("*").eq("project_id", id).order("position"),
+    // Sesiones libres del proyecto (migración 017); si la migración no ha
+    // corrido, el error solo deja data en null y la sección sale vacía.
+    supabase.from("consulting_sessions").select("*").eq("project_id", id).order("position"),
     supabase.from("consulting_inputs").select("*").eq("project_id", id).order("created_at"),
     supabase.from("consulting_changes").select("*").eq("project_id", id).order("created_at"),
     supabase.from("consulting_attachments").select("*").eq("project_id", id).order("created_at"),
@@ -77,6 +84,7 @@ export default async function ConsultingDetailPage({
   ]);
 
   const milestones = (milestonesData ?? []) as unknown as ConsultingMilestone[];
+  const projectSessions = (sessionsData ?? []) as unknown as ConsultingSession[];
   const inputs = (inputsData ?? []) as unknown as ConsultingInput[];
   const changes = (changesData ?? []) as unknown as ConsultingChange[];
   const files = (filesData ?? []) as unknown as ConsultingAttachment[];
@@ -170,6 +178,12 @@ export default async function ConsultingDetailPage({
 
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-slate-100 pt-4">
           <LinkChip label="Carpeta Drive" url={project.drive_folder_url} onSave={save("drive_folder_url")} />
+          <LinkChip
+            label="Documentos de trabajo"
+            url={project.documents_url}
+            onSave={save("documents_url")}
+            hint="Carpeta de Drive con los formatos y documentos que se usan en las consultorías"
+          />
           <LinkChip label="Grupo WhatsApp" url={project.whatsapp_group} onSave={save("whatsapp_group")} />
         </div>
       </header>
@@ -265,6 +279,12 @@ export default async function ConsultingDetailPage({
         </div>
       </section>
 
+      <ConsultingSessionsSection
+        projectId={project.id}
+        sessions={projectSessions}
+        people={suggestions}
+      />
+
       <MilestonesSection
         projectId={project.id}
         milestones={milestones}
@@ -307,6 +327,13 @@ export default async function ConsultingDetailPage({
           ))}
         </div>
       </section>
+
+      <SurveyReports
+        participantsUrl={project.informe_encuesta_url}
+        clientUrl={project.informe_encuesta_cliente_url}
+        onSaveParticipants={save("informe_encuesta_url")}
+        onSaveClient={save("informe_encuesta_cliente_url")}
+      />
 
       {/* Notas */}
       <section className="grid gap-4 lg:grid-cols-2">

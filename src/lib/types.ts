@@ -22,12 +22,18 @@ export type Training = {
   status: string;
   total_sessions: number | null;
   internal_owner: string;
+  /** Comercial que vendió el proyecto; recibe los avisos de cierre (migración 018). */
+  comercial: string;
   client_contact: string;
   client_email: string;
   whatsapp_group: string;
   temario_url: string;
   drive_folder_url: string;
   participants_url: string;
+  /** Informe de resultados de la encuesta de satisfacción de participantes (migración 017). */
+  informe_encuesta_url: string;
+  /** Informe de la encuesta de satisfacción del cliente contratante (migración 017). */
+  informe_encuesta_cliente_url: string;
   materials_deadline: string | null;
   priority: string;
   envio_manual: string;
@@ -41,6 +47,10 @@ export type Training = {
   factura: string;
   seguimiento_20: string;
   seguimiento_30: string;
+  /** Aviso a Comercial al cerrar el curso: entregables y factura (migración 018). */
+  cierre_comercial: string;
+  /** Aviso a Comercial al terminar el acompañamiento de 30 días (migración 018). */
+  postventa_comercial: string;
   mensaje_logistica: string;
   logistics_info: string;
   contenido_facilitador: string;
@@ -249,6 +259,12 @@ export type ConsultingProject = {
   contracted_hours: number | null;
   whatsapp_group: string;
   drive_folder_url: string;
+  /** Carpeta de Drive con los documentos y formatos de siempre (migración 017). */
+  documents_url: string;
+  /** Informe de la encuesta de satisfacción de participantes (migración 017). */
+  informe_encuesta_url: string;
+  /** Informe de la encuesta de satisfacción del cliente contratante (migración 017). */
+  informe_encuesta_cliente_url: string;
   kickoff_date: string | null;
   kickoff_start: string | null;
   kickoff_end: string | null;
@@ -267,6 +283,10 @@ export type ConsultingProject = {
   encuesta: string;
   cierre_interno: string;
   seguimiento_20: string;
+  /** Aviso a Comercial al entregar el proyecto: entregables y factura (migración 018). */
+  cierre_comercial: string;
+  /** Aviso a Comercial al terminar el seguimiento posproyecto de 20 días (migración 018). */
+  postventa_comercial: string;
   notes: string;
   internal_notes: string;
   created_at: string;
@@ -284,6 +304,29 @@ export type ConsultingMilestone = {
   review_requested_at: string | null;
   position: number;
   created_at: string;
+};
+
+/**
+ * Sesión de un proyecto de consultoría (migración 017). Las reuniones de
+ * arranque y entrega siguen en el proyecto porque de ellas cuelgan los
+ * plazos del mapa; estas son todas las demás, sin límite de cuántas.
+ */
+export type ConsultingSession = {
+  id: string;
+  project_id: string;
+  title: string;
+  session_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  modality: string;
+  platform: string;
+  session_link: string;
+  facilitator: string;
+  status: string;
+  notes: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ConsultingInput = {
@@ -343,6 +386,10 @@ export type RecruitmentVacancy = {
   vacancy_url: string;
   whatsapp_group: string;
   drive_folder_url: string;
+  /** Informe de la encuesta de satisfacción de candidatos (migración 017). */
+  informe_encuesta_url: string;
+  /** Informe de la encuesta de satisfacción del cliente contratante (migración 017). */
+  informe_encuesta_cliente_url: string;
   quote_authorized_at: string | null;
   /** Paso 4 del flujo: desde aquí corren TODOS los plazos. */
   requisition_at: string | null;

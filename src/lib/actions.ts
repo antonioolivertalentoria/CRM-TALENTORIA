@@ -5,8 +5,8 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, todayISO } from "@/lib/format";
-import { syncConsultingMeeting, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
-import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
+import { syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
+import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
 
@@ -358,12 +358,15 @@ const TRAINING_FIELDS = new Set([
   "status",
   "total_sessions",
   "internal_owner",
+  "comercial",
   "client_contact",
   "client_email",
   "whatsapp_group",
   "temario_url",
   "drive_folder_url",
   "participants_url",
+  "informe_encuesta_url",
+  "informe_encuesta_cliente_url",
   "materials_deadline",
   "priority",
   "envio_manual",
@@ -382,6 +385,8 @@ const TRAINING_FIELDS = new Set([
   "factura",
   "seguimiento_20",
   "seguimiento_30",
+  "cierre_comercial",
+  "postventa_comercial",
   "notes",
   "internal_notes",
   "questions",
@@ -1581,6 +1586,9 @@ const CONSULTING_FIELDS = new Set([
   "contracted_hours",
   "whatsapp_group",
   "drive_folder_url",
+  "documents_url",
+  "informe_encuesta_url",
+  "informe_encuesta_cliente_url",
   "kickoff_date",
   "kickoff_start",
   "kickoff_end",
@@ -1599,6 +1607,8 @@ const CONSULTING_FIELDS = new Set([
   "encuesta",
   "cierre_interno",
   "seguimiento_20",
+  "cierre_comercial",
+  "postventa_comercial",
   "notes",
   "internal_notes",
 ]);
@@ -1694,6 +1704,17 @@ export async function deleteConsultingProjectAction(id: string, clientId: string
   // Cancela las reuniones del calendario y limpia archivos del bucket
   await syncConsultingMeeting(supabase, id, "kickoff", "cancel");
   await syncConsultingMeeting(supabase, id, "delivery", "cancel");
+  try {
+    const { data: sess } = await supabase
+      .from("consulting_sessions")
+      .select("id")
+      .eq("project_id", id);
+    for (const row of (sess ?? []) as { id: string }[]) {
+      await syncConsultingSessionEvent(supabase, row.id, "cancel");
+    }
+  } catch {
+    // sin sesiones que cancelar (o falta la migración 017)
+  }
   try {
     const { data: files } = await supabase
       .from("consulting_attachments")
@@ -1795,6 +1816,119 @@ export async function deleteConsultingMilestoneAction(id: string, projectId: str
   if (error) return { error: error.message };
   revalidatePath(`/consultoria/${projectId}`);
   revalidatePath("/tareas");
+  return null;
+}
+
+// ---------------- Sesiones del proyecto (migración 017) ----------------
+// Arranque y entrega siguen viviendo en la ficha del proyecto porque de
+// ellas cuelgan los plazos del mapa; estas son todas las demás, las que
+// haga falta: diagnóstico, avances, talleres, cierre…
+
+const CONSULTING_SESSION_FIELDS = new Set([
+  "title",
+  "session_date",
+  "start_time",
+  "end_time",
+  "modality",
+  "platform",
+  "session_link",
+  "facilitator",
+  "status",
+  "notes",
+]);
+
+export async function addConsultingSessionAction(fields: {
+  projectId: string;
+  title: string;
+  sessionDate: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  modality: string;
+  facilitator: string;
+}): Promise<{ error: string } | { session: ConsultingSession }> {
+  const title = fields.title.trim();
+  if (!title) return { error: "Ponle nombre a la sesión." };
+
+  const supabase = await createSupabase();
+  const { data: last } = await supabase
+    .from("consulting_sessions")
+    .select("position")
+    .eq("project_id", fields.projectId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const position = ((last?.[0]?.position as number | undefined) ?? 0) + 1;
+
+  const { data, error } = await supabase
+    .from("consulting_sessions")
+    .insert({
+      project_id: fields.projectId,
+      title,
+      session_date: fields.sessionDate || null,
+      start_time: fields.startTime || null,
+      end_time: fields.endTime || null,
+      modality: fields.modality || "Online",
+      facilitator: fields.facilitator,
+      position,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("consulting_sessions")) {
+      return { error: "Falta correr la migración 017 en la base (sesiones de consultoría)." };
+    }
+    return { error: error?.message ?? "No se pudo agregar la sesión." };
+  }
+
+  // Con fecha y hora, la sesión se agenda sola en el calendario del equipo
+  await syncConsultingSessionEvent(supabase, data.id, "request");
+
+  revalidatePath(`/consultoria/${fields.projectId}`);
+  return { session: data as ConsultingSession };
+}
+
+export async function updateConsultingSessionField(
+  id: string,
+  projectId: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!CONSULTING_SESSION_FIELDS.has(field)) return { error: "Campo no permitido." };
+
+  const nullableWhenEmpty = new Set(["session_date", "start_time", "end_time"]);
+  const parsed: string | null = nullableWhenEmpty.has(field) && !value ? null : value;
+
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("consulting_sessions")
+    .update({ [field]: parsed })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  // Mover fecha, hora, modalidad o quién la lleva actualiza la invitación;
+  // quitar la fecha o cancelar la sesión la quita del calendario.
+  if (
+    ["session_date", "start_time", "end_time", "modality", "platform", "session_link", "facilitator", "title", "status"].includes(
+      field
+    )
+  ) {
+    const cancel = (field === "session_date" && parsed === null) || (field === "status" && value === "Cancelada");
+    await syncConsultingSessionEvent(supabase, id, cancel ? "cancel" : "request");
+  }
+
+  revalidatePath(`/consultoria/${projectId}`);
+  return null;
+}
+
+export async function deleteConsultingSessionAction(
+  id: string,
+  projectId: string
+): Promise<FormState> {
+  const supabase = await createSupabase();
+  await syncConsultingSessionEvent(supabase, id, "cancel");
+  const { error } = await supabase.from("consulting_sessions").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath(`/consultoria/${projectId}`);
   return null;
 }
 
@@ -2100,6 +2234,8 @@ const VACANCY_FIELDS = new Set([
   "vacancy_url",
   "whatsapp_group",
   "drive_folder_url",
+  "informe_encuesta_url",
+  "informe_encuesta_cliente_url",
   "quote_authorized_at",
   "requisition_at",
   "profile_meeting_date",

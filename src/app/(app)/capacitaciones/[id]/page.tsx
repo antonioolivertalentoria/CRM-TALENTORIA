@@ -21,6 +21,7 @@ import { OwnerSelect } from "@/components/OwnerSelect";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { RequestsSection } from "@/components/RequestsSection";
 import { TrainingAttachments } from "@/components/TrainingAttachments";
+import { SurveyReports } from "@/components/SurveyReports";
 import type { Client, Training, Session, Material, MaterialComment, Profile, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -224,6 +225,12 @@ export default async function TrainingDetailPage({
             <OwnerSelect value={training.internal_owner} people={people} onChange={save("internal_owner")} />
           </div>
           <div>
+            <p className="text-xs font-semibold text-slate-400" title="Recibe los avisos de cierre (factura y entregables) y de fin de postventa">
+              Comercial
+            </p>
+            <OwnerSelect value={training.comercial} people={people} onChange={save("comercial")} />
+          </div>
+          <div>
             <p className="text-xs font-semibold text-slate-400">Total de sesiones</p>
             <EditableField value={training.total_sessions?.toString() ?? ""} type="number" onSave={save("total_sessions")} />
           </div>
@@ -340,6 +347,14 @@ export default async function TrainingDetailPage({
         </div>
       </section>
       )}
+
+      {/* Informes de la encuesta de satisfacción (aplican también a team buildings) */}
+      <SurveyReports
+        participantsUrl={training.informe_encuesta_url}
+        clientUrl={training.informe_encuesta_cliente_url}
+        onSaveParticipants={save("informe_encuesta_url")}
+        onSaveClient={save("informe_encuesta_cliente_url")}
+      />
 
       {/* Notas */}
       <section className="grid gap-4 lg:grid-cols-3">

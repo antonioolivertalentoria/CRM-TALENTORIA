@@ -11,14 +11,28 @@ import {
   addConsultingChangeAction,
   updateConsultingChangeField,
   deleteConsultingChangeAction,
+  addConsultingSessionAction,
+  updateConsultingSessionField,
+  deleteConsultingSessionAction,
   deleteConsultingProjectAction,
 } from "@/lib/actions";
-import { MILESTONE_STATUSES, CHANGE_STATUSES } from "@/lib/constants";
+import {
+  MILESTONE_STATUSES,
+  CHANGE_STATUSES,
+  CONSULTING_SESSION_STATUSES,
+  MODALITIES,
+} from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import { EditableField } from "./EditableField";
 import { StatusSelect } from "./StatusSelect";
 import { ConsultingItemFiles } from "./ConsultingAttachments";
-import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone } from "@/lib/types";
+import type {
+  ConsultingAttachment,
+  ConsultingChange,
+  ConsultingInput,
+  ConsultingMilestone,
+  ConsultingSession,
+} from "@/lib/types";
 
 const inputCls =
   "rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
@@ -181,6 +195,226 @@ export function MilestonesSection({
             inputMode="decimal"
             className={`${inputCls} w-20`}
           />
+          <button
+            onClick={add}
+            disabled={pending || !title.trim()}
+            className="rounded-lg bg-brand-cyan px-3.5 py-1.5 text-sm font-semibold text-white shadow transition hover:bg-brand-cyan-dark disabled:opacity-50"
+          >
+            {pending ? "…" : "Agregar"}
+          </button>
+        </div>
+        {error && <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-600">{error}</p>}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Sesiones del proyecto (migración 017). Arranque y entrega viven arriba,
+ * en la ficha, porque de sus fechas cuelgan los plazos del mapa. Aquí van
+ * todas las demás, sin límite: diagnóstico, avances, talleres, cierre…
+ * Cada sesión con fecha y hora manda su invitación de calendario al equipo.
+ */
+export function ConsultingSessionsSection({
+  projectId,
+  sessions,
+  people,
+}: {
+  projectId: string;
+  sessions: ConsultingSession[];
+  people: string[];
+}) {
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [modality, setModality] = useState<string>("Online");
+  const [facilitator, setFacilitator] = useState("");
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  const save = (id: string, field: string) => (value: string) =>
+    updateConsultingSessionField(id, projectId, field, value);
+
+  const add = () => {
+    if (!title.trim()) return;
+    startTransition(async () => {
+      const res = await addConsultingSessionAction({
+        projectId,
+        title,
+        sessionDate: date || null,
+        startTime: start || null,
+        endTime: end || null,
+        modality,
+        facilitator,
+      });
+      if ("error" in res) setError(res.error);
+      else {
+        setTitle("");
+        setDate("");
+        setStart("");
+        setEnd("");
+        setError("");
+      }
+    });
+  };
+
+  const remove = (s: ConsultingSession) => {
+    if (
+      !confirm(
+        `¿Eliminar la sesión "${s.title}"?\n\nSi ya estaba en el calendario del equipo, se manda la cancelación.`
+      )
+    )
+      return;
+    startTransition(async () => {
+      await deleteConsultingSessionAction(s.id, projectId);
+    });
+  };
+
+  const active = sessions.filter((s) => s.status !== "Cancelada");
+  const held = sessions.filter((s) => s.status === "Realizada").length;
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 px-4 py-3">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+          Sesiones del proyecto ({held} de {active.length} realizadas)
+        </h2>
+      </div>
+      <div className="p-4">
+        <p className="mb-3 text-xs text-slate-400">
+          Agrega las sesiones que haga falta además del arranque y la entrega: diagnóstico,
+          avances, talleres, cierre… Al capturar fecha y hora se manda la invitación de
+          calendario al equipo; si la mueves, llega la actualización sola.
+        </p>
+
+        {sessions.length > 0 && (
+          <div className="mb-3 overflow-x-auto">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
+                  <th className="min-w-48 px-2 py-2 font-semibold">Sesión</th>
+                  <th className="w-36 px-2 py-2 font-semibold">Fecha</th>
+                  <th className="w-24 px-2 py-2 font-semibold">Inicio</th>
+                  <th className="w-24 px-2 py-2 font-semibold">Fin</th>
+                  <th className="w-32 px-2 py-2 font-semibold">Modalidad</th>
+                  <th className="w-36 px-2 py-2 font-semibold">Quién la lleva</th>
+                  <th className="w-40 px-2 py-2 font-semibold">Liga o lugar</th>
+                  <th className="w-32 px-2 py-2 font-semibold">Estado</th>
+                  <th className="w-10 px-2 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((s) => (
+                  <tr
+                    key={s.id}
+                    className={`border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50/60 ${
+                      s.status === "Cancelada" ? "opacity-50" : ""
+                    }`}
+                  >
+                    <td className="px-1 py-1.5">
+                      <EditableField value={s.title} onSave={save(s.id, "title")} />
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <EditableField value={s.session_date ?? ""} type="date" onSave={save(s.id, "session_date")} />
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <EditableField value={s.start_time?.slice(0, 5) ?? ""} type="time" onSave={save(s.id, "start_time")} />
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <EditableField value={s.end_time?.slice(0, 5) ?? ""} type="time" onSave={save(s.id, "end_time")} />
+                    </td>
+                    <td className="px-2 py-1.5 pt-2">
+                      <StatusSelect
+                        value={s.modality || "Online"}
+                        options={MODALITIES}
+                        onChange={save(s.id, "modality")}
+                        small
+                      />
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <EditableField
+                        value={s.facilitator}
+                        onSave={save(s.id, "facilitator")}
+                        placeholder="Nombre"
+                        suggestions={people}
+                      />
+                    </td>
+                    <td className="px-1 py-1.5">
+                      {s.modality === "Presencial" ? (
+                        <EditableField
+                          value={s.platform}
+                          onSave={save(s.id, "platform")}
+                          placeholder="Lugar o sala"
+                        />
+                      ) : (
+                        <EditableField
+                          value={s.session_link}
+                          type="url"
+                          onSave={save(s.id, "session_link")}
+                          placeholder="Liga de la sesión"
+                        />
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 pt-2">
+                      <StatusSelect
+                        value={s.status}
+                        options={CONSULTING_SESSION_STATUSES}
+                        onChange={save(s.id, "status")}
+                        small
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 pt-2.5">
+                      <button
+                        onClick={() => remove(s)}
+                        disabled={pending}
+                        title="Eliminar sesión"
+                        className="text-slate-300 transition hover:text-red-500"
+                      >
+                        {trashIcon}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && add()}
+            placeholder="Nueva sesión, ej. Sesión de diagnóstico…"
+            className={`${inputCls} min-w-52 flex-1`}
+          />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          <input
+            type="time"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+            title="Hora de inicio"
+            className={inputCls}
+          />
+          <input
+            type="time"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+            title="Hora de fin"
+            className={inputCls}
+          />
+          <select value={modality} onChange={(e) => setModality(e.target.value)} className={inputCls}>
+            {MODALITIES.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+          <select value={facilitator} onChange={(e) => setFacilitator(e.target.value)} className={inputCls}>
+            <option value="">— Quién la lleva</option>
+            {people.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
           <button
             onClick={add}
             disabled={pending || !title.trim()}
@@ -470,7 +704,7 @@ export function DeleteConsultingButton({
       onClick={() => {
         if (
           confirm(
-            `¿Eliminar el proyecto "${name}"?\n\nSe borran también sus hitos, insumos, cambios y archivos, y se cancelan sus reuniones en calendario. Esta acción no se puede deshacer.`
+            `¿Eliminar el proyecto "${name}"?\n\nSe borran también sus sesiones, hitos, insumos, cambios y archivos, y se cancelan sus eventos de calendario. Esta acción no se puede deshacer.`
           )
         ) {
           startTransition(() => deleteConsultingProjectAction(projectId, clientId));

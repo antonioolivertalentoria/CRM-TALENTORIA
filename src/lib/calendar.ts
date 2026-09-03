@@ -522,3 +522,152 @@ export async function syncConsultingMeeting(
     // cortesía: nunca rompe la acción original
   }
 }
+
+// ---------------- Sesiones de consultoría (migración 017) ----------------
+
+type ConsultingSessionRow = {
+  id: string;
+  title: string;
+  session_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  modality: string;
+  platform: string;
+  session_link: string;
+  facilitator: string;
+  status: string;
+  consulting_projects: Pick<
+    ConsultingRow,
+    "id" | "name" | "leader" | "team" | "comercial" | "internal_owner" | "clients"
+  > | null;
+};
+
+/**
+ * Manda (o cancela) la invitación de UNA sesión de consultoría, las que el
+ * equipo agrega libremente además de arranque y entrega. Mismo mecanismo
+ * que las reuniones fijas: .ics por Resend, actualizable por UID.
+ * Es cortesía: nunca lanza ni rompe la acción original.
+ */
+export async function syncConsultingSessionEvent(
+  supabase: SupabaseLike,
+  sessionId: string,
+  mode: "request" | "cancel"
+): Promise<void> {
+  try {
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) return;
+
+    const { data } = await supabase
+      .from("consulting_sessions")
+      .select(
+        "id, title, session_date, start_time, end_time, modality, platform, session_link, facilitator, status, consulting_projects(id, name, leader, team, comercial, internal_owner, whatsapp_group, clients(company))"
+      )
+      .eq("id", sessionId)
+      .maybeSingle();
+    const s = data as ConsultingSessionRow | null;
+    if (!s || !s.consulting_projects) return;
+    if (!s.session_date || !s.start_time) return;
+
+    const p = s.consulting_projects;
+    const clientName = p.clients?.company ?? "";
+
+    const [{ data: profilesData }, { data: facilitatorsData }, userRes] = await Promise.all([
+      supabase.from("profiles").select("full_name, email"),
+      supabase.from("facilitators").select("name, email"),
+      supabase.auth.getUser(),
+    ]);
+    const profiles = (profilesData ?? []) as { full_name: string; email: string }[];
+    const facilitators = (facilitatorsData ?? []) as { name: string; email?: string }[];
+
+    const creator: Person[] = userRes?.data?.user?.email
+      ? [{
+          name: profiles.find((x) => x.email === userRes.data.user.email)?.full_name ?? userRes.data.user.email,
+          email: userRes.data.user.email,
+        }]
+      : [];
+
+    const teamNames = p.team.split(",").map((t: string) => t.trim()).filter(Boolean);
+    const attendees = dedupe([
+      ...ALWAYS_INVITED,
+      ...creator,
+      ...resolveEmails(
+        [p.leader, p.comercial, p.internal_owner, s.facilitator, ...teamNames],
+        profiles,
+        facilitators
+      ),
+    ]);
+    if (attendees.length === 0) return;
+
+    const startTime = s.start_time.slice(0, 5);
+    const endTime = s.end_time ? s.end_time.slice(0, 5) : plusTwoHours(startTime);
+    const label = s.title.trim() || "Sesión de consultoría";
+    const summary = `🧩 ${label}: ${p.name}${clientName ? ` (${clientName})` : ""}`;
+
+    const description = [
+      `Consultoría: ${p.name}`,
+      clientName ? `Cliente: ${clientName}` : "",
+      s.facilitator ? `Lleva la sesión: ${s.facilitator}` : "",
+      p.leader ? `Líder: ${p.leader}` : "",
+      s.modality ? `Modalidad: ${s.modality}` : "",
+      s.platform && s.modality !== "Presencial" ? `Plataforma: ${s.platform}` : "",
+      s.session_link ? `Liga: ${s.session_link}` : "",
+      "",
+      `Ficha en el CRM: https://crm-talentoria.vercel.app/consultoria/${p.id}`,
+    ].filter((l) => l !== "");
+
+    const location =
+      s.modality === "Presencial" ? "Presencial" : s.session_link || s.platform || "";
+
+    const ics = buildIcs({
+      method: mode === "cancel" ? "CANCEL" : "REQUEST",
+      uid: `cons-sesion-${s.id}@crm-talentoria.vercel.app`,
+      summary,
+      description: description.join("\n"),
+      location,
+      date: s.session_date,
+      startTime,
+      endTime,
+      attendees,
+      url: s.session_link || undefined,
+    });
+
+    const from = process.env.REMINDER_FROM ?? "CRM Talentoría <crm@talentoriacursos.com>";
+    const dateNice = s.session_date.split("-").reverse().join("/");
+    const subject =
+      mode === "cancel"
+        ? `❌ Cancelada: ${label} · ${p.name}`
+        : `📅 ${label}: ${p.name} · ${dateNice} ${startTime}`;
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;">
+        <div style="height:6px;background:linear-gradient(to right,#00aeef,#e6007e);border-radius:3px;"></div>
+        <h2 style="color:#16345f;">${mode === "cancel" ? `${label} cancelada` : label}</h2>
+        <p style="color:#334155;"><strong>${summary}</strong></p>
+        <p style="color:#334155;">📅 ${dateNice} · ${startTime}–${endTime} (hora de México)</p>
+        ${location ? `<p style="color:#64748b;">📍 ${location}</p>` : ""}
+        <p style="color:#94a3b8;font-size:12px;margin-top:16px;">
+          ${mode === "cancel" ? "El evento adjunto quita la sesión de tu Google Calendar." : "Abre la invitación adjunta para que quede en tu Google Calendar. Si la fecha cambia, te llegará la actualización sola."}
+        </p>
+      </div>`;
+
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: attendees.map((a) => a.email),
+        subject,
+        html,
+        attachments: [
+          {
+            filename: mode === "cancel" ? "cancelacion.ics" : "invitacion.ics",
+            content: Buffer.from(ics).toString("base64"),
+            content_type: `text/calendar; method=${mode === "cancel" ? "CANCEL" : "REQUEST"}; charset=UTF-8`,
+          },
+        ],
+      }),
+    });
+  } catch {
+    // cortesía: nunca rompe la acción original
+  }
+}

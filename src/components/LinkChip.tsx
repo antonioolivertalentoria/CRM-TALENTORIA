@@ -11,21 +11,27 @@ export function LinkChip({
   label,
   url,
   onSave,
+  placeholder = "Pega el link de Drive…",
+  hint,
 }: {
   label: string;
   url: string;
   onSave: (value: string) => Promise<unknown>;
+  /** Texto guía del campo vacío (por defecto, el de una carpeta de Drive). */
+  placeholder?: string;
+  /** Explicación al pasar el mouse, para links que no son obvios. */
+  hint?: string;
 }) {
   const [editing, setEditing] = useState(false);
 
   if (!url || editing) {
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1" title={hint}>
         <span className="text-xs font-medium text-slate-500 shrink-0">{label}:</span>
         <EditableField
           value={url}
           type="url"
-          placeholder="Pega el link de Drive…"
+          placeholder={placeholder}
           onSave={async (v) => {
             await onSave(v);
             setEditing(false);
@@ -36,7 +42,7 @@ export function LinkChip({
   }
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5" title={hint}>
       <a
         href={url}
         target="_blank"

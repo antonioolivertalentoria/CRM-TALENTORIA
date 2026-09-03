@@ -1,4 +1,5 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
+import { COMMERCIAL_OWNER } from "./constants";
 import type { Client, CustomTask, Material, Session, Training, TrainingRequest } from "./types";
 
 /**
@@ -270,6 +271,50 @@ export function computeTasks(
         due: lastDate,
         complete: trainingField("factura"),
       });
+    }
+
+    // ---- Avisos a Comercial (migración 018) ----
+    // Comercial no se enteraba del cierre y es quien tiene que cuidar
+    // que la factura exista y retomar al cliente cuando se acaba el
+    // acompañamiento. Estos dos avisos son su parte del proceso.
+    if (lastDate && today > lastDate) {
+      const comercial = t.comercial || COMMERCIAL_OWNER;
+
+      if (t.cierre_comercial === "Pendiente") {
+        const faltan = POST_ITEMS.filter((i) => val(i.field) === "Pendiente").map((i) => i.label);
+        tasks.push({
+          ...base,
+          assignee: comercial,
+          key: `${t.id}-cierre_comercial`,
+          kind: "Entrega",
+          title: "Cierre del proyecto: confirmar entregables enviados y factura",
+          details:
+            (t.factura === "Pendiente"
+              ? "⚠️ La factura sigue pendiente en la ficha. "
+              : "Factura marcada como atendida. ") +
+            (faltan.length > 0
+              ? `Todavía faltan entregas: ${faltan.join(", ")}.`
+              : "Todas las entregas al cliente ya están marcadas."),
+          due: addBusinessDays(lastDate, 2),
+          complete: trainingField("cierre_comercial"),
+        });
+      }
+
+      // Fin del acompañamiento: aparece el día que se cumplen los 30 días
+      // (no antes: el punto es avisar que YA pasó el servicio postventa).
+      const postDue = addDays(lastDate, 30);
+      if (t.postventa_comercial === "Pendiente" && today >= postDue) {
+        tasks.push({
+          ...base,
+          assignee: comercial,
+          key: `${t.id}-postventa_comercial`,
+          kind: "Seguimiento",
+          title: "Terminó el servicio postventa (30 días): retomar al cliente",
+          details: "Se acabó el acompañamiento del curso. Buen momento para preguntar resultados y proponer lo que sigue.",
+          due: postDue,
+          complete: trainingField("postventa_comercial"),
+        });
+      }
     }
 
     // Seguimientos día 20 y 30 (aparecen 3 días antes de vencer)

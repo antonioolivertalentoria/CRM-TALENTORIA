@@ -88,7 +88,7 @@ activity_log  (quién hizo qué; se limpia a 90 días desde el cron)
 | Tabla | Qué guarda | Campos clave |
 |---|---|---|
 | `clients` | Empresas cliente | `company`, contacto, RFC/razón social, **`parent_id`** (si es subcliente de un cliente "paraguas" que nos subcontrata, ej. Coparmex → empresa final; `null` = cliente directo o venta al público en general) |
-| `trainings` | La capacitación **o el team building** = el proyecto (columna **`kind`**; los team buildings no llevan checklist/materiales/logística) | `client_id`, nombres, `status` (Propuesta/Confirmada/En curso/Finalizada/Cancelada), responsable interno, links (Drive, temario, WhatsApp), y ~17 columnas de **checklist** (`Pendiente`/`Listo`/`No aplica`): mensaje de logística, contenido al facilitador, lista de participantes, envío de manual/constancias/insignias/DC-3, encuesta de participantes, **informe de encuesta**, factura, seguimientos día 20/30, etc. |
+| `trainings` | La capacitación **o el team building** = el proyecto (columna **`kind`**; los team buildings no llevan checklist/materiales/logística) | `client_id`, nombres, `status` (Propuesta/Confirmada/En curso/Finalizada/Cancelada), responsable interno, **`comercial`** (quien vendió; recibe los avisos de cierre), links (Drive, temario, WhatsApp, **informes de encuesta**), y ~19 columnas de **checklist** (`Pendiente`/`Listo`/`No aplica`): mensaje de logística, contenido al facilitador, lista de participantes, envío de manual/constancias/insignias/DC-3, encuesta de participantes, **informe de encuesta**, factura, seguimientos día 20/30, etc. |
 | `sessions` | Sesiones de cada capacitación | `training_id`, número, fecha, horario (inicio/cierre, duración calculada), **facilitador propio por sesión**, modalidad (Online/Presencial/Híbrida), plataforma, liga, inscritos/asistentes |
 | `materials` | Materiales del proyecto (links a Drive) | tipo (PPT, manuales…), quién lo hace (`maker`), quién lo revisa (`reviewer`), estado (Pendiente → En proceso → Por revisar → Listo), fecha límite |
 | `material_comments` | Comentarios de revisión | autor, texto |
@@ -103,6 +103,7 @@ activity_log  (quién hizo qué; se limpia a 90 días desde el cron)
 | `training_requests` | Peticiones de un team building (gafetes, tarjetas…) | `training_id`, título, responsable, fecha, `done`; las pendientes salen en "Mis tareas" como tipo "Petición" |
 | `training_attachments` | Archivos de un team building | igual que `task_attachments` pero colgado de `trainings`; bucket "adjuntos", ruta `teambuildings/<id>/` |
 | `consulting_projects` | Proyecto de consultoría (módulo propio, migración 013) | cliente, fase, líder/equipo/comercial/operaciones, alcance, horas contratadas, reuniones de arranque y entrega (con invitación de calendario) y checklist del Mapa del Proceso |
+| `consulting_sessions` | Sesiones libres del proyecto de consultoría (migración 017) | título, fecha, horario, modalidad, quién la lleva, liga/lugar y estado; cada una con fecha y hora manda su invitación de calendario. Arranque y entrega siguen en el proyecto porque de sus fechas cuelgan los plazos del mapa |
 | `consulting_milestones` | Hitos del plan de trabajo | responsable, fecha, horas estimadas, estado (Pendiente→En curso→Por revisar→Entregado); "Por revisar" dispara la revisión técnica de Operaciones |
 | `consulting_inputs` | Insumos del cliente | fecha acordada y recibido; vencido genera seguimiento al líder y escalamiento al comercial a las 48h |
 | `consulting_changes` | Cambios de alcance | en alcance sí/no, estado (En evaluación→Cotizado→Aprobado/Rechazado→Aplicado) y monto de cotización |
@@ -113,7 +114,15 @@ activity_log  (quién hizo qué; se limpia a 90 días desde el cron)
 | `profiles` | Perfil por usuario de auth | nombre, correo, `reminder_prefs` (JSON: recordatorios on/off y tipos de tarea) |
 
 Seguridad: **RLS activado en todas las tablas** con política simple: cualquier usuario
-autenticado puede leer y escribir todo (`to authenticated using (true)`). No hay roles.
+autenticado puede leer y escribir todo (`to authenticated using (true)`). No hay roles:
+quien tiene usuario ve y edita todas las capacitaciones, clientes, tareas y proyectos,
+incluidos los links de los informes de encuesta.
+
+La única puerta que existe es de módulo, no de dato: `src/lib/consulting-access.ts`
+(`CONSULTING_OPEN_TO_ALL = true`, abierto a todo el equipo) y
+`src/lib/recruitment-access.ts` (`RECRUITMENT_OPEN_TO_ALL = false`: reclutamiento solo
+lo ve la lista de correos, el resto ve la pantalla de estreno y sus tareas no se le
+mezclan en "Mis tareas" ni en los recordatorios).
 
 ### Archivos adjuntos (Supabase Storage)
 
@@ -130,8 +139,21 @@ Bucket **privado** `adjuntos`, con tope de **20 MB por archivo**; los archivos v
 - El plan gratuito de Supabase da **1 GB** de almacenamiento total. Para material pesado
   (videos, PPTs grandes) se sigue usando Google Drive con link.
 
-Las migraciones (`supabase/migration-001…005.sql`) se corren a mano en el SQL Editor del
+Las migraciones (`supabase/migration-001…018.sql`) se corren a mano en el SQL Editor del
 dashboard de Supabase; todas son aditivas.
+
+### Informes de encuesta de satisfacción (migración 017)
+
+Capacitaciones, consultoría y reclutamiento tienen la misma sección
+**"Informes de encuesta de satisfacción"** con dos links de Drive:
+`informe_encuesta_url` (el de quienes participaron / los candidatos) e
+`informe_encuesta_cliente_url` (el de la encuesta al cliente que contrató).
+Son solo links —el archivo vive en Drive— y cualquiera del equipo con usuario
+puede consultarlos desde la ficha. El componente compartido es
+`src/components/SurveyReports.tsx`.
+
+Consultoría tiene además `documents_url`: una segunda carpeta de Drive, aparte
+de la del proyecto, con los formatos y documentos que se usan siempre.
 
 ## 5. Motor de tareas (lo más "de negocio" del sistema)
 
@@ -146,6 +168,14 @@ Completar una tarea actualiza el campo correspondiente (y viceversa). Reglas de 
 - Entregas post-curso (manual, constancias, insignias, DC-3, encuesta, informe de encuesta,
   leads): 2 días **hábiles** después de la última sesión. Factura: el mismo día.
 - Seguimientos: día 20 y día 30 naturales.
+- **Comercial (migración 018):** aviso de *cierre* 2 días hábiles después de la
+  última sesión (confirmar entregables y que la factura exista) y aviso de *fin
+  de postventa* el día que se cumplen los 30 días naturales. En consultoría son
+  los mismos dos, colgados de la fecha de entrega: cierre a 2 días hábiles y fin
+  de postventa a los 20 días. Van a `trainings.comercial` /
+  `consulting_projects.comercial` (por omisión `COMMERCIAL_OWNER`, Perla Torres)
+  y se cierran con los puntos `cierre_comercial` y `postventa_comercial` del
+  checklist.
 
 Las tareas de `custom_tasks` (tipo "Personal") se mezclan en la misma lista, en los
 recordatorios por correo y en el reporte semanal.
@@ -200,6 +230,12 @@ correos resueltos vía profiles, facilitators.email y el mapa EXTRA_EMAILS
 (Carolina, Adrián Hernández). Todo es best-effort: sin RESEND_API_KEY o ante
 cualquier error, la acción original no se afecta.
 
+
+Las reuniones de arranque y entrega de consultoría y las **sesiones libres del
+proyecto** (`consulting_sessions`, migración 017) usan el mismo mecanismo:
+capturar o mover fecha y hora manda la invitación al líder, comercial,
+operaciones, equipo consultor y quien lleva la sesión; borrarla o ponerla en
+"Cancelada" manda la cancelación.
 
 **El correo ya no se manda solo (02-sep-2026).** Antes, mover fecha/horario/facilitador
 mandaba la invitación en automático y en silencio: si Resend fallaba (p. ej. 429 por su

@@ -19,6 +19,7 @@ import { LinkChip } from "@/components/LinkChip";
 import { OwnerSelect } from "@/components/OwnerSelect";
 import { CandidatesSection, DeleteVacancyButton } from "@/components/CandidatesSection";
 import { RecruitmentAttachments } from "@/components/RecruitmentAttachments";
+import { SurveyReports } from "@/components/SurveyReports";
 import { addDays, formatDate, formatMinutes, todayISO } from "@/lib/format";
 import type {
   Client,
@@ -354,6 +355,15 @@ export default async function VacancyDetailPage({
           ))}
         </div>
       </section>
+
+      <SurveyReports
+        participantsUrl={vacancy.informe_encuesta_url}
+        clientUrl={vacancy.informe_encuesta_cliente_url}
+        onSaveParticipants={save("informe_encuesta_url")}
+        onSaveClient={save("informe_encuesta_cliente_url")}
+        participantsLabel="Informe de candidatos"
+        hint="Pega aquí el link del informe de resultados: uno es el de la encuesta que contestaron los candidatos y el otro el de la encuesta al cliente que nos contrató."
+      />
 
       {/* Notas */}
       <section className="grid gap-4 lg:grid-cols-2">
