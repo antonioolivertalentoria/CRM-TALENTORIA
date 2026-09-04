@@ -1,15 +1,17 @@
 /**
- * Acceso al módulo de Reclutamiento mientras está en construcción.
+ * Acceso al módulo de Reclutamiento.
  *
- * Mientras RECRUITMENT_OPEN_TO_ALL sea false, solo los correos de la
- * lista ven el módulo completo; el resto del equipo ve la pantalla de
- * "en construcción" y sus tareas de reclutamiento no se les mezclan en
- * "Mis tareas" ni en los recordatorios por correo.
+ * ABIERTO A TODO EL EQUIPO desde el 03-sep-2026: con el CRM ya completo
+ * (capacitaciones, team buildings, consultoría y reclutamiento), todos
+ * los módulos se ven igual y las tareas de reclutamiento se mezclan en
+ * "Mis tareas", en el reporte semanal y en los recordatorios.
  *
- * Para abrir el módulo a todo el equipo: cambia RECRUITMENT_OPEN_TO_ALL
- * a true (un solo cambio, un deploy).
+ * La bandera y la lista se dejan como estaban por si algún día hay que
+ * volver a cerrar el módulo: basta poner RECRUITMENT_OPEN_TO_ALL en
+ * false y desplegar; quien no esté en ALLOWED_EMAILS verá la pantalla
+ * de "en construcción" y no recibirá esas tareas.
  */
-export const RECRUITMENT_OPEN_TO_ALL = false;
+export const RECRUITMENT_OPEN_TO_ALL = true;
 
 const ALLOWED_EMAILS = ["antoniooliver@talentoria.com"];
 

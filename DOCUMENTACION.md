@@ -120,9 +120,9 @@ incluidos los links de los informes de encuesta.
 
 La única puerta que existe es de módulo, no de dato: `src/lib/consulting-access.ts`
 (`CONSULTING_OPEN_TO_ALL = true`, abierto a todo el equipo) y
-`src/lib/recruitment-access.ts` (`RECRUITMENT_OPEN_TO_ALL = false`: reclutamiento solo
-lo ve la lista de correos, el resto ve la pantalla de estreno y sus tareas no se le
-mezclan en "Mis tareas" ni en los recordatorios).
+`src/lib/recruitment-access.ts` (`RECRUITMENT_OPEN_TO_ALL = true` desde el 03-sep-2026).
+Hoy los cuatro módulos están abiertos a todo el equipo; las banderas se quedan por si
+alguna vez hay que volver a cerrar uno.
 
 ### Archivos adjuntos (Supabase Storage)
 
@@ -211,10 +211,10 @@ estados, no tareas:
   continúa, la tarea de **reposición** regresa la vacante a "Publicada" con fecha de hoy,
   conservando candidatos e historial.
 
-El módulo está **en construcción** (`src/lib/recruitment-access.ts`): solo los correos de la
-lista lo ven; el resto del equipo ve la pantalla de estreno y sus tareas de reclutamiento no se
-les mezclan en "Mis tareas" ni en los recordatorios. Para abrirlo a todos:
-`RECRUITMENT_OPEN_TO_ALL = true` y un deploy.
+El módulo está **abierto a todo el equipo** desde el 03-sep-2026
+(`RECRUITMENT_OPEN_TO_ALL = true` en `src/lib/recruitment-access.ts`), igual que consultoría:
+todos ven los cuatro módulos y las tareas de reclutamiento se mezclan en "Mis tareas", en el
+reporte semanal y en los recordatorios. La bandera se queda por si hay que volver a cerrarlo.
 
 ### Invitaciones de Google Calendar (src/lib/calendar.ts)
 
