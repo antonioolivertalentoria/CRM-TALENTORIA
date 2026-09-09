@@ -33,6 +33,10 @@ const EXTRA_EMAILS: Record<string, string> = {
   "adrian hernandez": "adrianhernandez@talentoria.com",
 };
 
+// Buzón de solo envío: talentoriacursos.com no tiene registro MX, así que
+// NADIE puede escribirle. Por eso los invitados van con RSVP=FALSE más
+// abajo: si Calendar mandara la respuesta aquí, rebotaría y el que
+// contestó recibiría un "Delivery Status Notification".
 const ORGANIZER_EMAIL = "crm@talentoriacursos.com";
 const TZID = "America/Mexico_City"; // UTC-6 fijo (sin horario de verano)
 
@@ -175,10 +179,15 @@ function buildIcs(opts: {
     `LOCATION:${icsEscape(opts.location)}`,
     `STATUS:${opts.method === "CANCEL" ? "CANCELLED" : "CONFIRMED"}`,
     `ORGANIZER;CN=CRM Talentoria:mailto:${ORGANIZER_EMAIL}`,
+    // Outlook mandaría la contrapropuesta al organizador: mismo rebote.
+    "X-MICROSOFT-DISALLOW-COUNTER:TRUE",
     ...(opts.url ? [`URL:${opts.url}`] : []),
+    // PARTSTAT=ACCEPTED + RSVP=FALSE: el evento entra al calendario ya
+    // aceptado y Calendar no pide confirmación, así que nunca manda la
+    // respuesta al organizador (que no recibe correo).
     ...opts.attendees.map(
       (a) =>
-        `ATTENDEE;CN=${icsEscape(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${a.email}`
+        `ATTENDEE;CN=${icsEscape(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=FALSE:mailto:${a.email}`
     ),
     "END:VEVENT",
     "END:VCALENDAR",

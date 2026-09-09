@@ -230,6 +230,16 @@ correos resueltos vía profiles, facilitators.email y el mapa EXTRA_EMAILS
 (Carolina, Adrián Hernández). Todo es best-effort: sin RESEND_API_KEY o ante
 cualquier error, la acción original no se afecta.
 
+**Las invitaciones no piden confirmación a propósito** (`PARTSTAT=ACCEPTED;
+RSVP=FALSE`). El organizador del .ics es `crm@talentoriacursos.com`, un buzón
+de solo envío: el dominio no tiene registro MX (Resend solo firma el subdominio
+`send.`), o sea que nadie puede escribirle. Cuando los invitados sí podían
+responder, Google mandaba el "Sí/No" al organizador, la conexión al puerto 25
+expiraba y a quien contestó le llegaba un *Delivery Status Notification*
+(primero "Delay" durante 48 h, luego "Failure"). Con RSVP apagado el evento
+entra al calendario ya aceptado y no se manda nada de vuelta. Si algún día se
+quiere saber quién confirma, primero hay que darle MX y buzón real al dominio.
+
 
 Las reuniones de arranque y entrega de consultoría y las **sesiones libres del
 proyecto** (`consulting_sessions`, migración 017) usan el mismo mecanismo:
