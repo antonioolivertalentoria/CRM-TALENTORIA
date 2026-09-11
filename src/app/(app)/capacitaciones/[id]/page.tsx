@@ -16,7 +16,7 @@ import { MaterialsSection } from "@/components/MaterialsSection";
 import { DeleteTrainingButton } from "@/components/DeleteTrainingButton";
 import { LogisticsMessage } from "@/components/LogisticsMessage";
 import { FollowUpMessage } from "@/components/FollowUpMessage";
-import { SEGUIMIENTO_20, CIERRE_30 } from "@/lib/templates";
+import { ENCUESTA_CLIENTE, SEGUIMIENTO_20, CIERRE_30 } from "@/lib/templates";
 import { OwnerSelect } from "@/components/OwnerSelect";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { RequestsSection } from "@/components/RequestsSection";
@@ -302,10 +302,19 @@ export default async function TrainingDetailPage({
         <p className="mt-0.5 text-xs text-slate-400">
           Según el proceso Talentoría: entregas en máximo 48h después del curso, cierre administrativo y seguimiento a 20 y 30 días.
         </p>
-        {/* Los dos mensajes de seguimiento, listos para copiar o mandar por
+        {/* Los mensajes de seguimiento (encuesta al cliente y días 20 y 30), listos para copiar o mandar por
             WhatsApp; al marcarlos como enviados se palomea su punto del
             checklist y desaparece la tarea de "Mis tareas". */}
         <div className="mb-4 mt-3 flex flex-wrap items-center gap-2">
+          <FollowUpMessage
+            trainingId={training.id}
+            field="encuesta_final"
+            label="Encuesta al cliente"
+            title="Encuesta de satisfacción del cliente contratante"
+            text={ENCUESTA_CLIENTE}
+            whatsapp={training.clients.whatsapp}
+            status={training.encuesta_final}
+          />
           <FollowUpMessage
             trainingId={training.id}
             field="seguimiento_20"

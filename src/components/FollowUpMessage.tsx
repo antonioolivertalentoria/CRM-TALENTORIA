@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { updateTrainingField } from "@/lib/actions";
 
 /**
- * Botón de mensaje de seguimiento (días 20 y 30 del proceso), con el mismo
+ * Botón de mensaje de seguimiento (encuesta al cliente y días 20 y 30 del
+ * proceso), con el mismo
  * mecanismo que el mensaje de logística: muestra la plantilla, la copia al
  * portapapeles, abre WhatsApp con el texto listo y marca el punto del
  * checklist como enviado (con eso desaparece la tarea de "Mis tareas").
@@ -20,7 +21,7 @@ export function FollowUpMessage({
 }: {
   trainingId: string;
   /** Campo del checklist que se palomea al marcarlo como enviado. */
-  field: "seguimiento_20" | "seguimiento_30";
+  field: "seguimiento_20" | "seguimiento_30" | "encuesta_final";
   label: string;
   title: string;
   text: string;

@@ -54,3 +54,17 @@ export function pickTemplate(modalities: string[]): "Presencial" | "Online" {
   if (clean.some((m) => m === "Presencial" || m === "Híbrida")) return "Presencial";
   return "Online";
 }
+
+// Encuesta de satisfacción del cliente contratante (Jotform). Se manda al
+// cerrar las entregas para escuchar cómo vivió el proceso quien nos contrató.
+
+export const ENCUESTA_CLIENTE_URL = "https://www.jotform.com/250566091828867";
+
+export const ENCUESTA_CLIENTE = `Hola, [nombre]. ¡Qué gusto saludarte! 😊
+
+Fue un verdadero placer acompañar a tu equipo en esta capacitación, y ahora nos encantaría escucharte a ti: ¿cómo viviste el proceso desde el primer contacto hasta la entrega?
+
+Tu opinión es la que más nos ayuda a mejorar, así que preparamos una encuesta muy breve (te toma menos de 5 minutos) para conocer qué hicimos bien y en qué podemos seguir creciendo:
+${ENCUESTA_CLIENTE_URL}
+
+Puedes contestarla con toda confianza, tanto lo bueno como lo que podamos hacer mejor nos sirve muchísimo. ¡Gracias por ayudarnos a seguir dando un mejor servicio! 🙌`;
