@@ -69,13 +69,15 @@ ${ENCUESTA_CLIENTE_URL}
 
 Puedes contestarla con toda confianza, tanto lo bueno como lo que podamos hacer mejor nos sirve muchísimo. ¡Gracias por ayudarnos a seguir dando un mejor servicio! 🙌`;
 
-// Misma encuesta, en versión para team building.
+// Encuesta de satisfacción de team building (formulario distinto al de capacitación).
+
+export const ENCUESTA_CLIENTE_TB_URL = "https://form.jotform.com/251316771126857";
 
 export const ENCUESTA_CLIENTE_TB = `Hola, [nombre]. ¡Qué gusto saludarte! 😊
 
 Nos la pasamos increíble con tu equipo en el team building y esperamos que ustedes también se hayan llevado un gran recuerdo. Ahora nos encantaría escucharte a ti: ¿cómo viviste el proceso desde el primer contacto hasta el día del evento?
 
 Tu opinión es la que más nos ayuda a mejorar, así que preparamos una encuesta muy breve (te toma menos de 5 minutos) para conocer qué hicimos bien y en qué podemos seguir creciendo:
-${ENCUESTA_CLIENTE_URL}
+${ENCUESTA_CLIENTE_TB_URL}
 
 Puedes contestarla con toda confianza, tanto lo bueno como lo que podamos hacer mejor nos sirve muchísimo. ¡Gracias por ayudarnos a seguir dando un mejor servicio! 🙌`;
