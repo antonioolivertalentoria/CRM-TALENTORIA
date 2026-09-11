@@ -105,7 +105,8 @@ export function computeTasks(
     const clientName = t.clients?.company ?? "";
 
     // Team buildings: sin checklist/materiales/logística. Sus tareas son
-    // las peticiones pendientes (gafetes, tarjetas, lo que pida el cliente).
+    // las peticiones pendientes (gafetes, tarjetas, lo que pida el cliente)
+    // y la encuesta de satisfacción al cliente después del evento.
     if (t.kind === "Team building") {
       for (const r of t.training_requests ?? []) {
         if (r.done) continue;
@@ -120,6 +121,25 @@ export function computeTasks(
           requestedBy: r.requested_by,
           due: r.due_date,
           complete: { type: "training_request", requestId: r.id },
+        });
+      }
+
+      // Encuesta de satisfacción del cliente contratante: se manda en las
+      // 48h siguientes al evento (misma regla que en capacitaciones).
+      const tbDates = activeDates(t.sessions);
+      const tbLast = tbDates[tbDates.length - 1] ?? null;
+      if (tbLast && today > tbLast && t.encuesta_final === "Pendiente") {
+        tasks.push({
+          key: `${t.id}-encuesta_final`,
+          kind: "Seguimiento",
+          title: "Enviar encuesta de satisfacción al cliente contratante",
+          details: "Manda por WhatsApp el mensaje 'Encuesta al cliente' desde la ficha del team building.",
+          trainingId: t.id,
+          trainingName: t.short_name,
+          clientName,
+          assignee: t.internal_owner,
+          due: addBusinessDays(tbLast, 2),
+          complete: { type: "training_field", field: "encuesta_final", value: "Listo" },
         });
       }
       continue;

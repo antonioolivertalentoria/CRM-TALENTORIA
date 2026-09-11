@@ -16,7 +16,7 @@ import { MaterialsSection } from "@/components/MaterialsSection";
 import { DeleteTrainingButton } from "@/components/DeleteTrainingButton";
 import { LogisticsMessage } from "@/components/LogisticsMessage";
 import { FollowUpMessage } from "@/components/FollowUpMessage";
-import { ENCUESTA_CLIENTE, SEGUIMIENTO_20, CIERRE_30 } from "@/lib/templates";
+import { ENCUESTA_CLIENTE, ENCUESTA_CLIENTE_TB, SEGUIMIENTO_20, CIERRE_30 } from "@/lib/templates";
 import { OwnerSelect } from "@/components/OwnerSelect";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { RequestsSection } from "@/components/RequestsSection";
@@ -292,6 +292,29 @@ export default async function TrainingDetailPage({
       />
 
       {isTeamBuilding && <TrainingAttachments trainingId={training.id} attachments={tbFiles} />}
+
+      {/* Seguimiento del team building: encuesta al cliente contratante */}
+      {isTeamBuilding && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">
+            Seguimiento
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-400">
+            Después del evento, manda la encuesta de satisfacción al cliente que contrató (en las 48h siguientes).
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <FollowUpMessage
+              trainingId={training.id}
+              field="encuesta_final"
+              label="Encuesta al cliente"
+              title="Encuesta de satisfacción del cliente contratante"
+              text={ENCUESTA_CLIENTE_TB}
+              whatsapp={training.clients.whatsapp}
+              status={training.encuesta_final}
+            />
+          </div>
+        </section>
+      )}
 
       {/* Checklist post-capacitación */}
       {!isTeamBuilding && (
