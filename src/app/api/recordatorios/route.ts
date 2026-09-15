@@ -7,12 +7,19 @@ import { todayISO, formatDate } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
 import { canSeeRecruitment } from "@/lib/recruitment-access";
+import { COMMERCIAL_OWNER } from "@/lib/constants";
 import type { ReminderPrefs } from "@/lib/types";
 
 /**
  * Recordatorios diarios por correo (Vercel Cron, 8:00 am hora de Chihuahua).
  * Envía a cada persona un solo correo con sus tareas vencidas y para hoy,
  * respetando sus preferencias (activado/desactivado y tipos de tarea).
+ *
+ * Excepción: el/la comercial (COMMERCIAL_OWNER) solo recibe las tareas de
+ * cierre y postventa que son suyas (15-sep-2026). Antes le caían todos los
+ * hitos del proceso —los propios y, peor, todos los pendientes sin dueño de
+ * los cuatro módulos— y pidió enterarse únicamente de cuándo se cerró el
+ * proyecto. Ver también withoutCommercial en src/lib/calendar.ts.
  *
  * Requiere en Vercel: SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, CRON_SECRET.
  * Sin RESEND_API_KEY responde sin enviar nada (modo apagado).
@@ -39,6 +46,15 @@ function taskLine(
     <strong style="color:${overdue ? "#dc2626" : "#16345f"};">${t.title}</strong><br/>
     <span style="color:#64748b;font-size:13px;">${t.trainingName}${t.clientName ? " · " + t.clientName : ""} — vence ${t.due ? formatDate(t.due) : "sin fecha"}${overdue ? " ⚠️ VENCIDA" : ""}</span>${progressLine}
   </li>`;
+}
+
+/**
+ * Las dos únicas tareas que el comercial recibe por correo: el cierre del
+ * proyecto y el fin de la postventa (claves `<id>-cierre_comercial` y
+ * `<id>-postventa_comercial`, tanto de capacitaciones como de consultoría).
+ */
+function isCommercialCloseTask(key: string): boolean {
+  return key.endsWith("-cierre_comercial") || key.endsWith("-postventa_comercial");
 }
 
 export async function GET(request: Request) {
@@ -190,11 +206,16 @@ export async function GET(request: Request) {
       continue;
     }
     const kinds = prefs.kinds ?? [];
+    // El comercial solo se entera del cierre: ni hitos a media obra ni
+    // pendientes sin dueño de otros módulos.
+    const commercialOnlyClose = p.full_name === COMMERCIAL_OWNER;
     // Solo tareas vencidas o que vencen hoy, del tipo elegido,
     // asignadas a la persona o sin asignar
     const mine = tasks.filter(
       (t) =>
-        (t.assignee === p.full_name || !t.assignee) &&
+        (commercialOnlyClose
+          ? t.assignee === p.full_name && isCommercialCloseTask(t.key)
+          : t.assignee === p.full_name || !t.assignee) &&
         kinds.includes(t.kind) &&
         // Consultoría en estreno: sus tareas solo a quien ve el módulo
         (t.kind !== "Consultoría" || canSeeConsulting(p.email)) &&

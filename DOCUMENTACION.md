@@ -13,8 +13,9 @@ CRM interno (estilo Monday) para gestionar el proceso completo de capacitaciones
 post-capacitación, tareas automáticas derivadas del proceso, tareas propias capturadas a mano,
 recordatorios diarios por correo y un reporte semanal en PDF para dirección.
 
-Usuarios actuales: el equipo Talentoría (Arianna, Oliver, Eduardo). No es multi-tenant:
-todos los usuarios autenticados ven y editan todo.
+Usuarios actuales: el equipo Talentoría (Arianna, Oliver, Eduardo, Carolina, Perla y
+Jacqueline —reclutamiento, alta 15-sep-2026). No es multi-tenant: todos los usuarios
+autenticados ven y editan todo.
 
 ## 2. Stack
 
@@ -177,6 +178,29 @@ Completar una tarea actualiza el campo correspondiente (y viceversa). Reglas de 
   y se cierran con los puntos `cierre_comercial` y `postventa_comercial` del
   checklist.
 
+### Comercial: correo solo del cierre (15-sep-2026)
+
+Comercial recibía correo de todo el proceso: la invitación de calendario de cada
+reunión y sesión, y en el recordatorio diario todos los hitos —los suyos y, peor,
+todos los pendientes **sin dueño** de los cuatro módulos, porque esos se le mandan
+a todo el mundo. Lo que necesita saber es una sola cosa: cuándo terminó el proyecto.
+Desde el 15-sep-2026:
+
+- **Invitaciones de calendario:** el comercial de la ficha nunca va como invitado
+  (`withoutCommercial` en `src/lib/calendar.ts`). Filtra por correo resuelto, así que
+  da igual si entraba como comercial, como responsable o por ser quien creó la sesión.
+  Única excepción: `ALWAYS_INVITED` (Antonio y Arianna) siempre va.
+- **Recordatorio diario:** el correo de `COMMERCIAL_OWNER` solo trae sus tareas de
+  `cierre_comercial` y `postventa_comercial` (`src/app/api/recordatorios/route.ts`).
+  Todo lo demás sigue visible en "Mis tareas", nada más que ya no va por correo —
+  incluidas sus tareas de arranque de reclutamiento (factura de anticipo y envío de
+  la requisición).
+- **Aviso de terminado:** al pasar una capacitación o team building a **Finalizada**
+  sale un correo al comercial de esa ficha con el cliente, la última sesión, quién la
+  cerró y qué sigue pendiente del checklist de entregas
+  (`notifyCommercialTrainingFinished` en `src/lib/actions.ts`). Solo se manda cuando
+  el estado *cambia* a Finalizada, no cada vez que se vuelve a tocar.
+
 Las tareas de `custom_tasks` (tipo "Personal") se mezclan en la misma lista, en los
 recordatorios por correo y en el reporte semanal.
 
@@ -225,7 +249,8 @@ invitado con todos los datos. Mover fecha/horario/facilitador manda la
 actualización (mismo UID, SEQUENCE creciente) y cancelar o borrar la sesión
 (o el proyecto) manda la cancelación (METHOD:CANCEL). Invitados: el equipo
 base (ALWAYS_INVITED en calendar.ts: Antonio y Arianna), quien creó el
-proyecto, el responsable interno y el/la facilitador(a) de la sesión —
+proyecto, el responsable interno y el/la facilitador(a) de la sesión,
+**menos el comercial de la ficha** (15-sep-2026, ver arriba) —
 correos resueltos vía profiles, facilitators.email y el mapa EXTRA_EMAILS
 (Carolina, Adrián Hernández). Todo es best-effort: sin RESEND_API_KEY o ante
 cualquier error, la acción original no se afecta.
@@ -243,8 +268,8 @@ quiere saber quién confirma, primero hay que darle MX y buzón real al dominio.
 
 Las reuniones de arranque y entrega de consultoría y las **sesiones libres del
 proyecto** (`consulting_sessions`, migración 017) usan el mismo mecanismo:
-capturar o mover fecha y hora manda la invitación al líder, comercial,
-operaciones, equipo consultor y quien lleva la sesión; borrarla o ponerla en
+capturar o mover fecha y hora manda la invitación al líder, operaciones,
+equipo consultor y quien lleva la sesión (el comercial ya no); borrarla o ponerla en
 "Cancelada" manda la cancelación.
 
 **El correo ya no se manda solo (02-sep-2026).** Antes, mover fecha/horario/facilitador

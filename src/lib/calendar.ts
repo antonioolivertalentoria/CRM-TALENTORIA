@@ -1,3 +1,4 @@
+import { COMMERCIAL_OWNER } from "./constants";
 import type { Session, Training } from "./types";
 
 /**
@@ -17,6 +18,11 @@ import type { Session, Training } from "./types";
  *  - el/la facilitador(a) de la sesión,
  * resolviendo correos por perfiles del CRM, catálogo de facilitadores
  * (campo email, migración 012) y el mapa fijo EXTRA_EMAILS.
+ *
+ * Quien NO va nunca es el/la comercial de la ficha (15-sep-2026): pidió
+ * dejar de recibir el .ics de cada reunión y sesión del proceso. Lo único
+ * que le llega por correo es el aviso de proyecto terminado, que vive en
+ * `notifyCommercialTrainingFinished` (src/lib/actions.ts).
  */
 
 // Estos dos siempre reciben el evento en su calendario.
@@ -92,6 +98,34 @@ function resolveEmails(
     }
   }
   return out;
+}
+
+/**
+ * Quita al comercial de la lista de invitados (15-sep-2026).
+ *
+ * Quien vendió el proyecto no necesita el .ics de cada reunión ni de cada
+ * sesión: pidió que lo único que le llegue por correo sea el cierre. Se
+ * filtra por correo resuelto (no por nombre escrito) para que dé igual si
+ * entró como comercial de la ficha, como responsable o porque fue quien
+ * apretó el botón. La única excepción es el equipo base: ALWAYS_INVITED
+ * significa siempre.
+ */
+function withoutCommercial(
+  attendees: Person[],
+  comercialName: string,
+  profiles: { full_name: string; email: string }[],
+  facilitators: { name: string; email?: string }[]
+): Person[] {
+  const name = (comercialName ?? "").trim() || COMMERCIAL_OWNER;
+  const muted = new Set(
+    resolveEmails([name], profiles, facilitators).map((p) => p.email.toLowerCase())
+  );
+  if (muted.size === 0) return attendees;
+  const base = new Set(ALWAYS_INVITED.map((p) => p.email.toLowerCase()));
+  return attendees.filter((a) => {
+    const email = a.email.toLowerCase();
+    return base.has(email) || !muted.has(email);
+  });
 }
 
 function dedupe(people: Person[]): Person[] {
@@ -255,14 +289,19 @@ export async function syncSessionEvent(
       ? [{ name: "", email: userRes.data.user.email }]
       : [];
 
-    const attendees = dedupe([
-      ...ALWAYS_INVITED,
-      ...creator.map((c) => ({
-        name: profiles.find((p) => p.email === c.email)?.full_name ?? c.email,
-        email: c.email,
-      })),
-      ...resolveEmails([t.internal_owner, s.facilitator], profiles, facilitators),
-    ]);
+    const attendees = withoutCommercial(
+      dedupe([
+        ...ALWAYS_INVITED,
+        ...creator.map((c) => ({
+          name: profiles.find((p) => p.email === c.email)?.full_name ?? c.email,
+          email: c.email,
+        })),
+        ...resolveEmails([t.internal_owner, s.facilitator], profiles, facilitators),
+      ]),
+      t.comercial,
+      profiles,
+      facilitators
+    );
     if (attendees.length === 0) {
       return { sent: false, reason: "No hay a quién avisarle: nadie con correo conocido." };
     }
@@ -456,11 +495,17 @@ export async function syncConsultingMeeting(
       : [];
 
     const teamNames = p.team.split(",").map((t: string) => t.trim()).filter(Boolean);
-    const attendees = dedupe([
-      ...ALWAYS_INVITED,
-      ...creator,
-      ...resolveEmails([p.leader, p.comercial, p.internal_owner, ...teamNames], profiles, facilitators),
-    ]);
+    // El comercial ya no entra: ver withoutCommercial.
+    const attendees = withoutCommercial(
+      dedupe([
+        ...ALWAYS_INVITED,
+        ...creator,
+        ...resolveEmails([p.leader, p.internal_owner, ...teamNames], profiles, facilitators),
+      ]),
+      p.comercial,
+      profiles,
+      facilitators
+    );
     if (attendees.length === 0) return;
 
     const startTime = start.slice(0, 5);
@@ -596,15 +641,21 @@ export async function syncConsultingSessionEvent(
       : [];
 
     const teamNames = p.team.split(",").map((t: string) => t.trim()).filter(Boolean);
-    const attendees = dedupe([
-      ...ALWAYS_INVITED,
-      ...creator,
-      ...resolveEmails(
-        [p.leader, p.comercial, p.internal_owner, s.facilitator, ...teamNames],
-        profiles,
-        facilitators
-      ),
-    ]);
+    // El comercial ya no entra: ver withoutCommercial.
+    const attendees = withoutCommercial(
+      dedupe([
+        ...ALWAYS_INVITED,
+        ...creator,
+        ...resolveEmails(
+          [p.leader, p.internal_owner, s.facilitator, ...teamNames],
+          profiles,
+          facilitators
+        ),
+      ]),
+      p.comercial,
+      profiles,
+      facilitators
+    );
     if (attendees.length === 0) return;
 
     const startTime = s.start_time.slice(0, 5);

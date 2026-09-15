@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
-import { addDays, todayISO } from "@/lib/format";
+import { addDays, formatDate, todayISO } from "@/lib/format";
+import { CHECKLIST_FIELDS, COMMERCIAL_OWNER } from "@/lib/constants";
 import { syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
 import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
@@ -392,6 +393,112 @@ const TRAINING_FIELDS = new Set([
   "questions",
 ]);
 
+/** Entregas al cliente y factura: lo que el comercial necesita ver al cierre. */
+const CLOSING_CHECK_KEYS = [
+  "envio_manual",
+  "envio_constancias",
+  "envio_insignias",
+  "envio_dc3",
+  "encuesta_participantes",
+  "informe_encuesta",
+  "envio_leads",
+  "encuesta_final",
+  "factura",
+];
+
+/**
+ * Aviso a Comercial de que la capacitación ya terminó (15-sep-2026).
+ *
+ * Es el ÚNICO correo del proceso que recibe el/la comercial: se le quitó
+ * de las invitaciones de calendario (withoutCommercial en
+ * src/lib/calendar.ts) y su recordatorio diario ya solo trae cierre y
+ * postventa. Lo que pidió saber es cuándo se terminó, así que el correo
+ * sale al marcar la ficha como "Finalizada" y trae lo que sigue
+ * pendiente del checklist, para que pueda cerrar con el cliente.
+ *
+ * Es cortesía: sin RESEND_API_KEY o sin correo del comercial, no se manda
+ * y el cambio de estado se guarda igual.
+ */
+async function notifyCommercialTrainingFinished(
+  supabase: Awaited<ReturnType<typeof createSupabase>>,
+  trainingId: string,
+  finishedBy: string
+) {
+  try {
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) return;
+
+    const { data } = await supabase
+      .from("trainings")
+      .select("*, clients(company), sessions(session_date, status)")
+      .eq("id", trainingId)
+      .maybeSingle();
+    if (!data) return;
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const t = data as any;
+
+    const comercial = String(t.comercial || COMMERCIAL_OWNER).trim();
+    if (!comercial) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email, full_name")
+      .ilike("full_name", `%${comercial}%`)
+      .maybeSingle();
+    if (!profile?.email) return;
+
+    const isTB = t.kind === "Team building";
+    const clientName = t.clients?.company ?? "";
+    const dates = (t.sessions ?? [])
+      .filter((x: { session_date: string | null; status: string }) => x.session_date && x.status !== "Cancelada")
+      .map((x: { session_date: string }) => x.session_date)
+      .sort();
+    const lastDate = dates.length > 0 ? dates[dates.length - 1] : null;
+
+    // Team buildings no llevan checklist: ahí el aviso va sin pendientes.
+    const pending = isTB
+      ? []
+      : CHECKLIST_FIELDS.filter(
+          (f) => CLOSING_CHECK_KEYS.includes(f.key) && t[f.key] === "Pendiente"
+        ).map((f) => f.label);
+
+    const from = process.env.REMINDER_FROM ?? "CRM Talentoría <crm@talentoriacursos.com>";
+    const label = isTB ? "team building" : "capacitación";
+    const subject = `✅ Terminó ${t.short_name}${clientName ? ` · ${clientName}` : ""}`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#16345f">
+        <div style="height:6px;background:linear-gradient(90deg,#00aeef,#e6007e);border-radius:3px"></div>
+        <h2 style="margin:16px 0 4px">✅ Se terminó ${isTB ? "el" : "la"} ${label}</h2>
+        <p style="font-size:15px;margin:8px 0"><strong>${t.short_name}</strong>${clientName ? ` — ${clientName}` : ""}</p>
+        <p style="color:#64748b;font-size:13px;margin:4px 0">
+          ${lastDate ? `Última sesión: ${formatDate(lastDate)}.` : "Sin sesiones fechadas."}
+          ${finishedBy ? ` La cerró: ${finishedBy}.` : ""}
+        </p>
+        ${
+          pending.length > 0
+            ? `<p style="color:#b45309;font-size:13px;margin:12px 0 4px"><strong>Todavía falta:</strong></p>
+               <ul style="color:#475569;font-size:13px;padding-left:18px;margin:0">${pending
+                 .map((x) => `<li>${x}</li>`)
+                 .join("")}</ul>`
+            : `<p style="color:#047857;font-size:13px;margin:12px 0 4px">Las entregas al cliente y la factura ya están marcadas.</p>`
+        }
+        <a href="https://crm-talentoria.vercel.app/capacitaciones/${t.id}" style="display:inline-block;background:linear-gradient(90deg,#00aeef,#e6007e);color:#fff;font-weight:bold;padding:10px 22px;border-radius:8px;text-decoration:none;margin-top:16px">Abrir la ficha</a>
+        <p style="color:#94a3b8;font-size:12px;margin-top:20px">
+          Recibes este aviso porque eres quien vendió el proyecto. Es el único
+          correo del proceso que te manda el CRM. — CRM Talentoría
+        </p>
+      </div>`;
+
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [profile.email], subject, html }),
+    });
+  } catch {
+    // El aviso es cortesía: si falla, el estado queda guardado igual.
+  }
+}
+
 export async function updateTrainingField(
   id: string,
   field: string,
@@ -407,6 +514,19 @@ export async function updateTrainingField(
   if (field === "materials_deadline" && !value) parsed = null;
 
   const supabase = await createSupabase();
+
+  // Para avisarle a Comercial solo cuando el proyecto PASA a terminado
+  // (y no cada vez que alguien vuelve a tocar el mismo estado).
+  let wasFinished = false;
+  if (field === "status") {
+    const { data: before } = await supabase
+      .from("trainings")
+      .select("status")
+      .eq("id", id)
+      .maybeSingle();
+    wasFinished = before?.status === "Finalizada";
+  }
+
   const { error } = await supabase
     .from("trainings")
     .update({ [field]: parsed })
@@ -428,6 +548,17 @@ export async function updateTrainingField(
         ? `cambió el estado de "${name}" a ${value}`
         : `marcó "${field.replaceAll("_", " ")}" como ${value} en "${name}"`;
     await logActivity(supabase, field === "status" ? "cambió" : "completó", "capacitación", id, summary);
+
+    // Comercial se entera del cierre y de nada más: el correo sale después
+    // de responder, que mandarlo por Resend tarda.
+    if (field === "status" && value === "Finalizada" && !wasFinished) {
+      const finishedBy = await currentUserName(supabase);
+      try {
+        after(() => notifyCommercialTrainingFinished(supabase, id, finishedBy));
+      } catch {
+        await notifyCommercialTrainingFinished(supabase, id, finishedBy);
+      }
+    }
   }
 
   revalidatePath(`/capacitaciones/${id}`);
