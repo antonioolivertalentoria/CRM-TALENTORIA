@@ -267,10 +267,8 @@ quiere saber quién confirma, primero hay que darle MX y buzón real al dominio.
 
 
 Las reuniones de arranque y entrega de consultoría y las **sesiones libres del
-proyecto** (`consulting_sessions`, migración 017) usan el mismo mecanismo:
-capturar o mover fecha y hora manda la invitación al líder, operaciones,
-equipo consultor y quien lleva la sesión (el comercial ya no); borrarla o ponerla en
-"Cancelada" manda la cancelación.
+proyecto** (`consulting_sessions`, migración 017) usan el mismo .ics, con invitados
+líder, operaciones, equipo consultor y quien lleva la sesión (el comercial ya no).
 
 **El correo ya no se manda solo (02-sep-2026).** Antes, mover fecha/horario/facilitador
 mandaba la invitación en automático y en silencio: si Resend fallaba (p. ej. 429 por su
@@ -282,6 +280,21 @@ resultado (a quién se mandó, o por qué no se pudo). Cada sesión con fecha y 
 además un botón ✉️ para mandar o reenviar el aviso cuando se quiera, y borrar una sesión
 pregunta aparte si se avisa la cancelación. Al crear una capacitación, las invitaciones
 salen solo si se marca la casilla del formulario.
+
+**Consultoría tampoco manda nada sola (28-sep-2026).** Seguía mandando una invitación por
+cada sesión agregada y por cada dato editado (título, liga, modalidad…); el 24-sep, al dar
+de alta tres proyectos de NOM-035 con sus sesiones, al equipo le llegaron decenas de correos.
+Ahora: agregar o mover una sesión por venir (fecha, horario o quién la lleva) o cancelarla
+regresa `{askInvite}` vía `inviteQuestion()` y la sección pregunta igual que capacitaciones;
+cada renglón tiene su ✉️ (`sendConsultingSessionInviteAction`); las reuniones de arranque y
+entrega se mandan solo con su botón "Mandar invitación al equipo"
+(`sendConsultingMeetingInviteAction`); borrar una sesión, un proyecto de consultoría o una
+capacitación pregunta si se avisa la cancelación. `syncConsultingMeeting` y
+`syncConsultingSessionEvent` ahora devuelven `InviteResult` como `syncSessionEvent`, y las
+tres usan `postToResend` (reintento ante 429). **Ninguna fecha pasada manda correo** (`isPast`,
+con el "hoy" de México porque Vercel corre en UTC): capturar historial a destiempo ya no
+llena buzones. La lista de qué correos manda el CRM vive en el panel 🔔 Recordatorios
+(`ReminderSettings`), para que el equipo la consulte.
 
 ## 6. Endpoints y procesos automáticos
 

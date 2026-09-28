@@ -116,6 +116,16 @@ function resolveSelect(store: DemoStore, table: string, row: Row, sel: string): 
         : { ...t }
       : null;
   }
+  // Consultoría: el proyecto trae su cliente y la sesión trae su proyecto
+  if (table === "consulting_projects" && sel.includes("clients(")) {
+    out.clients = store.clients.find((c) => c.id === row.client_id) ?? null;
+  }
+  if (table === "consulting_sessions" && sel.includes("consulting_projects(")) {
+    const p = ((store as any).consulting_projects ?? []).find((p: Row) => p.id === row.project_id);
+    out.consulting_projects = p
+      ? { ...p, clients: store.clients.find((c) => c.id === p.client_id) ?? null }
+      : null;
+  }
   return out;
 }
 

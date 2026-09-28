@@ -23,6 +23,13 @@ import type { Session, Training } from "./types";
  * dejar de recibir el .ics de cada reunión y sesión del proceso. Lo único
  * que le llega por correo es el aviso de proyecto terminado, que vive en
  * `notifyCommercialTrainingFinished` (src/lib/actions.ts).
+ *
+ * NINGUNA invitación sale sola (28-sep-2026). Capacitaciones ya preguntaba
+ * desde el 02-sep; Consultoría seguía mandando una por cada sesión agregada
+ * y por cada dato editado, y al dar de alta tres proyectos de golpe el
+ * equipo recibió decenas de correos. Ahora todo sale solo cuando alguien lo
+ * pide (✉️, "Sí, mandar aviso" o la casilla al crear), y nunca para fechas
+ * que ya pasaron.
  */
 
 // Estos dos siempre reciben el evento en su calendario.
@@ -45,6 +52,46 @@ const EXTRA_EMAILS: Record<string, string> = {
 // contestó recibiría un "Delivery Status Notification".
 const ORGANIZER_EMAIL = "crm@talentoriacursos.com";
 const TZID = "America/Mexico_City"; // UTC-6 fijo (sin horario de verano)
+
+/** Hoy en México (YYYY-MM-DD); el servidor de Vercel vive en UTC. */
+function todayMx(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TZID }).format(new Date());
+}
+
+/**
+ * Nada de calendario para fechas que ya pasaron: al capturar un proyecto a
+ * destiempo (sesiones de agosto dadas de alta en septiembre) cada una
+ * mandaba su invitación sin que sirviera de nada.
+ */
+const PAST_REASON = "La fecha ya pasó: no hace falta mandarla al calendario.";
+export function isPast(date: string): boolean {
+  return date < todayMx();
+}
+
+/** Manda el correo por Resend; reintenta una vez si topa con el límite (~2 por segundo). */
+async function postToResend(
+  resendKey: string,
+  payload: Record<string, unknown>
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const body = JSON.stringify(payload);
+  const post = () =>
+    fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body,
+    });
+
+  let res = await post();
+  if (res.status === 429) {
+    await new Promise((r) => setTimeout(r, 1200));
+    res = await post();
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    return { ok: false, reason: `Resend respondió ${res.status}: ${detail.slice(0, 300)}` };
+  }
+  return { ok: true };
+}
 
 /** Cliente mínimo de Supabase; sirve el de server actions o el de service key. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -272,6 +319,7 @@ export async function syncSessionEvent(
         reason: "La sesión necesita fecha y hora de inicio para poder mandar la invitación.",
       };
     }
+    if (isPast(s.session_date)) return { sent: false, reason: PAST_REASON };
 
     const t = s.trainings;
     const clientName = t.clients?.company ?? "";
@@ -360,12 +408,12 @@ export async function syncSessionEvent(
           ${
             mode === "cancel"
               ? "El evento adjunto quita la sesión de tu Google Calendar."
-              : "Abre la invitación adjunta (o el aviso de Gmail) para que quede en tu Google Calendar con todos los datos. Si la fecha cambia, te llegará la actualización sola."
+              : "Abre la invitación adjunta (o el aviso de Gmail) para que quede en tu Google Calendar con todos los datos. Si la fecha cambia, te mandaremos la actualización."
           }
         </p>
       </div>`;
 
-    const body = JSON.stringify({
+    const res = await postToResend(resendKey, {
       from,
       to: attendees.map((a) => a.email),
       subject,
@@ -378,25 +426,7 @@ export async function syncSessionEvent(
         },
       ],
     });
-    const post = () =>
-      fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-        body,
-      });
-
-    let res = await post();
-    // Resend acepta ~2 correos por segundo: si se movieron varias sesiones
-    // seguidas, el primer intento puede rebotar. Se reintenta una vez.
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 1200));
-      res = await post();
-    }
-
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return { sent: false, reason: `Resend respondió ${res.status}: ${detail.slice(0, 300)}` };
-    }
+    if (!res.ok) return { sent: false, reason: res.reason };
 
     return { sent: true, to: attendees.map((a) => a.email), mode };
   } catch (e) {
@@ -422,7 +452,7 @@ export async function syncTrainingEvents(
       .eq("training_id", trainingId);
     const sessions = (data ?? []) as Pick<Session, "id" | "session_date" | "start_time" | "status">[];
     for (const s of sessions) {
-      if (!s.session_date || !s.start_time || s.status === "Cancelada") continue;
+      if (!s.session_date || !s.start_time || s.status === "Cancelada" || isPast(s.session_date)) continue;
       await syncSessionEvent(supabase, s.id, mode);
     }
   } catch {
@@ -453,16 +483,19 @@ type ConsultingRow = {
  * Invitación de calendario para la reunión de arranque (paso 9) o la de
  * entrega (paso 26) de un proyecto de consultoría. Mismo mecanismo que
  * las sesiones: .ics por Resend, actualizable y cancelable por UID.
+ * Solo se llama cuando alguien la pide; dice si se mandó y, si no, por qué.
  */
 export async function syncConsultingMeeting(
   supabase: SupabaseLike,
   projectId: string,
   which: "kickoff" | "delivery",
   mode: "request" | "cancel"
-): Promise<void> {
+): Promise<InviteResult> {
   try {
     const resendKey = process.env.RESEND_API_KEY;
-    if (!resendKey) return;
+    if (!resendKey) {
+      return { sent: false, reason: "No hay RESEND_API_KEY configurada: el CRM no puede mandar correos." };
+    }
 
     const { data } = await supabase
       .from("consulting_projects")
@@ -470,12 +503,15 @@ export async function syncConsultingMeeting(
       .eq("id", projectId)
       .maybeSingle();
     const p = data as ConsultingRow | null;
-    if (!p) return;
+    if (!p) return { sent: false, reason: "No se encontró el proyecto." };
 
     const date = which === "kickoff" ? p.kickoff_date : p.delivery_date;
     const start = which === "kickoff" ? p.kickoff_start : p.delivery_start;
     const end = which === "kickoff" ? p.kickoff_end : p.delivery_end;
-    if (!date || !start) return;
+    if (!date || !start) {
+      return { sent: false, reason: "La reunión necesita fecha y hora de inicio para poder mandar la invitación." };
+    }
+    if (isPast(date)) return { sent: false, reason: PAST_REASON };
 
     const clientName = p.clients?.company ?? "";
 
@@ -506,7 +542,9 @@ export async function syncConsultingMeeting(
       profiles,
       facilitators
     );
-    if (attendees.length === 0) return;
+    if (attendees.length === 0) {
+      return { sent: false, reason: "No hay a quién avisarle: nadie con correo conocido." };
+    }
 
     const startTime = start.slice(0, 5);
     const endTime = end ? end.slice(0, 5) : plusTwoHours(startTime);
@@ -551,29 +589,28 @@ export async function syncConsultingMeeting(
         <p style="color:#334155;"><strong>${summary}</strong></p>
         <p style="color:#334155;">📅 ${dateNice} · ${startTime}–${endTime} (hora de México)</p>
         <p style="color:#94a3b8;font-size:12px;margin-top:16px;">
-          ${mode === "cancel" ? "El evento adjunto quita la reunión de tu Google Calendar." : "Abre la invitación adjunta para que quede en tu Google Calendar. Si la fecha cambia, te llegará la actualización sola."}
+          ${mode === "cancel" ? "El evento adjunto quita la reunión de tu Google Calendar." : "Abre la invitación adjunta para que quede en tu Google Calendar. Si la fecha cambia, te mandaremos la actualización."}
         </p>
       </div>`;
 
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from,
-        to: attendees.map((a) => a.email),
-        subject,
-        html,
-        attachments: [
-          {
-            filename: mode === "cancel" ? "cancelacion.ics" : "invitacion.ics",
-            content: Buffer.from(ics).toString("base64"),
-            content_type: `text/calendar; method=${mode === "cancel" ? "CANCEL" : "REQUEST"}; charset=UTF-8`,
-          },
-        ],
-      }),
+    const res = await postToResend(resendKey, {
+      from,
+      to: attendees.map((a) => a.email),
+      subject,
+      html,
+      attachments: [
+        {
+          filename: mode === "cancel" ? "cancelacion.ics" : "invitacion.ics",
+          content: Buffer.from(ics).toString("base64"),
+          content_type: `text/calendar; method=${mode === "cancel" ? "CANCEL" : "REQUEST"}; charset=UTF-8`,
+        },
+      ],
     });
-  } catch {
-    // cortesía: nunca rompe la acción original
+    if (!res.ok) return { sent: false, reason: res.reason };
+    return { sent: true, to: attendees.map((a) => a.email), mode };
+  } catch (e) {
+    // cortesía: nunca rompe la acción original, pero dice qué pasó
+    return { sent: false, reason: e instanceof Error ? e.message : "Error inesperado al mandar el aviso." };
   }
 }
 
@@ -600,16 +637,18 @@ type ConsultingSessionRow = {
  * Manda (o cancela) la invitación de UNA sesión de consultoría, las que el
  * equipo agrega libremente además de arranque y entrega. Mismo mecanismo
  * que las reuniones fijas: .ics por Resend, actualizable por UID.
- * Es cortesía: nunca lanza ni rompe la acción original.
+ * Es cortesía: nunca lanza ni rompe la acción original, y dice qué pasó.
  */
 export async function syncConsultingSessionEvent(
   supabase: SupabaseLike,
   sessionId: string,
   mode: "request" | "cancel"
-): Promise<void> {
+): Promise<InviteResult> {
   try {
     const resendKey = process.env.RESEND_API_KEY;
-    if (!resendKey) return;
+    if (!resendKey) {
+      return { sent: false, reason: "No hay RESEND_API_KEY configurada: el CRM no puede mandar correos." };
+    }
 
     const { data } = await supabase
       .from("consulting_sessions")
@@ -619,8 +658,11 @@ export async function syncConsultingSessionEvent(
       .eq("id", sessionId)
       .maybeSingle();
     const s = data as ConsultingSessionRow | null;
-    if (!s || !s.consulting_projects) return;
-    if (!s.session_date || !s.start_time) return;
+    if (!s || !s.consulting_projects) return { sent: false, reason: "No se encontró la sesión." };
+    if (!s.session_date || !s.start_time) {
+      return { sent: false, reason: "La sesión necesita fecha y hora de inicio para poder mandar la invitación." };
+    }
+    if (isPast(s.session_date)) return { sent: false, reason: PAST_REASON };
 
     const p = s.consulting_projects;
     const clientName = p.clients?.company ?? "";
@@ -656,7 +698,9 @@ export async function syncConsultingSessionEvent(
       profiles,
       facilitators
     );
-    if (attendees.length === 0) return;
+    if (attendees.length === 0) {
+      return { sent: false, reason: "No hay a quién avisarle: nadie con correo conocido." };
+    }
 
     const startTime = s.start_time.slice(0, 5);
     const endTime = s.end_time ? s.end_time.slice(0, 5) : plusTwoHours(startTime);
@@ -706,28 +750,27 @@ export async function syncConsultingSessionEvent(
         <p style="color:#334155;">📅 ${dateNice} · ${startTime}–${endTime} (hora de México)</p>
         ${location ? `<p style="color:#64748b;">📍 ${location}</p>` : ""}
         <p style="color:#94a3b8;font-size:12px;margin-top:16px;">
-          ${mode === "cancel" ? "El evento adjunto quita la sesión de tu Google Calendar." : "Abre la invitación adjunta para que quede en tu Google Calendar. Si la fecha cambia, te llegará la actualización sola."}
+          ${mode === "cancel" ? "El evento adjunto quita la sesión de tu Google Calendar." : "Abre la invitación adjunta para que quede en tu Google Calendar. Si la fecha cambia, te mandaremos la actualización."}
         </p>
       </div>`;
 
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from,
-        to: attendees.map((a) => a.email),
-        subject,
-        html,
-        attachments: [
-          {
-            filename: mode === "cancel" ? "cancelacion.ics" : "invitacion.ics",
-            content: Buffer.from(ics).toString("base64"),
-            content_type: `text/calendar; method=${mode === "cancel" ? "CANCEL" : "REQUEST"}; charset=UTF-8`,
-          },
-        ],
-      }),
+    const res = await postToResend(resendKey, {
+      from,
+      to: attendees.map((a) => a.email),
+      subject,
+      html,
+      attachments: [
+        {
+          filename: mode === "cancel" ? "cancelacion.ics" : "invitacion.ics",
+          content: Buffer.from(ics).toString("base64"),
+          content_type: `text/calendar; method=${mode === "cancel" ? "CANCEL" : "REQUEST"}; charset=UTF-8`,
+        },
+      ],
     });
-  } catch {
-    // cortesía: nunca rompe la acción original
+    if (!res.ok) return { sent: false, reason: res.reason };
+    return { sent: true, to: attendees.map((a) => a.email), mode };
+  } catch (e) {
+    // cortesía: nunca rompe la acción original, pero dice qué pasó
+    return { sent: false, reason: e instanceof Error ? e.message : "Error inesperado al mandar el aviso." };
   }
 }

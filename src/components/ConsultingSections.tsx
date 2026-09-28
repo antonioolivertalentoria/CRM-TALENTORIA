@@ -14,6 +14,8 @@ import {
   addConsultingSessionAction,
   updateConsultingSessionField,
   deleteConsultingSessionAction,
+  sendConsultingSessionInviteAction,
+  sendConsultingMeetingInviteAction,
   deleteConsultingProjectAction,
 } from "@/lib/actions";
 import {
@@ -26,6 +28,14 @@ import { formatDate } from "@/lib/format";
 import { EditableField } from "./EditableField";
 import { StatusSelect } from "./StatusSelect";
 import { ConsultingItemFiles } from "./ConsultingAttachments";
+import {
+  InviteAskBar,
+  InviteResultBar,
+  envelopeIcon,
+  inviteNotice,
+  isPastLocal,
+  type InviteNotice,
+} from "./InviteBars";
 import type {
   ConsultingAttachment,
   ConsultingChange,
@@ -213,7 +223,9 @@ export function MilestonesSection({
  * Sesiones del proyecto (migración 017). Arranque y entrega viven arriba,
  * en la ficha, porque de sus fechas cuelgan los plazos del mapa. Aquí van
  * todas las demás, sin límite: diagnóstico, avances, talleres, cierre…
- * Cada sesión con fecha y hora manda su invitación de calendario al equipo.
+ * La invitación de calendario NO sale sola (28-sep-2026): al agregar o
+ * mover una sesión por venir se pregunta, y el ✉️ de cada renglón la
+ * manda o reenvía. Las sesiones que ya pasaron nunca mandan correo.
  */
 export function ConsultingSessionsSection({
   projectId,
@@ -233,8 +245,33 @@ export function ConsultingSessionsSection({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
-  const save = (id: string, field: string) => (value: string) =>
-    updateConsultingSessionField(id, projectId, field, value);
+  const [ask, setAsk] = useState<{ id: string; title: string; mode: "request" | "cancel"; isNew?: boolean } | null>(
+    null
+  );
+  const [notice, setNotice] = useState<InviteNotice | null>(null);
+  const [sending, setSending] = useState(false);
+
+  const save = (s: ConsultingSession, field: string) => async (value: string) => {
+    const res = await updateConsultingSessionField(s.id, projectId, field, value);
+    if (res && "error" in res) {
+      setAsk(null);
+      setNotice({ ok: false, text: res.error });
+    } else if (res && "askInvite" in res) {
+      setNotice(null);
+      setAsk({ id: s.id, title: s.title, mode: res.askInvite });
+    }
+    return res;
+  };
+
+  const sendInvite = (id: string, mode: "request" | "cancel") => {
+    setSending(true);
+    setAsk(null);
+    startTransition(async () => {
+      const res = await sendConsultingSessionInviteAction(id, mode);
+      setSending(false);
+      setNotice(inviteNotice(res, mode));
+    });
+  };
 
   const add = () => {
     if (!title.trim()) return;
@@ -250,6 +287,12 @@ export function ConsultingSessionsSection({
       });
       if ("error" in res) setError(res.error);
       else {
+        const s = res.session;
+        // Solo se ofrece el aviso si la sesión ya tiene cuándo y no pasó
+        if (s.session_date && s.start_time && !isPastLocal(s.session_date)) {
+          setNotice(null);
+          setAsk({ id: s.id, title: s.title, mode: "request", isNew: true });
+        }
         setTitle("");
         setDate("");
         setStart("");
@@ -260,14 +303,16 @@ export function ConsultingSessionsSection({
   };
 
   const remove = (s: ConsultingSession) => {
-    if (
-      !confirm(
-        `¿Eliminar la sesión "${s.title}"?\n\nSi ya estaba en el calendario del equipo, se manda la cancelación.`
-      )
-    )
-      return;
+    if (!confirm(`¿Eliminar la sesión "${s.title}"?`)) return;
+    const notify =
+      !!s.session_date &&
+      !!s.start_time &&
+      s.status !== "Cancelada" &&
+      !isPastLocal(s.session_date) &&
+      confirm("¿Le aviso por correo al equipo para que se le quite de sus calendarios?");
+    if (ask?.id === s.id) setAsk(null);
     startTransition(async () => {
-      await deleteConsultingSessionAction(s.id, projectId);
+      await deleteConsultingSessionAction(s.id, projectId, notify);
     });
   };
 
@@ -281,11 +326,30 @@ export function ConsultingSessionsSection({
           Sesiones del proyecto ({held} de {active.length} realizadas)
         </h2>
       </div>
+
+      {ask && (
+        <InviteAskBar
+          text={
+            ask.mode === "cancel"
+              ? `Cancelaste "${ask.title}". ¿Le aviso al equipo por correo para que se le quite de sus calendarios?`
+              : ask.isNew
+                ? `Agregaste "${ask.title}". ¿Le mando la invitación de calendario al equipo por correo?`
+                : `Cambiaste "${ask.title}". ¿Le mando el aviso por correo al equipo (invitación de calendario)?`
+          }
+          sending={sending}
+          onSend={() => sendInvite(ask.id, ask.mode)}
+          onDismiss={() => setAsk(null)}
+        />
+      )}
+
+      {notice && <InviteResultBar notice={notice} onClose={() => setNotice(null)} />}
+
       <div className="p-4">
         <p className="mb-3 text-xs text-slate-400">
           Agrega las sesiones que haga falta además del arranque y la entrega: diagnóstico,
-          avances, talleres, cierre… Al capturar fecha y hora se manda la invitación de
-          calendario al equipo; si la mueves, llega la actualización sola.
+          avances, talleres, cierre… El CRM no manda correo solo: al agregar o mover una sesión
+          por venir te pregunta si avisa al equipo, y con el sobre ✉️ la mandas o reenvías cuando
+          quieras. Las sesiones que ya pasaron nunca mandan correo.
         </p>
 
         {sessions.length > 0 && (
@@ -301,7 +365,7 @@ export function ConsultingSessionsSection({
                   <th className="w-36 px-2 py-2 font-semibold">Quién la lleva</th>
                   <th className="w-40 px-2 py-2 font-semibold">Liga o lugar</th>
                   <th className="w-32 px-2 py-2 font-semibold">Estado</th>
-                  <th className="w-10 px-2 py-2"></th>
+                  <th className="w-16 px-2 py-2"></th>
                 </tr>
               </thead>
               <tbody>
@@ -313,29 +377,29 @@ export function ConsultingSessionsSection({
                     }`}
                   >
                     <td className="px-1 py-1.5">
-                      <EditableField value={s.title} onSave={save(s.id, "title")} />
+                      <EditableField value={s.title} onSave={save(s, "title")} />
                     </td>
                     <td className="px-1 py-1.5">
-                      <EditableField value={s.session_date ?? ""} type="date" onSave={save(s.id, "session_date")} />
+                      <EditableField value={s.session_date ?? ""} type="date" onSave={save(s, "session_date")} />
                     </td>
                     <td className="px-1 py-1.5">
-                      <EditableField value={s.start_time?.slice(0, 5) ?? ""} type="time" onSave={save(s.id, "start_time")} />
+                      <EditableField value={s.start_time?.slice(0, 5) ?? ""} type="time" onSave={save(s, "start_time")} />
                     </td>
                     <td className="px-1 py-1.5">
-                      <EditableField value={s.end_time?.slice(0, 5) ?? ""} type="time" onSave={save(s.id, "end_time")} />
+                      <EditableField value={s.end_time?.slice(0, 5) ?? ""} type="time" onSave={save(s, "end_time")} />
                     </td>
                     <td className="px-2 py-1.5 pt-2">
                       <StatusSelect
                         value={s.modality || "Online"}
                         options={MODALITIES}
-                        onChange={save(s.id, "modality")}
+                        onChange={save(s, "modality")}
                         small
                       />
                     </td>
                     <td className="px-1 py-1.5">
                       <EditableField
                         value={s.facilitator}
-                        onSave={save(s.id, "facilitator")}
+                        onSave={save(s, "facilitator")}
                         placeholder="Nombre"
                         suggestions={people}
                       />
@@ -344,14 +408,14 @@ export function ConsultingSessionsSection({
                       {s.modality === "Presencial" ? (
                         <EditableField
                           value={s.platform}
-                          onSave={save(s.id, "platform")}
+                          onSave={save(s, "platform")}
                           placeholder="Lugar o sala"
                         />
                       ) : (
                         <EditableField
                           value={s.session_link}
                           type="url"
-                          onSave={save(s.id, "session_link")}
+                          onSave={save(s, "session_link")}
                           placeholder="Liga de la sesión"
                         />
                       )}
@@ -360,19 +424,35 @@ export function ConsultingSessionsSection({
                       <StatusSelect
                         value={s.status}
                         options={CONSULTING_SESSION_STATUSES}
-                        onChange={save(s.id, "status")}
+                        onChange={save(s, "status")}
                         small
                       />
                     </td>
                     <td className="px-2 py-1.5 pt-2.5">
-                      <button
-                        onClick={() => remove(s)}
-                        disabled={pending}
-                        title="Eliminar sesión"
-                        className="text-slate-300 transition hover:text-red-500"
-                      >
-                        {trashIcon}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        {s.session_date && s.start_time && !isPastLocal(s.session_date) && (
+                          <button
+                            title={
+                              s.status === "Cancelada"
+                                ? "Avisar por correo que esta sesión se canceló"
+                                : "Mandar (o reenviar) la invitación de calendario por correo"
+                            }
+                            disabled={sending || pending}
+                            onClick={() => sendInvite(s.id, s.status === "Cancelada" ? "cancel" : "request")}
+                            className="text-slate-300 transition hover:text-brand-cyan-dark disabled:opacity-40"
+                          >
+                            {envelopeIcon}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => remove(s)}
+                          disabled={pending}
+                          title="Eliminar sesión"
+                          className="text-slate-300 transition hover:text-red-500"
+                        >
+                          {trashIcon}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -687,6 +767,52 @@ export function ChangesSection({
   );
 }
 
+/**
+ * Botón ✉️ de la reunión de arranque o de entrega. Capturar o mover la
+ * fecha ya no manda nada (28-sep-2026): la invitación sale solo desde
+ * aquí, y dice a quién se mandó o por qué no se pudo.
+ */
+export function MeetingInviteButton({
+  projectId,
+  which,
+  date,
+  start,
+}: {
+  projectId: string;
+  which: "kickoff" | "delivery";
+  date: string | null;
+  start: string | null;
+}) {
+  const [notice, setNotice] = useState<InviteNotice | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  if (!date || !start || isPastLocal(date)) return null;
+
+  return (
+    <div className="mt-2">
+      <button
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            const res = await sendConsultingMeetingInviteAction(projectId, which);
+            setNotice(inviteNotice(res, "request"));
+          })
+        }
+        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:border-brand-cyan hover:text-brand-cyan-dark disabled:opacity-50"
+      >
+        {envelopeIcon}
+        {pending ? "Enviando…" : "Mandar invitación al equipo"}
+      </button>
+      {notice && (
+        <p className={`mt-1.5 text-[11px] ${notice.ok ? "text-emerald-700" : "text-red-600"}`}>
+          {notice.ok ? "✉️ " : "⚠️ "}
+          {notice.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Botón de borrado del proyecto, con confirmación. */
 export function DeleteConsultingButton({
   projectId,
@@ -704,10 +830,15 @@ export function DeleteConsultingButton({
       onClick={() => {
         if (
           confirm(
-            `¿Eliminar el proyecto "${name}"?\n\nSe borran también sus sesiones, hitos, insumos, cambios y archivos, y se cancelan sus eventos de calendario. Esta acción no se puede deshacer.`
+            `¿Eliminar el proyecto "${name}"?\n\nSe borran también sus sesiones, hitos, insumos, cambios y archivos. Esta acción no se puede deshacer.`
           )
         ) {
-          startTransition(() => deleteConsultingProjectAction(projectId, clientId));
+          // La cancelación solo sale si se pide: puede que nunca se hayan
+          // mandado las invitaciones.
+          const notify = confirm(
+            "¿Le aviso por correo al equipo para que se quiten de sus calendarios las reuniones y sesiones que venían?"
+          );
+          startTransition(() => deleteConsultingProjectAction(projectId, clientId, notify));
         }
       }}
       className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-500 transition hover:bg-red-50 disabled:opacity-60"

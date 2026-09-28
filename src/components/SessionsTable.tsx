@@ -10,6 +10,14 @@ import {
 import { SESSION_STATUSES, MODALITIES, PLATFORMS, EXTRA_FACILITATORS } from "@/lib/constants";
 import { StatusSelect } from "./StatusSelect";
 import { EditableField } from "./EditableField";
+import {
+  InviteAskBar,
+  InviteResultBar,
+  envelopeIcon,
+  inviteNotice,
+  isPastLocal,
+  type InviteNotice,
+} from "./InviteBars";
 import type { Session } from "@/lib/types";
 
 const selectCls =
@@ -35,7 +43,7 @@ export function SessionsTable({
   const [ask, setAsk] = useState<{ id: string; number: number; mode: "request" | "cancel" } | null>(
     null
   );
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [notice, setNotice] = useState<InviteNotice | null>(null);
   const [sending, setSending] = useState(false);
 
   const save = (session: Session, field: string) => async (value: string) => {
@@ -58,14 +66,7 @@ export function SessionsTable({
     startTransition(async () => {
       const res = await sendSessionInviteAction(id, mode);
       setSending(false);
-      setNotice(
-        res.sent
-          ? {
-              ok: true,
-              text: `${mode === "cancel" ? "Cancelación enviada" : "Aviso enviado"} a ${res.to.join(", ")}.`,
-            }
-          : { ok: false, text: `No se pudo mandar el aviso: ${res.reason}` }
-      );
+      setNotice(inviteNotice(res, mode));
     });
   };
 
@@ -98,44 +99,19 @@ export function SessionsTable({
       </div>
 
       {ask && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2.5">
-          <span className="text-sm text-amber-900">
-            {ask.mode === "cancel"
+        <InviteAskBar
+          text={
+            ask.mode === "cancel"
               ? `Cancelaste la sesión ${ask.number}. ¿Le aviso al equipo por correo para que se le quite de sus calendarios?`
-              : `Cambiaste la sesión ${ask.number}. ¿Le mando el aviso por correo al equipo (invitación de calendario)?`}
-          </span>
-          <span className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => sendInvite(ask.id, ask.mode)}
-              disabled={sending}
-              className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-amber-600 disabled:opacity-60"
-            >
-              {sending ? "Enviando…" : "Sí, mandar aviso"}
-            </button>
-            <button onClick={() => setAsk(null)} className="text-xs text-slate-500 hover:text-slate-700">
-              Ahora no
-            </button>
-          </span>
-        </div>
+              : `Cambiaste la sesión ${ask.number}. ¿Le mando el aviso por correo al equipo (invitación de calendario)?`
+          }
+          sending={sending}
+          onSend={() => sendInvite(ask.id, ask.mode)}
+          onDismiss={() => setAsk(null)}
+        />
       )}
 
-      {notice && (
-        <div
-          className={`flex items-start gap-3 border-b px-4 py-2.5 text-sm ${
-            notice.ok
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-red-200 bg-red-50 text-red-700"
-          }`}
-        >
-          <span className="min-w-0 flex-1">
-            {notice.ok ? "✉️ " : "⚠️ "}
-            {notice.text}
-          </span>
-          <button onClick={() => setNotice(null)} className="shrink-0 opacity-60 transition hover:opacity-100">
-            ✕
-          </button>
-        </div>
-      )}
+      {notice && <InviteResultBar notice={notice} onClose={() => setNotice(null)} />}
 
       {sessions.length === 0 ? (
         <p className="p-6 text-center text-sm text-slate-400">
@@ -262,7 +238,7 @@ export function SessionsTable({
                   </td>
                   <td className="px-2 py-1.5 pt-2.5">
                     <div className="flex items-center gap-1.5">
-                      {s.session_date && s.start_time && (
+                      {s.session_date && s.start_time && !isPastLocal(s.session_date) && (
                         <button
                           title={
                             s.status === "Cancelada"
@@ -273,9 +249,7 @@ export function SessionsTable({
                           onClick={() => sendInvite(s.id, s.status === "Cancelada" ? "cancel" : "request")}
                           className="text-slate-300 transition hover:text-brand-cyan-dark disabled:opacity-40"
                         >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                          </svg>
+                          {envelopeIcon}
                         </button>
                       )}
                       <button
@@ -285,6 +259,7 @@ export function SessionsTable({
                           const notify =
                             !!s.session_date &&
                             !!s.start_time &&
+                            !isPastLocal(s.session_date) &&
                             confirm("¿Le aviso por correo al equipo para que se le quite de sus calendarios?");
                           startTransition(() => deleteSessionAction(s.id, trainingId, notify));
                         }}

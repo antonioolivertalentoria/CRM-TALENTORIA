@@ -20,6 +20,7 @@ import {
   ChangesSection,
   ConsultingSessionsSection,
   DeleteConsultingButton,
+  MeetingInviteButton,
 } from "@/components/ConsultingSections";
 import { SurveyReports } from "@/components/SurveyReports";
 import { ConsultingAttachments } from "@/components/ConsultingAttachments";
@@ -231,12 +232,13 @@ export default async function ConsultingDetailPage({
         </div>
       </section>
 
-      {/* Reuniones clave: generan invitaciones de calendario */}
+      {/* Reuniones clave: la invitación de calendario sale solo con el botón ✉️ */}
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Reuniones clave</h2>
         <p className="mb-3 mt-0.5 text-xs text-slate-400">
-          Al capturar fecha y hora se manda la invitación de Google Calendar al equipo
-          (líder, comercial, operaciones y equipo consultor); si cambian, llega la actualización sola.
+          Capturar o mover la fecha no manda correo. Cuando la reunión esté lista, usa &quot;Mandar
+          invitación al equipo&quot; para que llegue a Google Calendar del líder, operaciones y equipo
+          consultor; si luego la mueves, vuelve a mandarla.
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
@@ -255,6 +257,12 @@ export default async function ConsultingDetailPage({
                 <EditableField value={project.kickoff_end?.slice(0, 5) ?? ""} type="time" onSave={save("kickoff_end")} />
               </div>
             </div>
+            <MeetingInviteButton
+              projectId={project.id}
+              which="kickoff"
+              date={project.kickoff_date}
+              start={project.kickoff_start}
+            />
           </div>
           <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
             <p className="mb-2 text-xs font-bold text-brand-navy">🏁 Reunión de entrega</p>
@@ -272,6 +280,12 @@ export default async function ConsultingDetailPage({
                 <EditableField value={project.delivery_end?.slice(0, 5) ?? ""} type="time" onSave={save("delivery_end")} />
               </div>
             </div>
+            <MeetingInviteButton
+              projectId={project.id}
+              which="delivery"
+              date={project.delivery_date}
+              start={project.delivery_start}
+            />
             <p className="mt-2 text-[11px] text-slate-400">
               Desde esta fecha corren factura (mismo día), encuesta (48h), cierre (3 días) y seguimiento (+20).
             </p>

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, formatDate, todayISO } from "@/lib/format";
 import { CHECKLIST_FIELDS, COMMERCIAL_OWNER } from "@/lib/constants";
-import { syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
+import { isPast, syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
 import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
@@ -567,12 +567,13 @@ export async function updateTrainingField(
   return null;
 }
 
-export async function deleteTrainingAction(id: string, clientId: string) {
+export async function deleteTrainingAction(id: string, clientId: string, notify = false) {
   const supabase = await createSupabase();
   const { data: tr } = await supabase.from("trainings").select("short_name").eq("id", id).maybeSingle();
 
-  // Quita de los calendarios los eventos de sus sesiones fechadas
-  await syncTrainingEvents(supabase, id, "cancel");
+  // Quita de los calendarios los eventos de sus sesiones por venir, solo si
+  // quien borra dijo que sí: puede que nunca se hayan mandado.
+  if (notify) await syncTrainingEvents(supabase, id, "cancel");
 
   // Los archivos del bucket no se borran solos con la fila (team buildings)
   try {
@@ -714,23 +715,35 @@ export async function updateSessionField(
   // Calendario: mover fecha/horario/facilitador o cancelar la sesión son los
   // cambios que le importan al equipo. NO se manda nada aquí: se le avisa a
   // la pantalla para que pregunte si se quiere mandar el correo.
-  if (field === "status" && value === "Cancelada") {
-    return { askInvite: "cancel" };
-  }
-  if (["session_date", "start_time", "end_time", "facilitator"].includes(field)) {
-    const { data: s } = await supabase
-      .from("sessions")
-      .select("session_date, start_time, status")
-      .eq("id", id)
-      .maybeSingle();
-    // Sin fecha y hora no hay invitación que mandar, y una sesión cancelada
-    // no se re-invita por mover un dato.
-    if (s?.session_date && s?.start_time && s?.status !== "Cancelada") {
-      return { askInvite: "request" };
-    }
-  }
+  return inviteQuestion(supabase, "sessions", id, field, value, ["session_date", "start_time", "end_time", "facilitator"]);
+}
 
-  return null;
+/**
+ * Decide si la pantalla debe preguntar "¿Le mando el aviso al equipo?"
+ * después de editar una sesión (de capacitación o de consultoría). Nunca
+ * pregunta por sesiones sin fecha y hora ni por las que ya pasaron: al
+ * capturar historial a destiempo no hay nada que agendar.
+ */
+async function inviteQuestion(
+  supabase: Awaited<ReturnType<typeof createSupabase>>,
+  table: "sessions" | "consulting_sessions",
+  id: string,
+  field: string,
+  value: string,
+  scheduleFields: string[]
+): Promise<{ askInvite: "request" | "cancel" } | null> {
+  const isCancel = field === "status" && value === "Cancelada";
+  if (!isCancel && !scheduleFields.includes(field)) return null;
+
+  const { data: s } = await supabase
+    .from(table)
+    .select("session_date, start_time, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!s?.session_date || !s?.start_time || isPast(s.session_date)) return null;
+  if (isCancel) return { askInvite: "cancel" };
+  // Una sesión cancelada no se re-invita por mover un dato.
+  return s.status !== "Cancelada" ? { askInvite: "request" } : null;
 }
 
 /**
@@ -1803,24 +1816,9 @@ export async function updateConsultingField(
     );
   }
 
-  // Calendario: capturar o mover la reunión de arranque/entrega manda
-  // (o actualiza) la invitación al equipo; quitar la fecha la cancela.
-  if (field.startsWith("kickoff_")) {
-    await syncConsultingMeeting(
-      supabase,
-      id,
-      "kickoff",
-      field === "kickoff_date" && parsed === null ? "cancel" : "request"
-    );
-  }
-  if (field.startsWith("delivery_")) {
-    await syncConsultingMeeting(
-      supabase,
-      id,
-      "delivery",
-      field === "delivery_date" && parsed === null ? "cancel" : "request"
-    );
-  }
+  // Calendario: capturar o mover la reunión de arranque/entrega YA NO manda
+  // nada (28-sep-2026). La invitación sale con el botón ✉️ de cada reunión
+  // (sendConsultingMeetingInviteAction), solo cuando alguien la pide.
 
   revalidatePath(`/consultoria/${id}`);
   revalidatePath("/consultoria");
@@ -1828,23 +1826,37 @@ export async function updateConsultingField(
   return null;
 }
 
-export async function deleteConsultingProjectAction(id: string, clientId: string) {
+/** Botón ✉️ de las reuniones de arranque y entrega: manda o reenvía la invitación. */
+export async function sendConsultingMeetingInviteAction(
+  projectId: string,
+  which: "kickoff" | "delivery"
+): Promise<InviteResult> {
+  const supabase = await createSupabase();
+  return syncConsultingMeeting(supabase, projectId, which, "request");
+}
+
+export async function deleteConsultingProjectAction(id: string, clientId: string, notify = false) {
   const supabase = await createSupabase();
   const { data: pr } = await supabase.from("consulting_projects").select("name").eq("id", id).maybeSingle();
 
-  // Cancela las reuniones del calendario y limpia archivos del bucket
-  await syncConsultingMeeting(supabase, id, "kickoff", "cancel");
-  await syncConsultingMeeting(supabase, id, "delivery", "cancel");
-  try {
-    const { data: sess } = await supabase
-      .from("consulting_sessions")
-      .select("id")
-      .eq("project_id", id);
-    for (const row of (sess ?? []) as { id: string }[]) {
-      await syncConsultingSessionEvent(supabase, row.id, "cancel");
+  // Cancela las reuniones del calendario solo si quien borra dijo que sí
+  // (pueden no haberse mandado nunca) y limpia archivos del bucket
+  if (notify) {
+    await syncConsultingMeeting(supabase, id, "kickoff", "cancel");
+    await syncConsultingMeeting(supabase, id, "delivery", "cancel");
+    try {
+      const { data: sess } = await supabase
+        .from("consulting_sessions")
+        .select("id, session_date, start_time, status")
+        .eq("project_id", id);
+      for (const row of (sess ?? []) as Pick<ConsultingSession, "id" | "session_date" | "start_time" | "status">[]) {
+        // Las que ya pasaron o no tienen horario ni siquiera se consultan
+        if (!row.session_date || !row.start_time || row.status === "Cancelada" || isPast(row.session_date)) continue;
+        await syncConsultingSessionEvent(supabase, row.id, "cancel");
+      }
+    } catch {
+      // sin sesiones que cancelar (o falta la migración 017)
     }
-  } catch {
-    // sin sesiones que cancelar (o falta la migración 017)
   }
   try {
     const { data: files } = await supabase
@@ -2011,9 +2023,8 @@ export async function addConsultingSessionAction(fields: {
     return { error: error?.message ?? "No se pudo agregar la sesión." };
   }
 
-  // Con fecha y hora, la sesión se agenda sola en el calendario del equipo
-  await syncConsultingSessionEvent(supabase, data.id, "request");
-
+  // Ya no se agenda sola (28-sep-2026): dar de alta varias sesiones seguidas
+  // mandaba un correo por cada una. La pantalla pregunta si se manda.
   revalidatePath(`/consultoria/${fields.projectId}`);
   return { session: data as ConsultingSession };
 }
@@ -2023,7 +2034,7 @@ export async function updateConsultingSessionField(
   projectId: string,
   field: string,
   value: string
-): Promise<FormState> {
+): Promise<SessionUpdateResult> {
   if (!CONSULTING_SESSION_FIELDS.has(field)) return { error: "Campo no permitido." };
 
   const nullableWhenEmpty = new Set(["session_date", "start_time", "end_time"]);
@@ -2036,27 +2047,30 @@ export async function updateConsultingSessionField(
     .eq("id", id);
   if (error) return { error: error.message };
 
-  // Mover fecha, hora, modalidad o quién la lleva actualiza la invitación;
-  // quitar la fecha o cancelar la sesión la quita del calendario.
-  if (
-    ["session_date", "start_time", "end_time", "modality", "platform", "session_link", "facilitator", "title", "status"].includes(
-      field
-    )
-  ) {
-    const cancel = (field === "session_date" && parsed === null) || (field === "status" && value === "Cancelada");
-    await syncConsultingSessionEvent(supabase, id, cancel ? "cancel" : "request");
-  }
-
   revalidatePath(`/consultoria/${projectId}`);
-  return null;
+
+  // Igual que en capacitaciones: no se manda nada aquí, se le pregunta a
+  // la pantalla si amerita avisarle al equipo (solo fecha, horario, quién
+  // la lleva o cancelarla; y nunca por sesiones que ya pasaron).
+  return inviteQuestion(supabase, "consulting_sessions", id, field, value, ["session_date", "start_time", "end_time", "facilitator"]);
+}
+
+/** Botón ✉️ y "Sí, mandar aviso" de las sesiones de consultoría. */
+export async function sendConsultingSessionInviteAction(
+  sessionId: string,
+  mode: "request" | "cancel"
+): Promise<InviteResult> {
+  const supabase = await createSupabase();
+  return syncConsultingSessionEvent(supabase, sessionId, mode);
 }
 
 export async function deleteConsultingSessionAction(
   id: string,
-  projectId: string
+  projectId: string,
+  notify = false
 ): Promise<FormState> {
   const supabase = await createSupabase();
-  await syncConsultingSessionEvent(supabase, id, "cancel");
+  if (notify) await syncConsultingSessionEvent(supabase, id, "cancel");
   const { error } = await supabase.from("consulting_sessions").delete().eq("id", id);
   if (error) return { error: error.message };
   revalidatePath(`/consultoria/${projectId}`);

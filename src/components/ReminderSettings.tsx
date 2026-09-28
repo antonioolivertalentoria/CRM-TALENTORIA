@@ -69,6 +69,37 @@ export function ReminderSettings({ prefs }: { prefs: ReminderPrefs }) {
               </label>
             ))}
           </div>
+
+          <details className="mt-3 border-t border-slate-100 pt-3">
+            <summary className="cursor-pointer text-xs font-semibold text-brand-cyan-dark">
+              ¿Qué correos manda el CRM?
+            </summary>
+            <ul className="mt-2 space-y-2 text-[11px] leading-snug text-slate-500">
+              <li>
+                <strong className="text-slate-700">📋 Este recordatorio:</strong> uno al día a las 8:00 am
+                con tus tareas vencidas o que vencen hoy (las tuyas y las que no tienen responsable), de
+                los tipos que marques arriba. Si no tienes nada, no llega.
+              </li>
+              <li>
+                <strong className="text-slate-700">📅 Invitaciones de calendario:</strong>{" "}solo cuando
+                alguien le da &quot;Sí, mandar aviso&quot; o el sobre ✉️ en una sesión o reunión. Nunca
+                por sesiones que ya pasaron.
+              </li>
+              <li>
+                <strong className="text-slate-700">✅ Tarea terminada:</strong>{" "}solo si quien la pidió
+                marcó &quot;Avisarme por correo cuando se complete&quot;.
+              </li>
+              <li>
+                <strong className="text-slate-700">🏁 Proyecto terminado:</strong> a Comercial, cuando una
+                capacitación o team building se marca como Finalizada.
+              </li>
+              <li>
+                Crear o asignar una tarea, agregar hitos, subir archivos o palomear el checklist{" "}
+                <strong className="text-slate-700">no manda correo</strong>: lo ves en Mis tareas y en
+                tu recordatorio del día que vence.
+              </li>
+            </ul>
+          </details>
         </div>
       )}
     </div>

@@ -19,7 +19,12 @@ export function DeleteTrainingButton({
       disabled={pending}
       onClick={() => {
         if (confirm(`¿Eliminar la capacitación "${name}" con todas sus sesiones y materiales? Esta acción no se puede deshacer.`)) {
-          startTransition(() => deleteTrainingAction(trainingId, clientId));
+          // El aviso de cancelación solo sale si se pide: puede que las
+          // invitaciones nunca se hayan mandado.
+          const notify = confirm(
+            "¿Le aviso por correo al equipo para que se quiten de sus calendarios las sesiones que venían?"
+          );
+          startTransition(() => deleteTrainingAction(trainingId, clientId, notify));
         }
       }}
       className="text-xs font-medium text-red-400 transition hover:text-red-600 hover:underline disabled:opacity-50"
