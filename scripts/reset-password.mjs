@@ -5,13 +5,16 @@
  *
  * Uso:
  *   node scripts/reset-password.mjs correo@talentoria.com
+ *   node scripts/reset-password.mjs correo@talentoria.com --copiar
  *
  * Requiere NEXT_PUBLIC_SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en .env.local.
- * Imprime la contraseña temporal: compártela de forma segura y pide
- * cambiarla al entrar.
+ * Imprime la contraseña temporal; con --copiar NO la imprime y la deja en
+ * el portapapeles de Windows (así no queda en la terminal ni en ningún log).
+ * Compártela de forma segura y pide cambiarla al entrar.
  */
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync, existsSync } from "node:fs";
+import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 
 // Carga .env.local sin dependencias extra
@@ -29,9 +32,11 @@ if (!url || !serviceKey) {
   process.exit(1);
 }
 
-const [email] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const toClipboard = args.includes("--copiar");
+const [email] = args.filter((a) => !a.startsWith("--"));
 if (!email) {
-  console.error("Uso: node scripts/reset-password.mjs correo@talentoria.com");
+  console.error("Uso: node scripts/reset-password.mjs correo@talentoria.com [--copiar]");
   process.exit(1);
 }
 
@@ -51,10 +56,25 @@ if (!user) {
 }
 
 const password = crypto.randomBytes(9).toString("base64url");
+
+// Con --copiar, primero se prueba el portapapeles: si falla, no se cambia nada
+if (toClipboard) {
+  try {
+    execSync("clip", { input: password });
+  } catch {
+    console.error("✗ No se pudo usar el portapapeles (clip.exe). No se cambió la contraseña.");
+    process.exit(1);
+  }
+}
+
 const { error } = await admin.auth.admin.updateUserById(user.id, { password });
 if (error) {
   console.error(`✗ ${email}: ${error.message}`);
   process.exit(1);
 }
-console.log(`✓ ${email} — contraseña temporal nueva: ${password}`);
+console.log(
+  toClipboard
+    ? `✓ ${email} — contraseña temporal nueva copiada al portapapeles (no se muestra).`
+    : `✓ ${email} — contraseña temporal nueva: ${password}`
+);
 console.log("La anterior ya no sirve. Compártela de forma segura y pide cambiarla al entrar.");
