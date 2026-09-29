@@ -3,6 +3,8 @@
 import { useState, useActionState } from "react";
 import { createTrainingAction } from "@/lib/actions";
 import { TRAINING_STATUSES, PLATFORMS, EXTRA_FACILITATORS } from "@/lib/constants";
+import { DEFAULT_TZ, normalizeTz } from "@/lib/timezones";
+import { TimezoneOptions } from "./ZoneTime";
 
 const input =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
@@ -13,6 +15,7 @@ export function NewTrainingForm({
   facilitators,
   currentUser = "",
   recipients,
+  defaultTimezone,
   kind = "Capacitación",
 }: {
   clientId: string;
@@ -24,12 +27,15 @@ export function NewTrainingForm({
    * Para clientes con subclientes: opciones de quién recibe la capacitación
    * (el propio cliente = venta al público en general, o uno de sus subclientes).
    */
-  recipients?: { id: string; label: string }[];
+  recipients?: { id: string; label: string; timezone?: string }[];
+  /** Zona de la sede del cliente (migración 019); prellena la de las sesiones. */
+  defaultTimezone?: string;
   /** "Capacitación" (por defecto) o "Team building" (sin materiales/checklist). */
   kind?: "Capacitación" | "Team building";
 }) {
   const [open, setOpen] = useState(false);
   const [total, setTotal] = useState(0);
+  const [timezone, setTimezone] = useState(normalizeTz(defaultTimezone));
   const [state, formAction, pending] = useActionState(createTrainingAction, null);
   const isTB = kind === "Team building";
 
@@ -61,7 +67,16 @@ export function NewTrainingForm({
             <label className="mb-1 block text-xs font-semibold text-slate-500">
               ¿Quién recibe la capacitación?
             </label>
-            <select name="client_id" defaultValue={clientId} className={input}>
+            <select
+              name="client_id"
+              defaultValue={clientId}
+              onChange={(e) => {
+                // Cada subcliente puede estar en otra ciudad: la zona sigue a quien la recibe
+                const r = recipients.find((x) => x.id === e.target.value);
+                setTimezone(normalizeTz(r?.timezone ?? defaultTimezone));
+              }}
+              className={input}
+            >
               {recipients.map((r) => (
                 <option key={r.id} value={r.id}>{r.label}</option>
               ))}
@@ -153,6 +168,22 @@ export function NewTrainingForm({
             <label className="mb-1 block text-xs font-semibold text-slate-500">Hora cierre general</label>
             <input name="end_time" type="time" className={input} />
           </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Zona horaria de la sede</label>
+          <select
+            name="timezone"
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className={input}
+          >
+            <TimezoneOptions current={timezone} />
+          </select>
+          {timezone !== DEFAULT_TZ && (
+            <p className="mt-1 text-[11px] font-semibold text-amber-700">
+              🕐 Todas las horas de este formulario son la hora de la sede, como las dice el cliente.
+            </p>
+          )}
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">Plataforma (si es online)</label>

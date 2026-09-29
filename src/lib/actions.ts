@@ -7,6 +7,7 @@ import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, formatDate, todayISO } from "@/lib/format";
 import { CHECKLIST_FIELDS, COMMERCIAL_OWNER } from "@/lib/constants";
 import { isPast, syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
+import { DEFAULT_TZ, normalizeTz, tzShort } from "@/lib/timezones";
 import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
@@ -24,6 +25,13 @@ function intOrNull(formData: FormData, key: string): number | null {
   if (!v) return null;
   const n = parseInt(v, 10);
   return Number.isNaN(n) ? null : n;
+}
+
+/** Copia de una fila sin `timezone`, para reintentar si falta la migración 019. */
+function withoutTimezone<T extends { timezone?: string }>(row: T): Omit<T, "timezone"> {
+  const copy = { ...row };
+  delete copy.timezone;
+  return copy;
 }
 
 /** Horas entre dos horarios "HH:MM" (null si faltan o son inválidos). */
@@ -90,12 +98,19 @@ export async function createClientAction(
     email: str(formData, "email"),
     whatsapp: str(formData, "whatsapp"),
     notes: str(formData, "notes"),
+    timezone: normalizeTz(str(formData, "timezone")),
   };
   let { data, error } = await supabase
     .from("clients")
     .insert(payload)
     .select("id")
     .single();
+
+  // Respaldo mientras la migración 019 no esté corrida en la base
+  if (error && payload.timezone === DEFAULT_TZ && error.message.includes("timezone")) {
+    delete payload.timezone;
+    ({ data, error } = await supabase.from("clients").insert(payload).select("id").single());
+  }
 
   // Respaldo mientras la migración 005 no esté corrida en la base
   if (error && !payload.parent_id && error.message.includes("parent_id")) {
@@ -127,8 +142,17 @@ export async function updateClientAction(
     email: str(formData, "email"),
     whatsapp: str(formData, "whatsapp"),
     notes: str(formData, "notes"),
+    timezone: normalizeTz(str(formData, "timezone")),
   };
+  const timezone = payload.timezone as string;
+  const { data: before } = await supabase.from("clients").select("*").eq("id", id).maybeSingle();
   let { error } = await supabase.from("clients").update(payload).eq("id", id);
+
+  // Respaldo mientras la migración 019 no esté corrida en la base
+  if (error && timezone === DEFAULT_TZ && error.message.includes("timezone")) {
+    delete payload.timezone;
+    ({ error } = await supabase.from("clients").update(payload).eq("id", id));
+  }
 
   // Respaldo mientras la migración 005 no esté corrida en la base
   if (error && !payload.parent_id && error.message.includes("parent_id")) {
@@ -137,8 +161,44 @@ export async function updateClientAction(
   }
 
   if (error) return { error: `No se pudo actualizar: ${error.message}` };
+
+  // Cambió la zona de la sede: sus sesiones por venir (y las que aún no
+  // tienen fecha) se mueven con ella si así se pidió. Las pasadas no se
+  // tocan: ya ocurrieron a la hora que ocurrieron.
+  if (
+    (before as { timezone?: string } | null)?.timezone !== timezone &&
+    str(formData, "apply_timezone_to_sessions") === "on"
+  ) {
+    const today = todayISO();
+    const [{ data: tr }, { data: cp }] = await Promise.all([
+      supabase.from("trainings").select("id").eq("client_id", id),
+      supabase.from("consulting_projects").select("id").eq("client_id", id),
+    ]);
+    const trainingIds = ((tr ?? []) as { id: string }[]).map((t) => t.id);
+    const projectIds = ((cp ?? []) as { id: string }[]).map((p) => p.id);
+    const moveUpcoming = async (table: "sessions" | "consulting_sessions", parent: string, parentIds: string[]) => {
+      if (parentIds.length === 0) return;
+      const { data: rows } = await supabase.from(table).select("id, session_date").in(parent, parentIds);
+      const ids = ((rows ?? []) as { id: string; session_date: string | null }[])
+        .filter((r) => !r.session_date || r.session_date >= today)
+        .map((r) => r.id);
+      if (ids.length > 0) await supabase.from(table).update({ timezone }).in("id", ids);
+    };
+    await moveUpcoming("sessions", "training_id", trainingIds);
+    await moveUpcoming("consulting_sessions", "project_id", projectIds);
+    await logActivity(
+      supabase,
+      "editó",
+      "cliente",
+      id,
+      `cambió la zona horaria de "${company}" a hora de ${tzShort(timezone)}`
+    );
+  }
+
   revalidatePath(`/clientes/${id}`);
   revalidatePath("/clientes");
+  revalidatePath("/");
+  revalidatePath("/calendario");
   return null;
 }
 
@@ -216,6 +276,8 @@ export async function createTrainingAction(
   const sessionLink = str(formData, "session_link");
   const startTime = str(formData, "start_time") || null;
   const endTime = str(formData, "end_time") || null;
+  // Zona de la sede: las horas del formulario son las de allá (migración 019)
+  const timezone = normalizeTz(str(formData, "timezone"));
   const duration = hoursBetween(startTime, endTime);
   const hasDefaults = !!(facilitator || modality || platform || sessionLink || startTime);
 
@@ -247,10 +309,15 @@ export async function createTrainingAction(
         session_link: sessionLink,
         start_time: sStart,
         end_time: sEnd,
+        timezone,
         duration_hours: hoursBetween(sStart, sEnd) ?? duration,
       };
     });
-    await supabase.from("sessions").insert(sessions);
+    const { error: sessionsError } = await supabase.from("sessions").insert(sessions);
+    // Respaldo mientras la migración 019 no esté corrida en la base
+    if (sessionsError?.message.includes("timezone")) {
+      await supabase.from("sessions").insert(sessions.map(withoutTimezone));
+    }
   }
 
   // Team building: sin materiales estándar (PPT/manuales); sus pendientes
@@ -599,29 +666,48 @@ export async function deleteTrainingAction(id: string, clientId: string, notify 
 
 export async function addSessionAction(trainingId: string) {
   const supabase = await createSupabase();
+  // "*" y no la lista de columnas: si falta la migración 019, pedir
+  // `timezone` tumbaría la consulta y la sesión nueva saldría como la 1.
   const { data: last } = await supabase
     .from("sessions")
-    .select("session_number, facilitator, start_time, end_time, duration_hours, modality, platform, session_link")
+    .select("*")
     .eq("training_id", trainingId)
     .order("session_number", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  // La sesión nueva hereda horario, facilitador, modalidad, plataforma y
-  // liga de la última sesión (la fecha no: esa siempre se captura).
+  // Sin sesión anterior, la zona sale de la sede del cliente.
+  let timezone: string | undefined = last?.timezone;
+  if (!timezone) {
+    const { data: tr } = await supabase
+      .from("trainings")
+      .select("clients(*)")
+      .eq("id", trainingId)
+      .maybeSingle();
+    timezone = (tr?.clients as { timezone?: string } | null)?.timezone;
+  }
+
+  // La sesión nueva hereda horario, zona, facilitador, modalidad, plataforma
+  // y liga de la última sesión (la fecha no: esa siempre se captura).
   const nextNumber = (last?.session_number ?? 0) + 1;
-  await supabase.from("sessions").insert({
+  const row = {
     training_id: trainingId,
     session_number: nextNumber,
     status: "Pendiente",
     facilitator: last?.facilitator ?? "",
     start_time: last?.start_time ?? null,
     end_time: last?.end_time ?? null,
+    timezone: normalizeTz(timezone),
     duration_hours: last?.duration_hours ?? null,
     modality: last?.modality ?? "",
     platform: last?.platform ?? "",
     session_link: last?.session_link ?? "",
-  });
+  };
+  const { error } = await supabase.from("sessions").insert(row);
+  // Respaldo mientras la migración 019 no esté corrida en la base
+  if (error?.message.includes("timezone")) {
+    await supabase.from("sessions").insert(withoutTimezone(row));
+  }
   await logActivity(supabase, "creó", "sesión", trainingId, `agregó la sesión ${nextNumber}`);
   revalidatePath(`/capacitaciones/${trainingId}`);
 }
@@ -633,6 +719,7 @@ const SESSION_FIELDS = new Set([
   "session_date",
   "start_time",
   "end_time",
+  "timezone",
   "duration_hours",
   "facilitator",
   "modality",
@@ -675,6 +762,7 @@ export async function updateSessionField(
     if (Number.isNaN(parsed)) parsed = null;
   }
   if (nullableWhenEmpty.has(field) && !value) parsed = null;
+  if (field === "timezone") parsed = normalizeTz(value);
 
   const supabase = await createSupabase();
   const { error } = await supabase
@@ -712,10 +800,10 @@ export async function updateSessionField(
   revalidatePath(`/capacitaciones/${trainingId}`);
   revalidatePath("/");
 
-  // Calendario: mover fecha/horario/facilitador o cancelar la sesión son los
-  // cambios que le importan al equipo. NO se manda nada aquí: se le avisa a
+  // Calendario: mover fecha/horario/zona/facilitador o cancelar la sesión son
+  // los cambios que le importan al equipo. NO se manda nada aquí: se le avisa a
   // la pantalla para que pregunte si se quiere mandar el correo.
-  return inviteQuestion(supabase, "sessions", id, field, value, ["session_date", "start_time", "end_time", "facilitator"]);
+  return inviteQuestion(supabase, "sessions", id, field, value, ["session_date", "start_time", "end_time", "timezone", "facilitator"]);
 }
 
 /**
@@ -1972,6 +2060,7 @@ const CONSULTING_SESSION_FIELDS = new Set([
   "session_date",
   "start_time",
   "end_time",
+  "timezone",
   "modality",
   "platform",
   "session_link",
@@ -1986,6 +2075,8 @@ export async function addConsultingSessionAction(fields: {
   sessionDate: string | null;
   startTime: string | null;
   endTime: string | null;
+  /** Zona de la sede; si no llega, la del cliente del proyecto. */
+  timezone?: string;
   modality: string;
   facilitator: string;
 }): Promise<{ error: string } | { session: ConsultingSession }> {
@@ -2001,20 +2092,37 @@ export async function addConsultingSessionAction(fields: {
     .limit(1);
   const position = ((last?.[0]?.position as number | undefined) ?? 0) + 1;
 
-  const { data, error } = await supabase
-    .from("consulting_sessions")
-    .insert({
-      project_id: fields.projectId,
-      title,
-      session_date: fields.sessionDate || null,
-      start_time: fields.startTime || null,
-      end_time: fields.endTime || null,
-      modality: fields.modality || "Online",
-      facilitator: fields.facilitator,
-      position,
-    })
-    .select("*")
-    .single();
+  let timezone = fields.timezone;
+  if (!timezone) {
+    const { data: project } = await supabase
+      .from("consulting_projects")
+      .select("clients(*)")
+      .eq("id", fields.projectId)
+      .maybeSingle();
+    timezone = (project?.clients as { timezone?: string } | null)?.timezone;
+  }
+
+  const row = {
+    project_id: fields.projectId,
+    title,
+    session_date: fields.sessionDate || null,
+    start_time: fields.startTime || null,
+    end_time: fields.endTime || null,
+    timezone: normalizeTz(timezone),
+    modality: fields.modality || "Online",
+    facilitator: fields.facilitator,
+    position,
+  };
+  let { data, error } = await supabase.from("consulting_sessions").insert(row).select("*").single();
+
+  // Respaldo mientras la migración 019 no esté corrida en la base
+  if (error?.message.includes("timezone")) {
+    ({ data, error } = await supabase
+      .from("consulting_sessions")
+      .insert(withoutTimezone(row))
+      .select("*")
+      .single());
+  }
 
   if (error || !data) {
     if (error?.message.includes("consulting_sessions")) {
@@ -2038,7 +2146,8 @@ export async function updateConsultingSessionField(
   if (!CONSULTING_SESSION_FIELDS.has(field)) return { error: "Campo no permitido." };
 
   const nullableWhenEmpty = new Set(["session_date", "start_time", "end_time"]);
-  const parsed: string | null = nullableWhenEmpty.has(field) && !value ? null : value;
+  let parsed: string | null = nullableWhenEmpty.has(field) && !value ? null : value;
+  if (field === "timezone") parsed = normalizeTz(value);
 
   const supabase = await createSupabase();
   const { error } = await supabase
@@ -2050,9 +2159,9 @@ export async function updateConsultingSessionField(
   revalidatePath(`/consultoria/${projectId}`);
 
   // Igual que en capacitaciones: no se manda nada aquí, se le pregunta a
-  // la pantalla si amerita avisarle al equipo (solo fecha, horario, quién
-  // la lleva o cancelarla; y nunca por sesiones que ya pasaron).
-  return inviteQuestion(supabase, "consulting_sessions", id, field, value, ["session_date", "start_time", "end_time", "facilitator"]);
+  // la pantalla si amerita avisarle al equipo (solo fecha, horario, zona,
+  // quién la lleva o cancelarla; y nunca por sesiones que ya pasaron).
+  return inviteQuestion(supabase, "consulting_sessions", id, field, value, ["session_date", "start_time", "end_time", "timezone", "facilitator"]);
 }
 
 /** Botón ✉️ y "Sí, mandar aviso" de las sesiones de consultoría. */

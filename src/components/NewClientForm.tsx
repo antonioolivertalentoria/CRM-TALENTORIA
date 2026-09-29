@@ -2,6 +2,8 @@
 
 import { useState, useActionState } from "react";
 import { createClientAction } from "@/lib/actions";
+import { DEFAULT_TZ } from "@/lib/timezones";
+import { TimezoneOptions } from "./ZoneTime";
 
 const input =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
@@ -84,6 +86,15 @@ export function NewClientForm({
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">WhatsApp</label>
           <input name="whatsapp" placeholder="+52 614 123 4567" className={input} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Zona horaria de la sede</label>
+          <select name="timezone" defaultValue={DEFAULT_TZ} className={input}>
+            <TimezoneOptions />
+          </select>
+          <p className="mt-1 text-[11px] text-slate-400">
+            Las horas de sus sesiones se capturan en la hora de la sede, como las dice el cliente.
+          </p>
         </div>
         <div className="sm:col-span-2">
           <label className="mb-1 block text-xs font-semibold text-slate-500">Notas</label>

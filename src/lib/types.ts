@@ -8,6 +8,8 @@ export type Client = {
   email: string;
   whatsapp: string;
   notes: string;
+  /** Zona horaria de la sede, ej. "America/Matamoros" (migración 019; falta si no se ha corrido). */
+  timezone?: string;
   created_at: string;
   updated_at: string;
 };
@@ -74,6 +76,8 @@ export type Session = {
   session_date: string | null;
   start_time: string | null;
   end_time: string | null;
+  /** Zona de la hora capturada, la de la sede (migración 019; falta si no se ha corrido). */
+  timezone?: string;
   duration_hours: number | null;
   facilitator: string;
   modality: string;
@@ -318,6 +322,8 @@ export type ConsultingSession = {
   session_date: string | null;
   start_time: string | null;
   end_time: string | null;
+  /** Zona de la hora capturada, la de la sede (migración 019; falta si no se ha corrido). */
+  timezone?: string;
   modality: string;
   platform: string;
   session_link: string;

@@ -4,6 +4,7 @@ import { TRAINING_STATUSES, PRIORITIES } from "@/lib/constants";
 import { StatusSelect } from "@/components/StatusSelect";
 import { updateTrainingField } from "@/lib/actions";
 import { formatDate, formatTime, todayISO } from "@/lib/format";
+import { ZoneNote } from "@/components/ZoneTime";
 import type { ActivityEvent, TrainingWithSessions, Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -127,6 +128,7 @@ export default async function DashboardPage() {
                   {formatDate(s.session_date)}
                   {s.start_time ? ` · ${formatTime(s.start_time)}` : ""}
                 </p>
+                <ZoneNote date={s.session_date} start={s.start_time} tz={s.timezone} className="mb-0.5" />
                 <p className="truncate text-sm font-semibold text-brand-navy">
                   {s.training.short_name}
                   <span className="font-normal text-slate-400"> · Sesión {s.session_number}</span>
@@ -266,6 +268,7 @@ export default async function DashboardPage() {
                             <>
                               <span className="font-semibold text-brand-magenta">{formatDate(next.session_date)}</span>
                               {next.start_time ? ` · ${formatTime(next.start_time)}` : ""}
+                              <ZoneNote date={next.session_date} start={next.start_time} tz={next.timezone} className="ml-1" />
                             </>
                           ) : (
                             "—"

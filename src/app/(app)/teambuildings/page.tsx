@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { statusColor } from "@/lib/constants";
 import { formatDate, formatTime, todayISO } from "@/lib/format";
+import { ZoneNote } from "@/components/ZoneTime";
 import type { Client, Session, Training, TrainingRequest } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -118,6 +119,7 @@ export default async function TeamBuildingsPage() {
                         <>
                           📅 {formatDate(next.session_date)}
                           {next.start_time ? ` · ${formatTime(next.start_time)}` : ""}
+                          <ZoneNote date={next.session_date} start={next.start_time} tz={next.timezone} className="ml-1" />
                         </>
                       ) : (
                         "Sin fecha próxima"

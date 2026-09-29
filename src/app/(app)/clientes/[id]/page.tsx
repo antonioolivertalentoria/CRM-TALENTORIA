@@ -93,7 +93,8 @@ export default async function ClientDetailPage({
       .eq("client_id", id)
       .order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, full_name").order("full_name"),
-    supabase.from("clients").select("id, company, parent_id").order("company"),
+    // "*" para traer la zona de los subclientes sin romper si falta la migración 019
+    supabase.from("clients").select("*").order("company"),
     supabase.auth.getUser(),
     fetchFacilitators(supabase),
   ]);
@@ -102,7 +103,7 @@ export default async function ClientDetailPage({
   const currentUser =
     profiles.find((p) => p.id === userRes.data.user?.id)?.full_name ?? "";
 
-  const allClients = (allClientsData ?? []) as Pick<Client, "id" | "company" | "parent_id">[];
+  const allClients = (allClientsData ?? []) as Pick<Client, "id" | "company" | "parent_id" | "timezone">[];
   const parent = client.parent_id
     ? allClients.find((c) => c.id === client.parent_id) ?? null
     : null;
@@ -152,8 +153,8 @@ export default async function ClientDetailPage({
   const recipients =
     subclients.length > 0
       ? [
-          { id: client.id, label: `${client.company} (directo / público en general)` },
-          ...subclients.map((s) => ({ id: s.id, label: s.company })),
+          { id: client.id, label: `${client.company} (directo / público en general)`, timezone: client.timezone },
+          ...subclients.map((s) => ({ id: s.id, label: s.company, timezone: s.timezone })),
         ]
       : undefined;
 
@@ -193,6 +194,7 @@ export default async function ClientDetailPage({
             facilitators={facilitatorSuggestions(people, catalog)}
             currentUser={currentUser}
             recipients={recipients}
+            defaultTimezone={client.timezone}
           />
           <NewTrainingForm
             clientId={client.id}
@@ -200,6 +202,7 @@ export default async function ClientDetailPage({
             facilitators={facilitatorSuggestions(people, catalog)}
             currentUser={currentUser}
             recipients={recipients}
+            defaultTimezone={client.timezone}
             kind="Team building"
           />
           {showConsulting && (

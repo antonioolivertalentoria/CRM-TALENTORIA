@@ -2,7 +2,14 @@
 
 import { useState, useActionState } from "react";
 import { updateClientAction, deleteClientAction } from "@/lib/actions";
+import { TEAM_PLACE, TIMEZONES, differsFromTeam, normalizeTz } from "@/lib/timezones";
+import { TimezoneOptions } from "./ZoneTime";
 import type { Client } from "@/lib/types";
+
+function tzLabel(tz: string | undefined): string {
+  const z = normalizeTz(tz);
+  return TIMEZONES.find((o) => o.value === z)?.label ?? z;
+}
 
 const input =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
@@ -81,6 +88,13 @@ export function ClientEditForm({
             </dd>
           </div>
           <div className="sm:col-span-2">
+            <dt className="text-xs font-semibold text-slate-400">Zona horaria de la sede</dt>
+            <dd className={differsFromTeam(client.timezone, null) ? "font-semibold text-amber-700" : "text-slate-700"}>
+              {tzLabel(client.timezone)}
+              {differsFromTeam(client.timezone, null) && ` · hoy no coincide con la hora de ${TEAM_PLACE}`}
+            </dd>
+          </div>
+          <div className="sm:col-span-2">
             <dt className="text-xs font-semibold text-slate-400">Notas</dt>
             <dd className="whitespace-pre-wrap text-slate-700">{client.notes || "—"}</dd>
           </div>
@@ -137,6 +151,25 @@ export function ClientEditForm({
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">WhatsApp</label>
           <input name="whatsapp" defaultValue={client.whatsapp} className={input} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Zona horaria de la sede</label>
+          <select name="timezone" defaultValue={normalizeTz(client.timezone)} className={input}>
+            <TimezoneOptions current={client.timezone} />
+          </select>
+          <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs text-slate-500">
+            <input
+              type="checkbox"
+              name="apply_timezone_to_sessions"
+              defaultChecked
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-brand-cyan"
+            />
+            <span>
+              Si la cambias, cambiar también sus sesiones por venir (capacitaciones, team buildings y
+              consultoría). Las invitaciones que ya se mandaron hay que reenviarlas con el ✉️ de cada
+              sesión.
+            </span>
+          </label>
         </div>
         <div className="sm:col-span-2">
           <label className="mb-1 block text-xs font-semibold text-slate-500">Notas</label>

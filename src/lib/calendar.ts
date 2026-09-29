@@ -1,4 +1,5 @@
 import { COMMERCIAL_OWNER } from "./constants";
+import { TEAM_PLACE, TEAM_TZ, describeSchedule, differsFromTeam, toTeamTime, tzShort, zonedToUtc } from "./timezones";
 import type { Session, Training } from "./types";
 
 /**
@@ -30,6 +31,12 @@ import type { Session, Training } from "./types";
  * equipo recibió decenas de correos. Ahora todo sale solo cuando alguien lo
  * pide (✉️, "Sí, mandar aviso" o la casilla al crear), y nunca para fechas
  * que ya pasaron.
+ *
+ * La hora sale con la zona de la sede (29-sep-2026). Antes todo iba como
+ * hora del centro y una sesión de las 9:00 en Matamoros (una hora
+ * adelante en verano) llegó a los calendarios como 9:00 de aquí. Ahora el
+ * evento viaja en UTC y Calendar lo pone a la hora correcta de cada quien;
+ * el título y el correo dicen además la hora local de la sede.
  */
 
 // Estos dos siempre reciben el evento en su calendario.
@@ -51,11 +58,9 @@ const EXTRA_EMAILS: Record<string, string> = {
 // abajo: si Calendar mandara la respuesta aquí, rebotaría y el que
 // contestó recibiría un "Delivery Status Notification".
 const ORGANIZER_EMAIL = "crm@talentoriacursos.com";
-const TZID = "America/Mexico_City"; // UTC-6 fijo (sin horario de verano)
-
 /** Hoy en México (YYYY-MM-DD); el servidor de Vercel vive en UTC. */
 function todayMx(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TZID }).format(new Date());
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TEAM_TZ }).format(new Date());
 }
 
 /**
@@ -205,9 +210,32 @@ function foldLine(line: string): string {
   return parts.join("\r\n");
 }
 
-/** "2026-09-20" + "09:00" → "20260920T090000" (hora local de México). */
-function icsLocal(date: string, time: string): string {
-  return `${date.replaceAll("-", "")}T${time.slice(0, 5).replace(":", "")}00`;
+/** "2026-09-29" + "09:00" en Matamoros → "20260929T140000Z" (el instante real, en UTC). */
+function icsUtc(date: string, time: string, tz: string | undefined): string {
+  return zonedToUtc(date, time, tz).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+/** " · 09:00 hora de Matamoros" para el título, solo si la sede no está en la hora del equipo. */
+function localTimeTag(date: string, time: string, tz: string | undefined): string {
+  return differsFromTeam(tz, date) ? ` · ${time} hora de ${tzShort(tz)}` : "";
+}
+
+/** "09:00" o, si la sede está en otra zona, "09:00 hora de Matamoros (08:00 Chihuahua)". */
+function subjectTime(date: string, time: string, tz: string | undefined): string {
+  return differsFromTeam(tz, date)
+    ? `${time} hora de ${tzShort(tz)} (${toTeamTime(date, time, tz)} ${TEAM_PLACE})`
+    : time;
+}
+
+/** Renglón de fecha y horario del correo, con la equivalencia si la sede está en otra zona. */
+function scheduleHtml(date: string, dateNice: string, start: string, end: string, tz: string | undefined): string {
+  const text = describeSchedule(date, start, end, tz);
+  return differsFromTeam(tz, date)
+    ? `<p style="color:#334155;">📅 ${dateNice} · ${text}</p>
+        <p style="background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:8px 10px;color:#92400e;font-size:13px;">
+          ⚠️ La sede está en otra zona horaria. Tu Google Calendar ya la pone a tu hora; si viajas a la sede, se ajusta sola.
+        </p>`
+    : `<p style="color:#334155;">📅 ${dateNice} · ${text}</p>`;
 }
 
 function utcNowStamp(): string {
@@ -230,6 +258,8 @@ function buildIcs(opts: {
   date: string;
   startTime: string;
   endTime: string;
+  /** Zona de la sede; la hora capturada es la de allá. */
+  timezone?: string;
   attendees: Person[];
   url?: string;
 }): string {
@@ -239,22 +269,14 @@ function buildIcs(opts: {
     "VERSION:2.0",
     "CALSCALE:GREGORIAN",
     `METHOD:${opts.method}`,
-    "BEGIN:VTIMEZONE",
-    `TZID:${TZID}`,
-    "BEGIN:STANDARD",
-    "DTSTART:19700101T000000",
-    "TZOFFSETFROM:-0600",
-    "TZOFFSETTO:-0600",
-    "TZNAME:CST",
-    "END:STANDARD",
-    "END:VTIMEZONE",
     "BEGIN:VEVENT",
     `UID:${opts.uid}`,
     // SEQUENCE creciente para que Calendar aplique siempre la versión más nueva
     `SEQUENCE:${Math.floor(Date.now() / 1000)}`,
     `DTSTAMP:${utcNowStamp()}`,
-    `DTSTART;TZID=${TZID}:${icsLocal(opts.date, opts.startTime)}`,
-    `DTEND;TZID=${TZID}:${icsLocal(opts.date, opts.endTime)}`,
+    // En UTC: no depende de que Calendar u Outlook conozcan la zona de la sede.
+    `DTSTART:${icsUtc(opts.date, opts.startTime, opts.timezone)}`,
+    `DTEND:${icsUtc(opts.date, opts.endTime, opts.timezone)}`,
     `SUMMARY:${icsEscape(opts.summary)}`,
     `DESCRIPTION:${icsEscape(opts.description)}`,
     `LOCATION:${icsEscape(opts.location)}`,
@@ -360,10 +382,12 @@ export async function syncSessionEvent(
     const sessionLabel =
       totalSessions > 1 || s.session_number > 1 ? ` — Sesión ${s.session_number}` : "";
 
-    const summary = `${isTB ? "🎉 " : "📚 "}${t.short_name}${sessionLabel}${clientName ? ` (${clientName})` : ""}`;
+    const tz = s.timezone;
+    const summary = `${isTB ? "🎉 " : "📚 "}${t.short_name}${sessionLabel}${clientName ? ` (${clientName})` : ""}${localTimeTag(s.session_date, startTime, tz)}`;
     const descriptionLines = [
       `${isTB ? "Team building" : "Capacitación"}: ${t.short_name}`,
       clientName ? `Cliente: ${clientName}` : "",
+      `Horario: ${describeSchedule(s.session_date, startTime, endTime, tz)}`,
       s.facilitator ? `Facilita: ${s.facilitator}` : "",
       t.internal_owner ? `Responsable interno: ${t.internal_owner}` : "",
       s.modality ? `Modalidad: ${s.modality}` : "",
@@ -386,6 +410,7 @@ export async function syncSessionEvent(
       date: s.session_date,
       startTime,
       endTime,
+      timezone: tz,
       attendees,
       url: s.session_link || undefined,
     });
@@ -395,14 +420,14 @@ export async function syncSessionEvent(
     const subject =
       mode === "cancel"
         ? `❌ Cancelada: ${t.short_name}${sessionLabel} · ${dateNice}`
-        : `📅 ${t.short_name}${sessionLabel} · ${dateNice} ${startTime}`;
+        : `📅 ${t.short_name}${sessionLabel} · ${dateNice} ${subjectTime(s.session_date, startTime, tz)}`;
 
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;">
         <div style="height:6px;background:linear-gradient(to right,#00aeef,#e6007e);border-radius:3px;"></div>
         <h2 style="color:#16345f;">${mode === "cancel" ? "Sesión cancelada" : "Sesión en calendario"}</h2>
         <p style="color:#334155;"><strong>${summary}</strong></p>
-        <p style="color:#334155;">📅 ${dateNice} · ${startTime}–${endTime} (hora de México)</p>
+        ${scheduleHtml(s.session_date, dateNice, startTime, endTime, tz)}
         ${location ? `<p style="color:#64748b;">📍 ${location}</p>` : ""}
         <p style="color:#94a3b8;font-size:12px;margin-top:16px;">
           ${
@@ -476,7 +501,7 @@ type ConsultingRow = {
   delivery_date: string | null;
   delivery_start: string | null;
   delivery_end: string | null;
-  clients: { company: string } | null;
+  clients: { company: string; timezone?: string } | null;
 };
 
 /**
@@ -499,7 +524,7 @@ export async function syncConsultingMeeting(
 
     const { data } = await supabase
       .from("consulting_projects")
-      .select("id, name, leader, team, comercial, internal_owner, whatsapp_group, kickoff_date, kickoff_start, kickoff_end, delivery_date, delivery_start, delivery_end, clients(company)")
+      .select("id, name, leader, team, comercial, internal_owner, whatsapp_group, kickoff_date, kickoff_start, kickoff_end, delivery_date, delivery_start, delivery_end, clients(*)")
       .eq("id", projectId)
       .maybeSingle();
     const p = data as ConsultingRow | null;
@@ -549,11 +574,14 @@ export async function syncConsultingMeeting(
     const startTime = start.slice(0, 5);
     const endTime = end ? end.slice(0, 5) : plusTwoHours(startTime);
     const label = which === "kickoff" ? "Reunión de arranque" : "Reunión de entrega";
-    const summary = `🧭 ${label}: ${p.name}${clientName ? ` (${clientName})` : ""}`;
+    // Arranque y entrega no tienen zona propia: van en la hora de la sede del cliente.
+    const tz = p.clients?.timezone;
+    const summary = `🧭 ${label}: ${p.name}${clientName ? ` (${clientName})` : ""}${localTimeTag(date, startTime, tz)}`;
 
     const description = [
       `Consultoría: ${p.name}`,
       clientName ? `Cliente: ${clientName}` : "",
+      `Horario: ${describeSchedule(date, startTime, endTime, tz)}`,
       p.leader ? `Líder: ${p.leader}` : "",
       teamNames.length ? `Equipo: ${teamNames.join(", ")}` : "",
       which === "kickoff"
@@ -572,6 +600,7 @@ export async function syncConsultingMeeting(
       date,
       startTime,
       endTime,
+      timezone: tz,
       attendees,
     });
 
@@ -580,14 +609,14 @@ export async function syncConsultingMeeting(
     const subject =
       mode === "cancel"
         ? `❌ Cancelada: ${label} · ${p.name}`
-        : `📅 ${label}: ${p.name} · ${dateNice} ${startTime}`;
+        : `📅 ${label}: ${p.name} · ${dateNice} ${subjectTime(date, startTime, tz)}`;
 
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;">
         <div style="height:6px;background:linear-gradient(to right,#00aeef,#e6007e);border-radius:3px;"></div>
         <h2 style="color:#16345f;">${mode === "cancel" ? `${label} cancelada` : label}</h2>
         <p style="color:#334155;"><strong>${summary}</strong></p>
-        <p style="color:#334155;">📅 ${dateNice} · ${startTime}–${endTime} (hora de México)</p>
+        ${scheduleHtml(date, dateNice, startTime, endTime, tz)}
         <p style="color:#94a3b8;font-size:12px;margin-top:16px;">
           ${mode === "cancel" ? "El evento adjunto quita la reunión de tu Google Calendar." : "Abre la invitación adjunta para que quede en tu Google Calendar. Si la fecha cambia, te mandaremos la actualización."}
         </p>
@@ -622,6 +651,7 @@ type ConsultingSessionRow = {
   session_date: string | null;
   start_time: string | null;
   end_time: string | null;
+  timezone?: string;
   modality: string;
   platform: string;
   session_link: string;
@@ -653,7 +683,7 @@ export async function syncConsultingSessionEvent(
     const { data } = await supabase
       .from("consulting_sessions")
       .select(
-        "id, title, session_date, start_time, end_time, modality, platform, session_link, facilitator, status, consulting_projects(id, name, leader, team, comercial, internal_owner, whatsapp_group, clients(company))"
+        "*, consulting_projects(id, name, leader, team, comercial, internal_owner, whatsapp_group, clients(company))"
       )
       .eq("id", sessionId)
       .maybeSingle();
@@ -705,11 +735,13 @@ export async function syncConsultingSessionEvent(
     const startTime = s.start_time.slice(0, 5);
     const endTime = s.end_time ? s.end_time.slice(0, 5) : plusTwoHours(startTime);
     const label = s.title.trim() || "Sesión de consultoría";
-    const summary = `🧩 ${label}: ${p.name}${clientName ? ` (${clientName})` : ""}`;
+    const tz = s.timezone;
+    const summary = `🧩 ${label}: ${p.name}${clientName ? ` (${clientName})` : ""}${localTimeTag(s.session_date, startTime, tz)}`;
 
     const description = [
       `Consultoría: ${p.name}`,
       clientName ? `Cliente: ${clientName}` : "",
+      `Horario: ${describeSchedule(s.session_date, startTime, endTime, tz)}`,
       s.facilitator ? `Lleva la sesión: ${s.facilitator}` : "",
       p.leader ? `Líder: ${p.leader}` : "",
       s.modality ? `Modalidad: ${s.modality}` : "",
@@ -731,6 +763,7 @@ export async function syncConsultingSessionEvent(
       date: s.session_date,
       startTime,
       endTime,
+      timezone: tz,
       attendees,
       url: s.session_link || undefined,
     });
@@ -740,14 +773,14 @@ export async function syncConsultingSessionEvent(
     const subject =
       mode === "cancel"
         ? `❌ Cancelada: ${label} · ${p.name}`
-        : `📅 ${label}: ${p.name} · ${dateNice} ${startTime}`;
+        : `📅 ${label}: ${p.name} · ${dateNice} ${subjectTime(s.session_date, startTime, tz)}`;
 
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;">
         <div style="height:6px;background:linear-gradient(to right,#00aeef,#e6007e);border-radius:3px;"></div>
         <h2 style="color:#16345f;">${mode === "cancel" ? `${label} cancelada` : label}</h2>
         <p style="color:#334155;"><strong>${summary}</strong></p>
-        <p style="color:#334155;">📅 ${dateNice} · ${startTime}–${endTime} (hora de México)</p>
+        ${scheduleHtml(s.session_date, dateNice, startTime, endTime, tz)}
         ${location ? `<p style="color:#64748b;">📍 ${location}</p>` : ""}
         <p style="color:#94a3b8;font-size:12px;margin-top:16px;">
           ${mode === "cancel" ? "El evento adjunto quita la sesión de tu Google Calendar." : "Abre la invitación adjunta para que quede en tu Google Calendar. Si la fecha cambia, te mandaremos la actualización."}

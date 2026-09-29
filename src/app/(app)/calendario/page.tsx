@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { statusColor } from "@/lib/constants";
 import { formatDate, formatTime, todayISO } from "@/lib/format";
+import { ZoneNote } from "@/components/ZoneTime";
 import type { Session, Training, Client } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +59,7 @@ export default async function CalendarPage() {
           {s.facilitator ? ` · Facilita: ${s.facilitator}` : ""}
           {s.modality ? ` · ${s.modality}` : ""}
         </p>
+        <ZoneNote date={s.session_date} start={s.start_time} end={s.end_time} tz={s.timezone} className="mt-1" />
       </div>
       <span className={`${statusColor(s.status)} rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white`}>
         {s.status}

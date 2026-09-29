@@ -26,6 +26,8 @@ import { SurveyReports } from "@/components/SurveyReports";
 import { ConsultingAttachments } from "@/components/ConsultingAttachments";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { formatMinutes } from "@/lib/format";
+import { ZoneNote } from "@/components/ZoneTime";
+import { DEFAULT_TZ, normalizeTz, tzShort } from "@/lib/timezones";
 import type {
   Client,
   ConsultingAttachment,
@@ -240,6 +242,12 @@ export default async function ConsultingDetailPage({
           invitación al equipo&quot; para que llegue a Google Calendar del líder, operaciones y equipo
           consultor; si luego la mueves, vuelve a mandarla.
         </p>
+        {normalizeTz(project.clients?.timezone) !== DEFAULT_TZ && (
+          <p className="-mt-1 mb-3 text-xs font-semibold text-amber-700">
+            🕐 Las horas de estas reuniones van en hora de {tzShort(project.clients?.timezone)}, la
+            sede del cliente (se cambia en la ficha del cliente).
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
             <p className="mb-2 text-xs font-bold text-brand-navy">🧭 Reunión de arranque</p>
@@ -257,6 +265,13 @@ export default async function ConsultingDetailPage({
                 <EditableField value={project.kickoff_end?.slice(0, 5) ?? ""} type="time" onSave={save("kickoff_end")} />
               </div>
             </div>
+            <ZoneNote
+              date={project.kickoff_date}
+              start={project.kickoff_start}
+              end={project.kickoff_end}
+              tz={project.clients?.timezone}
+              className="mt-1"
+            />
             <MeetingInviteButton
               projectId={project.id}
               which="kickoff"
@@ -280,6 +295,13 @@ export default async function ConsultingDetailPage({
                 <EditableField value={project.delivery_end?.slice(0, 5) ?? ""} type="time" onSave={save("delivery_end")} />
               </div>
             </div>
+            <ZoneNote
+              date={project.delivery_date}
+              start={project.delivery_start}
+              end={project.delivery_end}
+              tz={project.clients?.timezone}
+              className="mt-1"
+            />
             <MeetingInviteButton
               projectId={project.id}
               which="delivery"
@@ -297,6 +319,7 @@ export default async function ConsultingDetailPage({
         projectId={project.id}
         sessions={projectSessions}
         people={suggestions}
+        defaultTimezone={project.clients?.timezone}
       />
 
       <MilestonesSection

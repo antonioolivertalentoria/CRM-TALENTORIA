@@ -88,9 +88,9 @@ activity_log  (quién hizo qué; se limpia a 90 días desde el cron)
 
 | Tabla | Qué guarda | Campos clave |
 |---|---|---|
-| `clients` | Empresas cliente | `company`, contacto, RFC/razón social, **`parent_id`** (si es subcliente de un cliente "paraguas" que nos subcontrata, ej. Coparmex → empresa final; `null` = cliente directo o venta al público en general) |
+| `clients` | Empresas cliente | `company`, contacto, RFC/razón social, **`parent_id`** (si es subcliente de un cliente "paraguas" que nos subcontrata, ej. Coparmex → empresa final; `null` = cliente directo o venta al público en general), **`timezone`** (zona de la sede; prellena las sesiones nuevas y rige arranque/entrega de consultoría, migración 019) |
 | `trainings` | La capacitación **o el team building** = el proyecto (columna **`kind`**; los team buildings no llevan checklist/materiales/logística) | `client_id`, nombres, `status` (Propuesta/Confirmada/En curso/Finalizada/Cancelada), responsable interno, **`comercial`** (quien vendió; recibe los avisos de cierre), links (Drive, temario, WhatsApp, **informes de encuesta**), y ~19 columnas de **checklist** (`Pendiente`/`Listo`/`No aplica`): mensaje de logística, contenido al facilitador, lista de participantes, envío de manual/constancias/insignias/DC-3, encuesta de participantes, **informe de encuesta**, factura, seguimientos día 20/30, etc. |
-| `sessions` | Sesiones de cada capacitación | `training_id`, número, fecha, horario (inicio/cierre, duración calculada), **facilitador propio por sesión**, modalidad (Online/Presencial/Híbrida), plataforma, liga, inscritos/asistentes |
+| `sessions` | Sesiones de cada capacitación | `training_id`, número, fecha, horario (inicio/cierre, duración calculada) en la hora de la sede con su **`timezone`** (migración 019), **facilitador propio por sesión**, modalidad (Online/Presencial/Híbrida), plataforma, liga, inscritos/asistentes |
 | `materials` | Materiales del proyecto (links a Drive) | tipo (PPT, manuales…), quién lo hace (`maker`), quién lo revisa (`reviewer`), estado (Pendiente → En proceso → Por revisar → Listo), fecha límite |
 | `material_comments` | Comentarios de revisión | autor, texto |
 | `custom_tasks` | Tareas capturadas a mano | título, detalles, para quién (`assignee`), quién la pidió (`requested_by`), `client_id` opcional (`null` = "marca blanca / interno"), fecha límite, estado (Pendiente/Completada), **`notify_on_complete`** (correo a quien la pidió al completarse) |
@@ -140,7 +140,7 @@ Bucket **privado** `adjuntos`, con tope de **20 MB por archivo**; los archivos v
 - El plan gratuito de Supabase da **1 GB** de almacenamiento total. Para material pesado
   (videos, PPTs grandes) se sigue usando Google Drive con link.
 
-Las migraciones (`supabase/migration-001…018.sql`) se corren a mano en el SQL Editor del
+Las migraciones (`supabase/migration-001…019.sql`) se corren a mano en el SQL Editor del
 dashboard de Supabase; todas son aditivas.
 
 ### Informes de encuesta de satisfacción (migración 017)
@@ -240,11 +240,39 @@ El módulo está **abierto a todo el equipo** desde el 03-sep-2026
 todos ven los cuatro módulos y las tareas de reclutamiento se mezclan en "Mis tareas", en el
 reporte semanal y en los recordatorios. La bandera se queda por si hay que volver a cerrarlo.
 
+### Zona horaria de la sede (migración 019, 29-sep-2026)
+
+La hora de una sesión se guardaba sola ("09:00") y la invitación salía siempre como hora del
+centro. Matamoros (como toda la frontera noreste) cambia de horario al ritmo de Texas: de marzo
+a noviembre va una hora adelante. La sesión de NOM-035 de Index Matamoros del 29-sep era a las
+9:00 de allá, a la facilitadora le llegó como 9:00 de aquí y llegó una hora tarde.
+
+- **Regla:** la hora se captura como la dice el cliente, en la hora local de la sede.
+- **Dónde vive la zona:** `clients.timezone` (la sede; se edita en la ficha del cliente) y
+  `sessions.timezone` / `consulting_sessions.timezone` (por sesión, porque un proyecto puede
+  tener sedes distintas). Las sesiones nuevas toman la de la sesión anterior o la del cliente; el
+  formulario de nueva capacitación la prellena con la del cliente (o la del subcliente elegido).
+  Arranque y entrega de consultoría usan la del cliente. Por omisión todo es
+  `America/Mexico_City`, que es como el CRM trataba las horas antes.
+- **Cambiar la zona de un cliente** mueve también sus sesiones por venir y las que aún no tienen
+  fecha (casilla en el formulario, marcada por omisión). Las pasadas no se tocan. Las
+  invitaciones ya mandadas hay que reenviarlas con el ✉️.
+- **Invitación de calendario:** `DTSTART`/`DTEND` van en UTC, así que Calendar la pone a la hora
+  de cada quien y se ajusta sola si alguien viaja a la sede. Si la sede no está en la hora del
+  equipo ese día, el título dice "· 09:00 hora de Matamoros" y el correo trae el horario en ambas
+  horas con un aviso ámbar. Cambiar la zona de una sesión pregunta si se reenvía el aviso, igual
+  que mover fecha u hora.
+- **Pantallas:** la tabla de sesiones (capacitaciones y consultoría) tiene columna *Zona*; tablero,
+  calendario y team buildings enseñan "🕐 hora de Matamoros · 08:00 en Chihuahua" cuando la sede
+  no coincide con la hora del equipo *ese día* (Matamoros en invierno ya no lo enseña).
+- El catálogo y las conversiones viven en `src/lib/timezones.ts` (`TEAM_TZ`/`TEAM_PLACE` = la
+  hora del equipo); los componentes en `src/components/ZoneTime.tsx`.
+
 ### Invitaciones de Google Calendar (src/lib/calendar.ts)
 
 Al crear una capacitación o team building con sesiones fechadas, cada sesión
 manda por Resend una invitación de calendario estándar (.ics, METHOD:REQUEST,
-zona America/Mexico_City): Gmail/Google Calendar la agrega al calendario del
+con la hora en UTC calculada desde la zona de la sede): Gmail/Google Calendar la agrega al calendario del
 invitado con todos los datos. Mover fecha/horario/facilitador manda la
 actualización (mismo UID, SEQUENCE creciente) y cancelar o borrar la sesión
 (o el proyecto) manda la cancelación (METHOD:CANCEL). Invitados: el equipo

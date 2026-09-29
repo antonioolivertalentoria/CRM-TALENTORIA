@@ -28,6 +28,8 @@ import { formatDate } from "@/lib/format";
 import { EditableField } from "./EditableField";
 import { StatusSelect } from "./StatusSelect";
 import { ConsultingItemFiles } from "./ConsultingAttachments";
+import { TimezoneShortOptions, ZoneNote } from "./ZoneTime";
+import { normalizeTz } from "@/lib/timezones";
 import {
   InviteAskBar,
   InviteResultBar,
@@ -231,15 +233,19 @@ export function ConsultingSessionsSection({
   projectId,
   sessions,
   people,
+  defaultTimezone,
 }: {
   projectId: string;
   sessions: ConsultingSession[];
   people: string[];
+  /** Zona de la sede del cliente: la de las sesiones nuevas (migración 019). */
+  defaultTimezone?: string;
 }) {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
+  const [timezone, setTimezone] = useState(normalizeTz(defaultTimezone));
   const [modality, setModality] = useState<string>("Online");
   const [facilitator, setFacilitator] = useState("");
   const [error, setError] = useState("");
@@ -282,6 +288,7 @@ export function ConsultingSessionsSection({
         sessionDate: date || null,
         startTime: start || null,
         endTime: end || null,
+        timezone,
         modality,
         facilitator,
       });
@@ -354,13 +361,19 @@ export function ConsultingSessionsSection({
 
         {sessions.length > 0 && (
           <div className="mb-3 overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1040px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
                   <th className="min-w-48 px-2 py-2 font-semibold">Sesión</th>
                   <th className="w-36 px-2 py-2 font-semibold">Fecha</th>
                   <th className="w-24 px-2 py-2 font-semibold">Inicio</th>
                   <th className="w-24 px-2 py-2 font-semibold">Fin</th>
+                  <th
+                    className="w-36 px-2 py-2 font-semibold"
+                    title="Zona horaria de la sede: inicio y fin son la hora de allá, como la dice el cliente"
+                  >
+                    Zona
+                  </th>
                   <th className="w-32 px-2 py-2 font-semibold">Modalidad</th>
                   <th className="w-36 px-2 py-2 font-semibold">Quién la lleva</th>
                   <th className="w-40 px-2 py-2 font-semibold">Liga o lugar</th>
@@ -387,6 +400,24 @@ export function ConsultingSessionsSection({
                     </td>
                     <td className="px-1 py-1.5">
                       <EditableField value={s.end_time?.slice(0, 5) ?? ""} type="time" onSave={save(s, "end_time")} />
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <select
+                        value={normalizeTz(s.timezone)}
+                        onChange={(e) => save(s, "timezone")(e.target.value)}
+                        title="Zona horaria de la sede: inicio y fin son la hora de allá"
+                        className="w-full cursor-pointer rounded-md border border-transparent bg-transparent px-1 py-1 text-sm outline-none transition hover:border-slate-300 focus:border-brand-cyan"
+                      >
+                        <TimezoneShortOptions current={s.timezone} />
+                      </select>
+                      <ZoneNote
+                        date={s.session_date}
+                        start={s.start_time}
+                        end={s.end_time}
+                        tz={s.timezone}
+                        compact
+                        className="ml-1 mt-0.5"
+                      />
                     </td>
                     <td className="px-2 py-1.5 pt-2">
                       <StatusSelect
@@ -484,6 +515,14 @@ export function ConsultingSessionsSection({
             title="Hora de fin"
             className={inputCls}
           />
+          <select
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            title="Zona horaria de la sede: la hora de inicio y fin es la de allá"
+            className={inputCls}
+          >
+            <TimezoneShortOptions current={timezone} />
+          </select>
           <select value={modality} onChange={(e) => setModality(e.target.value)} className={inputCls}>
             {MODALITIES.map((m) => (
               <option key={m} value={m}>{m}</option>

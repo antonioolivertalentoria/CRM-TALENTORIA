@@ -18,6 +18,8 @@ import {
   isPastLocal,
   type InviteNotice,
 } from "./InviteBars";
+import { TimezoneShortOptions, ZoneNote } from "./ZoneTime";
+import { normalizeTz } from "@/lib/timezones";
 import type { Session } from "@/lib/types";
 
 const selectCls =
@@ -91,7 +93,7 @@ export function SessionsTable({
         <button
           disabled={pending}
           onClick={() => startTransition(() => addSessionAction(trainingId))}
-          title="La sesión nueva copia horario, facilitador, modalidad y plataforma de la última sesión"
+          title="La sesión nueva copia horario, zona, facilitador, modalidad y plataforma de la última sesión"
           className="rounded-lg bg-brand-cyan px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-brand-cyan-dark disabled:opacity-60"
         >
           + Agregar sesión
@@ -119,7 +121,7 @@ export function SessionsTable({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1150px] text-sm">
+          <table className="w-full min-w-[1290px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
                 <th className="w-10 px-3 py-2 font-semibold">#</th>
@@ -128,6 +130,12 @@ export function SessionsTable({
                 <th className="w-36 px-2 py-2 font-semibold">Fecha</th>
                 <th className="w-24 px-2 py-2 font-semibold">Inicio</th>
                 <th className="w-24 px-2 py-2 font-semibold">Cierre</th>
+                <th
+                  className="w-36 px-2 py-2 font-semibold"
+                  title="Zona horaria de la sede: inicio y cierre son la hora de allá, como la dice el cliente"
+                >
+                  Zona
+                </th>
                 <th className="w-20 px-2 py-2 font-semibold" title="Se calcula sola con inicio y cierre">Horas</th>
                 <th className="min-w-28 px-2 py-2 font-semibold">Facilitador/a</th>
                 <th className="w-32 px-2 py-2 font-semibold">Modalidad</th>
@@ -162,6 +170,24 @@ export function SessionsTable({
                   </td>
                   <td className="px-1 py-1.5">
                     <EditableField value={s.end_time?.slice(0, 5) ?? ""} type="time" onSave={save(s, "end_time")} />
+                  </td>
+                  <td className="px-1 py-1.5">
+                    <select
+                      value={normalizeTz(s.timezone)}
+                      onChange={(e) => save(s, "timezone")(e.target.value)}
+                      title="Zona horaria de la sede: inicio y cierre son la hora de allá"
+                      className={selectCls}
+                    >
+                      <TimezoneShortOptions current={s.timezone} />
+                    </select>
+                    <ZoneNote
+                      date={s.session_date}
+                      start={s.start_time}
+                      end={s.end_time}
+                      tz={s.timezone}
+                      compact
+                      className="ml-1 mt-0.5"
+                    />
                   </td>
                   <td
                     className="px-3 py-1.5 pt-2.5 text-xs font-semibold text-brand-cyan-dark"
