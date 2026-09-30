@@ -11,7 +11,7 @@ import { ATTACHMENTS_BUCKET, MAX_ATTACHMENT_MB } from "@/lib/constants";
 import { formatSize } from "./TaskAttachments";
 import type { TrainingAttachment } from "@/lib/types";
 
-function safeName(name: string): string {
+export function safeName(name: string): string {
   return name
     .normalize("NFD")
     .replace(/[^a-zA-Z0-9._-]/g, "-")
@@ -19,7 +19,7 @@ function safeName(name: string): string {
     .slice(-80);
 }
 
-function fileIcon(mime: string, name: string): string {
+export function fileIcon(mime: string, name: string): string {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (mime.startsWith("image/")) return "🖼️";
   if (mime === "application/pdf" || ext === "pdf") return "📕";

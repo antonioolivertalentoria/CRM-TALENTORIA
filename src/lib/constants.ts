@@ -4,6 +4,10 @@
 export const ATTACHMENTS_BUCKET = "adjuntos";
 export const MAX_ATTACHMENT_MB = 20;
 
+// Cotización de una capacitación: se guarda en training_attachments como
+// cualquier archivo y se distingue por su carpeta (así no pidió migración).
+export const quoteFolder = (trainingId: string) => `capacitaciones/${trainingId}/cotizacion/`;
+
 export const TRAINING_STATUSES = [
   "Propuesta",
   "Confirmada",

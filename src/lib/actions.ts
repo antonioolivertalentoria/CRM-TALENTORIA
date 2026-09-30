@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, formatDate, todayISO } from "@/lib/format";
-import { CHECKLIST_FIELDS, COMMERCIAL_OWNER } from "@/lib/constants";
+import { CHECKLIST_FIELDS, COMMERCIAL_OWNER, quoteFolder } from "@/lib/constants";
 import { isPast, syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
 import { DEFAULT_TZ, normalizeTz, tzShort } from "@/lib/timezones";
 import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
@@ -642,7 +642,7 @@ export async function deleteTrainingAction(id: string, clientId: string, notify 
   // quien borra dijo que sí: puede que nunca se hayan mandado.
   if (notify) await syncTrainingEvents(supabase, id, "cancel");
 
-  // Los archivos del bucket no se borran solos con la fila (team buildings)
+  // Los archivos del bucket no se borran solos con la fila (team buildings y cotizaciones)
   try {
     const { data: files } = await supabase
       .from("training_attachments")
@@ -1708,12 +1708,13 @@ export async function registerTrainingAttachmentAction(fields: {
     return { error: error?.message ?? "No se pudo registrar el archivo." };
   }
 
+  const isQuote = fields.storagePath.startsWith(quoteFolder(fields.trainingId));
   await logActivity(
     supabase,
     "subió",
-    "team building",
+    isQuote ? "capacitación" : "team building",
     fields.trainingId,
-    `subió el archivo "${fields.fileName}"`
+    isQuote ? `subió la cotización "${fields.fileName}"` : `subió el archivo "${fields.fileName}"`
   );
   revalidatePath(`/capacitaciones/${fields.trainingId}`);
   return { attachment: data as TrainingAttachment };

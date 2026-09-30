@@ -7,6 +7,7 @@ import {
   PRIORITIES,
   CHECK_STATUSES,
   CHECKLIST_FIELDS,
+  quoteFolder,
 } from "@/lib/constants";
 import { StatusSelect } from "@/components/StatusSelect";
 import { EditableField } from "@/components/EditableField";
@@ -21,6 +22,7 @@ import { OwnerSelect } from "@/components/OwnerSelect";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { RequestsSection } from "@/components/RequestsSection";
 import { TrainingAttachments } from "@/components/TrainingAttachments";
+import { QuoteFiles } from "@/components/QuoteFiles";
 import { SurveyReports } from "@/components/SurveyReports";
 import type { Client, Training, Session, Material, MaterialComment, Profile, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
@@ -61,7 +63,7 @@ export default async function TrainingDetailPage({
     { data: commentsData },
     catalog,
     { data: requestsData },
-    { data: tbFilesData },
+    { data: filesData },
   ] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email").order("full_name"),
     materials.length > 0
@@ -72,17 +74,17 @@ export default async function TrainingDetailPage({
           .order("created_at")
       : Promise.resolve({ data: [] }),
     fetchFacilitators(supabase),
-    // Solo aplican a team buildings; se piden aparte para tolerar que la
-    // migración 011 no haya corrido (el error solo deja data en null).
+    // Las peticiones solo aplican a team buildings; se piden aparte para
+    // tolerar que la migración 011 no haya corrido (el error solo deja data en null).
     isTeamBuilding
       ? supabase.from("training_requests").select("*").eq("training_id", id).order("position")
       : Promise.resolve({ data: [] }),
-    isTeamBuilding
-      ? supabase.from("training_attachments").select("*").eq("training_id", id).order("created_at")
-      : Promise.resolve({ data: [] }),
+    // Archivos: los del team building y, en capacitaciones, la cotización.
+    supabase.from("training_attachments").select("*").eq("training_id", id).order("created_at"),
   ]);
   const requests = (requestsData ?? []) as unknown as TrainingRequest[];
-  const tbFiles = (tbFilesData ?? []) as unknown as TrainingAttachment[];
+  const tbFiles = (filesData ?? []) as unknown as TrainingAttachment[];
+  const quoteFiles = tbFiles.filter((f) => f.storage_path.startsWith(quoteFolder(id)));
   const profiles = (profilesData ?? []) as unknown as Profile[];
   const people = profiles.map((p) => p.full_name);
   const comments = (commentsData ?? []) as unknown as MaterialComment[];
@@ -208,6 +210,7 @@ export default async function TrainingDetailPage({
             <>
               <LinkChip label="Temario" url={training.temario_url} onSave={save("temario_url")} />
               <LinkChip label="Lista de participantes" url={training.participants_url} onSave={save("participants_url")} />
+              <QuoteFiles trainingId={training.id} files={quoteFiles} />
             </>
           )}
           <LinkChip label="Grupo WhatsApp" url={training.whatsapp_group} onSave={save("whatsapp_group")} />
