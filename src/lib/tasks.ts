@@ -179,6 +179,19 @@ export function computeTasks(
       });
     }
 
+    // Mensaje de confirmación: 2 días antes del curso (solo cursos por venir,
+    // para no llenar de tareas viejas lo que ya se impartió)
+    if (t.mensaje_confirmacion === "Pendiente" && firstDate && firstDate >= today) {
+      tasks.push({
+        ...base,
+        key: `${t.id}-confirmacion`,
+        kind: "Logística",
+        title: "Enviar mensaje de confirmación por WhatsApp",
+        due: atLeast(addDays(firstDate, -2), today),
+        complete: trainingField("mensaje_confirmacion"),
+      });
+    }
+
     // Preparación previa (solo si el campo sigue Pendiente)
     const PRE_ITEMS: { field: string; label: string; days: number; applies: boolean }[] = [
       {

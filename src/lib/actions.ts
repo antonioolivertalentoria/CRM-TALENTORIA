@@ -421,6 +421,8 @@ export async function createTrainingAction(
 const TRAINING_FIELDS = new Set([
   "mensaje_logistica",
   "logistics_info",
+  "venue",
+  "mensaje_confirmacion",
   "short_name",
   "official_name",
   "status",

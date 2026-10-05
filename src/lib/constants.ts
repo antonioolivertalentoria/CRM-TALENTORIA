@@ -79,6 +79,7 @@ export function statusColor(value: string): string {
 // entregas en máx. 48h, cierre administrativo y seguimiento 20/30 días.
 export const CHECKLIST_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: "mensaje_logistica", label: "Mensaje de logística", hint: "Enviar mensaje de logística por WhatsApp (20 días antes o de inmediato)" },
+  { key: "mensaje_confirmacion", label: "Mensaje de confirmación", hint: "Enviar mensaje de confirmación por WhatsApp (2 días antes del curso)" },
   { key: "contenido_facilitador", label: "Contenido al facilitador", hint: "Entregar todo el contenido (14 días antes si es externo, 7 si es interno)" },
   { key: "lista_participantes", label: "Lista de participantes", hint: "Nombres completos confirmados (7 días antes, para constancias)" },
   { key: "impresion_manuales", label: "Impresión de manuales", hint: "Presencial: confirmar si imprime el cliente o llevamos nosotros (7 días antes)" },

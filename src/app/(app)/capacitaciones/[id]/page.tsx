@@ -16,6 +16,7 @@ import { SessionsTable } from "@/components/SessionsTable";
 import { MaterialsSection } from "@/components/MaterialsSection";
 import { DeleteTrainingButton } from "@/components/DeleteTrainingButton";
 import { LogisticsMessage } from "@/components/LogisticsMessage";
+import { ConfirmationMessage } from "@/components/ConfirmationMessage";
 import { FollowUpMessage } from "@/components/FollowUpMessage";
 import { ENCUESTA_CLIENTE, ENCUESTA_CLIENTE_TB, SEGUIMIENTO_20, CIERRE_30 } from "@/lib/templates";
 import { OwnerSelect } from "@/components/OwnerSelect";
@@ -205,6 +206,21 @@ export default async function TrainingDetailPage({
               status={training.mensaje_logistica}
             />
           )}
+          {!isTeamBuilding && (
+            <ConfirmationMessage
+              trainingId={training.id}
+              data={{
+                clientContact: training.client_contact ?? "",
+                officialName: training.official_name ?? "",
+                shortName: training.short_name ?? "",
+                sessions,
+                venue: training.venue ?? "",
+                logisticsInfo: training.logistics_info ?? "",
+              }}
+              whatsapp={training.clients.whatsapp}
+              status={training.mensaje_confirmacion ?? "Pendiente"}
+            />
+          )}
           <LinkChip label="Carpeta Drive" url={training.drive_folder_url} onSave={save("drive_folder_url")} />
           {!isTeamBuilding && (
             <>
@@ -241,6 +257,20 @@ export default async function TrainingDetailPage({
             <div>
               <p className="text-xs font-semibold text-slate-400">Fecha límite de materiales</p>
               <EditableField value={training.materials_deadline ?? ""} type="date" onSave={save("materials_deadline")} />
+            </div>
+          )}
+          {!isTeamBuilding && (
+            <div className="sm:col-span-2 lg:col-span-3">
+              <p className="text-xs font-semibold text-slate-400" title="Dirección, sala o área y referencia para llegar. Alimenta el mensaje de confirmación.">
+                Sede / dirección
+              </p>
+              <EditableField
+                value={training.venue ?? ""}
+                onSave={save("venue")}
+                multiline
+                rows={3}
+                placeholder={"Dirección completa (calle y número, colonia, ciudad)\nSala o área\nReferencia para llegar"}
+              />
             </div>
           )}
           <div>

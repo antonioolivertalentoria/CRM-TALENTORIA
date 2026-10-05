@@ -55,6 +55,10 @@ export type Training = {
   postventa_comercial: string;
   mensaje_logistica: string;
   logistics_info: string;
+  /** Sede: dirección, sala o área y referencia (migración 020; falta si no se ha corrido). */
+  venue?: string;
+  /** Mensaje de confirmación al cliente (migración 020; falta si no se ha corrido). */
+  mensaje_confirmacion?: string;
   contenido_facilitador: string;
   lista_participantes: string;
   impresion_manuales: string;

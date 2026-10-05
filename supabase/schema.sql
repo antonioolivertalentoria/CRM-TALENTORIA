@@ -83,6 +83,8 @@ create table public.trainings (
   seguimiento_30 text not null default 'Pendiente',   -- Seguimiento día 30 y cierre de grupo WA
   mensaje_logistica text not null default 'Pendiente', -- Mensaje de logística (WhatsApp) antes del curso
   logistics_info text not null default '',     -- Respuestas logísticas confirmadas por el cliente
+  venue text not null default '',              -- Sede: dirección, sala o área y referencia para llegar (migración 020)
+  mensaje_confirmacion text not null default 'Pendiente', -- Mensaje de confirmación (WhatsApp) 2 días antes (migración 020)
   -- Checklist previo al curso (Pendiente | Listo | No aplica)
   contenido_facilitador text not null default 'Pendiente', -- Contenido completo al facilitador
   lista_participantes text not null default 'Pendiente',   -- Lista confirmada con nombres completos

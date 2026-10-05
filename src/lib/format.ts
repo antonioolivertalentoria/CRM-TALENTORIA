@@ -12,6 +12,21 @@ export function formatDate(iso: string | null): string {
   return `${DAYS[date.getDay()]} ${d} ${MONTHS[m - 1]} ${y}`;
 }
 
+const LONG_DAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const LONG_MONTHS = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/** "2026-10-07" → "miércoles 7 de octubre". */
+export function formatLongDate(iso: string | null): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const date = new Date(y, m - 1, d);
+  return `${LONG_DAYS[date.getDay()]} ${d} de ${LONG_MONTHS[m - 1]}`;
+}
+
 export function formatTime(t: string | null): string {
   if (!t) return "";
   return t.slice(0, 5);

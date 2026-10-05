@@ -58,6 +58,8 @@ function createInitialData(): DemoStore {
     seguimiento_30: "Pendiente",
     mensaje_logistica: "Pendiente",
     logistics_info: "",
+    venue: "",
+    mensaje_confirmacion: "Pendiente",
     contenido_facilitador: "Pendiente",
     lista_participantes: "Pendiente",
     impresion_manuales: "Pendiente",
