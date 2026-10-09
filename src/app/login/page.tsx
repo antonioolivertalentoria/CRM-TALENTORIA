@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useActionState } from "react";
 import { login } from "./actions";
 
@@ -59,6 +60,11 @@ export default function LoginPage() {
               placeholder="••••••••"
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30"
             />
+            <div className="mt-1.5 text-right">
+              <Link href="/recuperar" className="text-xs font-medium text-brand-cyan-dark hover:underline">
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
           </div>
 
           {state?.error && (

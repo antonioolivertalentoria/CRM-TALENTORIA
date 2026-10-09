@@ -42,6 +42,10 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isLogin = request.nextUrl.pathname.startsWith("/login");
+  // Recuperar contraseña: se entra sin sesión (y /auth/confirm es quien la abre)
+  const isRecovery =
+    request.nextUrl.pathname.startsWith("/recuperar") || request.nextUrl.pathname.startsWith("/auth/confirm");
+  if (isRecovery) return response;
 
   if (!user && !isLogin) {
     const url = request.nextUrl.clone();
@@ -52,7 +56,8 @@ export async function proxy(request: NextRequest) {
   // base ya le niega lo demás; esto evita que llegue a pantallas vacías.
   const guest = user?.app_metadata?.role === "invitado";
   const path = request.nextUrl.pathname;
-  const guestAllowed = path.startsWith("/marketing") || path.startsWith("/tareas");
+  const guestAllowed =
+    path.startsWith("/marketing") || path.startsWith("/tareas") || path.startsWith("/cambiar-contrasena");
 
   if (user && isLogin) {
     const url = request.nextUrl.clone();

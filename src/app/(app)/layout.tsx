@@ -52,6 +52,9 @@ export default async function AppLayout({
           <p className="truncate text-sm font-medium">{displayName}</p>
           <p className="truncate text-xs text-white/50">{user?.email}</p>
           {guest && <p className="mt-1 text-[11px] font-semibold text-brand-cyan">Usuario invitado</p>}
+          <Link href="/cambiar-contrasena" className="mt-1.5 inline-block text-[11px] text-white/60 hover:text-white hover:underline">
+            Cambiar contraseña
+          </Link>
           <form action={logout} className="mt-3">
             <button
               type="submit"
