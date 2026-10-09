@@ -5,10 +5,22 @@ import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
 import { addDays, formatDate, todayISO } from "@/lib/format";
-import { CHECKLIST_FIELDS, COMMERCIAL_OWNER, quoteFolder } from "@/lib/constants";
+import {
+  CHECKLIST_FIELDS,
+  COMMERCIAL_OWNER,
+  FINANCE_OWNER,
+  LEAD_CHANNELS,
+  MARKETING_COLLABORATOR,
+  MARKETING_DIRECTOR,
+  MARKETING_OWNER,
+  SEND_STATUSES,
+  SEND_TYPES,
+  quoteFolder,
+} from "@/lib/constants";
+import { NEGATIVE_RESULTS, POSITIVE_RESULTS, addWorkingDays, findDef, loopRange } from "@/lib/marketing-flows";
 import { isPast, syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
 import { DEFAULT_TZ, normalizeTz, tzShort } from "@/lib/timezones";
-import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
+import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, MarketingLead, MarketingPage, MarketingSend, MarketingStep, MarketingUrl, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
 
@@ -2909,4 +2921,749 @@ export async function getRecruitmentAttachmentUrlAction(
 
   if (error || !data) return { error: error?.message ?? "No se pudo abrir el archivo." };
   return { url: data.signedUrl };
+}
+
+// ================= Marketing (migración 021) =================
+
+const MARKETING_MISSING = "Falta correr la migración 021 en la base (módulo de marketing).";
+
+function revalidateMarketing(projectId?: string) {
+  if (projectId) revalidatePath(`/marketing/${projectId}`);
+  revalidatePath("/marketing");
+  revalidatePath("/marketing/leads");
+  revalidatePath("/tareas");
+}
+
+/** "2026-11" o "2026-11-17" → "2026-11-01" (null si viene vacío). */
+function toPeriod(value: string): string | null {
+  const v = value.trim();
+  if (!/^\d{4}-\d{2}/.test(v)) return null;
+  return `${v.slice(0, 7)}-01`;
+}
+
+export async function createMarketingProjectAction(
+  _prev: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const kind = str(formData, "kind") === "SEO" ? "SEO" : "Mailing";
+  const today = todayISO();
+  const name =
+    str(formData, "name") ||
+    (kind === "SEO" ? `Proyecto SEO ${today.slice(0, 4)}` : "Mailing mensual");
+  const startMonth = toPeriod(str(formData, "start_month")) ?? `${today.slice(0, 7)}-01`;
+
+  const supabase = await createSupabase();
+  const { data, error } = await supabase
+    .from("marketing_projects")
+    .insert({
+      kind,
+      name,
+      status: "Activo",
+      owner: str(formData, "owner") || MARKETING_OWNER,
+      director: str(formData, "director") || MARKETING_DIRECTOR,
+      collaborator: str(formData, "collaborator") || MARKETING_COLLABORATOR,
+      finance: FINANCE_OWNER,
+      started_at: today,
+      start_month: startMonth,
+      end_month: toPeriod(str(formData, "end_month")),
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("marketing_projects")) return { error: MARKETING_MISSING };
+    return { error: `No se pudo crear el proyecto: ${error?.message}` };
+  }
+  await logActivity(supabase, "creó", "marketing", data.id, `abrió el proyecto de marketing "${name}"`);
+  revalidateMarketing();
+  redirect(`/marketing/${data.id}`);
+}
+
+const MARKETING_PROJECT_FIELDS = new Set([
+  "name",
+  "status",
+  "owner",
+  "director",
+  "collaborator",
+  "finance",
+  "started_at",
+  "start_month",
+  "end_month",
+  "priorities",
+  "drive_folder_url",
+  "dashboard_url",
+  "slack_channel_url",
+  "notes",
+  "internal_notes",
+]);
+
+export async function updateMarketingProjectField(
+  id: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!MARKETING_PROJECT_FIELDS.has(field)) return { error: "Campo no permitido." };
+  let parsed: string | null = value;
+  if (field === "start_month") {
+    parsed = toPeriod(value);
+    if (!parsed) return { error: "Elige el mes de arranque." };
+  }
+  if (field === "end_month") parsed = toPeriod(value);
+  if (field === "started_at" && !value) return { error: "La fecha de arranque es obligatoria." };
+
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("marketing_projects").update({ [field]: parsed }).eq("id", id);
+  if (error) return { error: error.message };
+  if (field === "status") {
+    await logActivity(supabase, "cambió", "marketing", id, `puso el proyecto de marketing en ${value}`);
+  }
+  revalidateMarketing(id);
+  return null;
+}
+
+export async function deleteMarketingProjectAction(id: string) {
+  const supabase = await createSupabase();
+  const { data: p } = await supabase.from("marketing_projects").select("name").eq("id", id).maybeSingle();
+  await supabase.from("marketing_projects").delete().eq("id", id);
+  await logActivity(
+    supabase,
+    "eliminó",
+    "marketing",
+    id,
+    `eliminó el proyecto de marketing "${(p as { name: string } | null)?.name ?? ""}"`
+  );
+  revalidateMarketing();
+  redirect("/marketing");
+}
+
+const MARKETING_STEP_FIELDS = new Set(["status", "result", "due_date", "evidence_url", "notes", "blocker"]);
+
+type StepPayload = Record<string, string | number | null>;
+
+async function upsertMarketingStep(
+  supabase: Awaited<ReturnType<typeof createSupabase>>,
+  projectId: string,
+  stepKey: string,
+  payload: StepPayload
+) {
+  return supabase
+    .from("marketing_steps")
+    .upsert({ project_id: projectId, step_key: stepKey, ...payload }, { onConflict: "project_id,step_key" });
+}
+
+/**
+ * Guarda lo capturado de un paso de los mapas de Marketing. Los rombos
+ * hacen lo que dice el diagrama: un NO (cambios solicitados, prueba que
+ * falla, dominio no autorizado, nueva práctica) reabre los pasos desde el
+ * que corresponde, con fecha nueva, y cuenta una ronda más.
+ */
+export async function updateMarketingStepAction(
+  projectId: string,
+  stepKey: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!MARKETING_STEP_FIELDS.has(field)) return { error: "Campo no permitido." };
+
+  const supabase = await createSupabase();
+  const { data: proj } = await supabase
+    .from("marketing_projects")
+    .select("id, kind")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!proj) return { error: MARKETING_MISSING };
+  const kind = (proj as { kind: string }).kind;
+  const def = findDef(stepKey, kind);
+  if (!def) return { error: "Paso desconocido." };
+
+  const today = todayISO();
+  const actor = await currentUserName(supabase);
+  const { data: existingData } = await supabase
+    .from("marketing_steps")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("step_key", stepKey)
+    .maybeSingle();
+  const existing = existingData as MarketingStep | null;
+
+  const pageId = stepKey.startsWith("p:") ? stepKey.split(":")[1] : null;
+  const closing =
+    (field === "status" && (value === "Listo" || value === "No aplica")) ||
+    (field === "result" && POSITIVE_RESULTS.has(value));
+
+  // Paso 5 de una página: se decide eligiendo la arquitectura
+  if (def.id === "p5" && closing && pageId) {
+    const { data: page } = await supabase
+      .from("marketing_pages")
+      .select("architecture")
+      .eq("id", pageId)
+      .maybeSingle();
+    if (!page || (page as { architecture: string }).architecture === "Por decidir") {
+      return { error: "Primero elige la arquitectura en la ficha de la página (paso 5)." };
+    }
+  }
+
+  // ---- Rombo en NO: se regresa al paso que indica el mapa ----
+  if (field === "result" && NEGATIVE_RESULTS.has(value)) {
+    const range = loopRange(stepKey, kind);
+    if (range.length === 0) return { error: "Este paso no tiene a dónde regresar." };
+    const redoDays = def.kind === "validacion" ? 10 : 1;
+    for (const key of range) {
+      const isSelf = key === stepKey;
+      const payload: StepPayload = { status: "Pendiente", result: "", completed_at: null, updated_by: actor };
+      if (key === range[0]) payload.due_date = addWorkingDays(today, redoDays);
+      if (isSelf) {
+        payload.rounds = (existing?.rounds ?? 0) + 1;
+        if (range.length > 1) payload.due_date = addWorkingDays(today, redoDays + 1);
+      }
+      const { error } = await upsertMarketingStep(supabase, projectId, key, payload);
+      if (error) return { error: error.message.includes("marketing_steps") ? MARKETING_MISSING : error.message };
+    }
+    // Dominio no autorizado: la arquitectura se vuelve a decidir
+    if (def.id === "p5d" && pageId) {
+      await supabase.from("marketing_pages").update({ architecture: "Por decidir" }).eq("id", pageId);
+    }
+    await logActivity(
+      supabase,
+      "cambió",
+      "marketing",
+      projectId,
+      `marcó "${def.title}" como ${value}: regresa al paso ${findDef(range[0], kind)?.no ?? ""}`
+    );
+    revalidateMarketing(projectId);
+    return null;
+  }
+
+  const payload: StepPayload = { updated_by: actor };
+  if (field === "status") {
+    payload.status = value;
+    payload.completed_at = closing ? (existing?.completed_at ?? today) : null;
+    if (value === "Pendiente" || value === "En proceso") payload.result = "";
+  } else if (field === "result") {
+    if (!value || value === "Pendiente") {
+      payload.result = "";
+      payload.status = "Pendiente";
+      payload.completed_at = null;
+    } else {
+      payload.result = value;
+      payload.status = "Listo";
+      // "Corregido" conserva la fecha en que se hizo la auditoría
+      payload.completed_at = value === "Corregido" ? (existing?.completed_at ?? today) : today;
+    }
+  } else if (field === "due_date") {
+    payload.due_date = value || null;
+  } else if (field === "blocker") {
+    payload.blocker = value.trim();
+    payload.blocker_at = value.trim() ? (existing?.blocker_at ?? today) : null;
+  } else {
+    payload[field] = value;
+  }
+
+  const { error } = await upsertMarketingStep(supabase, projectId, stepKey, payload);
+  if (error) return { error: error.message.includes("marketing_steps") ? MARKETING_MISSING : error.message };
+
+  // Informes de los días 15 y 27: los envíos que ya salieron quedan "Reportado"
+  // (el del 27 usa los datos al corte; lo posterior pasa al informe siguiente).
+  if (closing && (def.id === "s12" || def.id === "s14")) {
+    const period = `${stepKey.slice(0, 7)}-01`;
+    await supabase
+      .from("marketing_sends")
+      .update({ status: "Reportado" })
+      .eq("project_id", projectId)
+      .eq("period", period)
+      .eq("status", "Enviado")
+      .lte("send_date", today);
+  }
+  // Cierre de la URL: la página queda cerrada (y se reabre si se reabre el paso)
+  if (def.id === "pc" && pageId && field === "status") {
+    await supabase
+      .from("marketing_pages")
+      .update({ status: closing ? "Cerrada" : "En curso" })
+      .eq("id", pageId);
+  }
+
+  if (field === "status" || field === "result") {
+    await logActivity(
+      supabase,
+      closing ? "completó" : "cambió",
+      "marketing",
+      projectId,
+      `marcó "${def.title}" como ${value || "Pendiente"}`
+    );
+  } else if (field === "blocker" && value.trim()) {
+    await logActivity(
+      supabase,
+      "cambió",
+      "marketing",
+      projectId,
+      `registró un bloqueo en "${def.title}": ${value.trim()}`
+    );
+  }
+  revalidateMarketing(projectId);
+  return null;
+}
+
+/** Palomita desde "Mis tareas": cierra el paso (con el sí del rombo, si lo tiene). */
+export async function completeMarketingStepAction(
+  projectId: string,
+  stepKey: string,
+  result?: string
+): Promise<FormState> {
+  return result
+    ? updateMarketingStepAction(projectId, stepKey, "result", result)
+    : updateMarketingStepAction(projectId, stepKey, "status", "Listo");
+}
+
+// ---------------- Mailing: envíos ----------------
+
+export async function addMarketingSendAction(fields: {
+  projectId: string;
+  period: string;
+  sendDate: string | null;
+  type: string;
+  base: string;
+  subject: string;
+}): Promise<{ error: string } | { send: MarketingSend }> {
+  const period = toPeriod(fields.period);
+  if (!period) return { error: "Falta el mes del envío." };
+  if (!fields.subject.trim()) return { error: "Escribe el asunto o tema del envío." };
+
+  const supabase = await createSupabase();
+  const { count } = await supabase
+    .from("marketing_sends")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", fields.projectId)
+    .eq("period", period);
+
+  const { data, error } = await supabase
+    .from("marketing_sends")
+    .insert({
+      project_id: fields.projectId,
+      period,
+      send_date: fields.sendDate || null,
+      type: (SEND_TYPES as readonly string[]).includes(fields.type) ? fields.type : "Correo",
+      base: fields.base.trim(),
+      subject: fields.subject.trim(),
+      status: "En preparación",
+      position: count ?? 0,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("marketing_sends")) return { error: MARKETING_MISSING };
+    return { error: error?.message ?? "No se pudo agregar el envío." };
+  }
+  revalidateMarketing(fields.projectId);
+  return { send: data as MarketingSend };
+}
+
+const SEND_FIELDS = new Set([
+  "send_date",
+  "send_time",
+  "type",
+  "base",
+  "subject",
+  "objective",
+  "cta",
+  "resource",
+  "content_url",
+  "status",
+  "evidence_url",
+  "incidents",
+  "base_size",
+  "delivered",
+  "bounces",
+  "unsubscribes",
+  "clicks",
+  "signups",
+  "replies",
+  "leads",
+  "notes",
+]);
+const SEND_NUMERIC = new Set([
+  "base_size",
+  "delivered",
+  "bounces",
+  "unsubscribes",
+  "clicks",
+  "signups",
+  "replies",
+  "leads",
+]);
+
+/** Fechas que se sellan solas al mover el estado de un envío. */
+function sendStamps(status: string): Record<string, string> {
+  const today = todayISO();
+  if (status === "Programado") return { scheduled_at: today };
+  if (status === "Enviado") return { sent_at: today };
+  return {};
+}
+
+export async function updateMarketingSendField(
+  id: string,
+  projectId: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!SEND_FIELDS.has(field)) return { error: "Campo no permitido." };
+  let parsed: string | number | null = value;
+  if (SEND_NUMERIC.has(field)) {
+    parsed = value === "" ? null : Number(value);
+    if (parsed !== null && Number.isNaN(parsed)) parsed = null;
+  }
+  if ((field === "send_date" || field === "send_time") && !value) parsed = null;
+
+  const update: Record<string, string | number | null> = { [field]: parsed };
+  if (field === "status") Object.assign(update, sendStamps(value));
+
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("marketing_sends").update(update).eq("id", id);
+  if (error) return { error: error.message };
+  if (field === "status") {
+    const { data: s } = await supabase
+      .from("marketing_sends")
+      .select("subject, type")
+      .eq("id", id)
+      .maybeSingle();
+    const send = s as { subject: string; type: string } | null;
+    await logActivity(
+      supabase,
+      "cambió",
+      "marketing",
+      projectId,
+      `puso el envío "${send?.subject || send?.type || ""}" en ${value}`
+    );
+  }
+  revalidateMarketing(projectId);
+  return null;
+}
+
+/** Pasa todos los envíos del mes de una etapa a la siguiente (tarea agrupada). */
+export async function advanceMarketingSendsAction(
+  projectId: string,
+  period: string,
+  from: string,
+  to: string
+): Promise<FormState> {
+  const statuses = SEND_STATUSES as readonly string[];
+  if (statuses.indexOf(from) < 0 || statuses.indexOf(to) !== statuses.indexOf(from) + 1) {
+    return { error: "Cambio de estado no permitido." };
+  }
+
+  const supabase = await createSupabase();
+  const { data, error } = await supabase
+    .from("marketing_sends")
+    .update({ status: to, ...sendStamps(to) })
+    .eq("project_id", projectId)
+    .eq("period", period)
+    .eq("status", from)
+    .select("id");
+  if (error) return { error: error.message };
+  await logActivity(
+    supabase,
+    "cambió",
+    "marketing",
+    projectId,
+    `pasó ${(data ?? []).length} envío(s) de "${from}" a "${to}"`
+  );
+  revalidateMarketing(projectId);
+  return null;
+}
+
+export async function deleteMarketingSendAction(id: string, projectId: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("marketing_sends").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidateMarketing(projectId);
+  return null;
+}
+
+/** Criterios del bono y notas de un mes (marketing_periods). */
+export async function updateMarketingPeriodField(
+  projectId: string,
+  period: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (field !== "bonus_criteria" && field !== "notes") return { error: "Campo no permitido." };
+  const p = toPeriod(period);
+  if (!p) return { error: "Mes inválido." };
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("marketing_periods")
+    .upsert({ project_id: projectId, period: p, [field]: value }, { onConflict: "project_id,period" });
+  if (error) return { error: error.message };
+  revalidateMarketing(projectId);
+  return null;
+}
+
+// ---------------- Leads (mailing paso 10 y formularios SEO) ----------------
+
+export async function addMarketingLeadAction(fields: {
+  projectId: string | null;
+  channel: string;
+  leadDate: string;
+  name: string;
+  email: string;
+  company: string;
+  source: string;
+  segment: string;
+  leadType: string;
+}): Promise<{ error: string } | { lead: MarketingLead }> {
+  const email = fields.email.trim().toLowerCase();
+  if (!email && !fields.name.trim()) return { error: "Escribe al menos el correo o el nombre." };
+
+  const supabase = await createSupabase();
+  // Depurar duplicados: si el correo ya estaba registrado, se marca
+  let duplicate = false;
+  if (email) {
+    const { data: same } = await supabase.from("marketing_leads").select("id").eq("email", email).limit(1);
+    duplicate = (same ?? []).length > 0;
+  }
+
+  const { data, error } = await supabase
+    .from("marketing_leads")
+    .insert({
+      project_id: fields.projectId || null,
+      channel: (LEAD_CHANNELS as readonly string[]).includes(fields.channel) ? fields.channel : "Mailing",
+      lead_date: fields.leadDate || todayISO(),
+      name: fields.name.trim(),
+      email,
+      company: fields.company.trim(),
+      source: fields.source.trim(),
+      segment: fields.segment.trim(),
+      lead_type: fields.leadType === "Oportunidad comercial" ? "Oportunidad comercial" : "Suscripción",
+      responsible: await currentUserName(supabase),
+      duplicate,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("marketing_leads")) return { error: MARKETING_MISSING };
+    return { error: error?.message ?? "No se pudo registrar el lead." };
+  }
+  revalidateMarketing(fields.projectId ?? undefined);
+  return { lead: data as MarketingLead };
+}
+
+const LEAD_FIELDS = new Set([
+  "channel",
+  "lead_date",
+  "name",
+  "email",
+  "company",
+  "job_title",
+  "source",
+  "segment",
+  "consent",
+  "lead_type",
+  "commercial_action",
+  "responsible",
+  "next_step",
+  "duplicate",
+  "sent_to_commercial",
+  "notes",
+  "project_id",
+]);
+
+export async function updateMarketingLeadField(id: string, field: string, value: string): Promise<FormState> {
+  if (!LEAD_FIELDS.has(field)) return { error: "Campo no permitido." };
+  let parsed: string | boolean | null = value;
+  if (field === "duplicate") parsed = value === "true";
+  if (field === "email") parsed = value.trim().toLowerCase();
+  if ((field === "sent_to_commercial" || field === "project_id") && !value) parsed = null;
+  if (field === "lead_date" && !value) return { error: "La fecha es obligatoria." };
+
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("marketing_leads").update({ [field]: parsed }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidateMarketing();
+  return null;
+}
+
+/** El lead ya se le pasó a Comercial por Slack: se registra hoy. */
+export async function markMarketingLeadSentAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase
+    .from("marketing_leads")
+    .update({ sent_to_commercial: todayISO() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  await logActivity(supabase, "completó", "marketing", id, "pasó un lead a Comercial por Slack");
+  revalidateMarketing();
+  return null;
+}
+
+export async function deleteMarketingLeadAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("marketing_leads").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidateMarketing();
+  return null;
+}
+
+// ---------------- SEO: páginas e inventario de URL ----------------
+
+export async function addMarketingPageAction(fields: {
+  projectId: string;
+  name: string;
+  service: string;
+  city: string;
+}): Promise<{ error: string } | { page: MarketingPage }> {
+  const name = fields.name.trim();
+  if (!name) return { error: "Ponle nombre a la página, ej. Team building CDMX." };
+  const supabase = await createSupabase();
+  const { count } = await supabase
+    .from("marketing_pages")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", fields.projectId);
+  const { data, error } = await supabase
+    .from("marketing_pages")
+    .insert({
+      project_id: fields.projectId,
+      name,
+      service: fields.service.trim(),
+      city: fields.city.trim() || "CDMX",
+      architecture: "Por decidir",
+      status: "En curso",
+      position: count ?? 0,
+    })
+    .select("*")
+    .single();
+  if (error || !data) {
+    if (error?.message.includes("marketing_pages")) return { error: MARKETING_MISSING };
+    return { error: error?.message ?? "No se pudo agregar la página." };
+  }
+  await logActivity(supabase, "creó", "marketing", fields.projectId, `agregó la página "${name}"`);
+  revalidateMarketing(fields.projectId);
+  return { page: data as MarketingPage };
+}
+
+const PAGE_FIELDS = new Set([
+  "name",
+  "service",
+  "city",
+  "url",
+  "reference_url",
+  "audience",
+  "offer",
+  "objective",
+  "cta",
+  "main_query",
+  "architecture",
+  "domain",
+  "target_date",
+  "status",
+  "data_url",
+  "lead_origin",
+  "notes",
+]);
+
+export async function updateMarketingPageField(
+  id: string,
+  projectId: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!PAGE_FIELDS.has(field)) return { error: "Campo no permitido." };
+  const parsed = field === "target_date" && !value ? null : value;
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("marketing_pages").update({ [field]: parsed }).eq("id", id);
+  if (error) return { error: error.message };
+
+  // Paso 5: elegir la arquitectura ES la decisión; regresar a "Por decidir" la reabre
+  if (field === "architecture") {
+    const decided = value !== "Por decidir";
+    await upsertMarketingStep(supabase, projectId, `p:${id}:p5`, {
+      status: decided ? "Listo" : "Pendiente",
+      completed_at: decided ? todayISO() : null,
+      updated_by: await currentUserName(supabase),
+    });
+  }
+  revalidateMarketing(projectId);
+  return null;
+}
+
+export async function deleteMarketingPageAction(id: string, projectId: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { data: page } = await supabase.from("marketing_pages").select("name").eq("id", id).maybeSingle();
+  const { error } = await supabase.from("marketing_pages").delete().eq("id", id);
+  if (error) return { error: error.message };
+  await supabase.from("marketing_steps").delete().eq("project_id", projectId).like("step_key", `p:${id}:%`);
+  await logActivity(
+    supabase,
+    "eliminó",
+    "marketing",
+    projectId,
+    `eliminó la página "${(page as { name: string } | null)?.name ?? ""}"`
+  );
+  revalidateMarketing(projectId);
+  return null;
+}
+
+export async function addMarketingUrlAction(fields: {
+  projectId: string;
+  url: string;
+  service: string;
+  city: string;
+}): Promise<{ error: string } | { url: MarketingUrl }> {
+  const url = fields.url.trim();
+  if (!url) return { error: "Pega la URL." };
+  const supabase = await createSupabase();
+  const { data, error } = await supabase
+    .from("marketing_urls")
+    .insert({
+      project_id: fields.projectId,
+      url,
+      service: fields.service.trim(),
+      city: fields.city.trim(),
+      indexing: "Por revisar",
+      last_updated: todayISO(),
+    })
+    .select("*")
+    .single();
+  if (error || !data) {
+    if (error?.message.includes("marketing_urls")) return { error: MARKETING_MISSING };
+    return { error: error?.message ?? "No se pudo agregar la URL." };
+  }
+  revalidateMarketing(fields.projectId);
+  return { url: data as MarketingUrl };
+}
+
+const URL_FIELDS = new Set([
+  "url",
+  "service",
+  "city",
+  "purpose",
+  "indexing",
+  "form",
+  "responsible",
+  "last_updated",
+  "improvement",
+  "notes",
+]);
+
+export async function updateMarketingUrlField(
+  id: string,
+  projectId: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!URL_FIELDS.has(field)) return { error: "Campo no permitido." };
+  const parsed = field === "last_updated" && !value ? null : value;
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("marketing_urls").update({ [field]: parsed }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidateMarketing(projectId);
+  return null;
+}
+
+export async function deleteMarketingUrlAction(id: string, projectId: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("marketing_urls").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidateMarketing(projectId);
+  return null;
 }

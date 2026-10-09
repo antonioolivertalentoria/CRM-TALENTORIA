@@ -85,6 +85,105 @@ const DEFAULTS: Record<string, Row> = {
     status: "Pendiente",
     completed_at: null,
   },
+  // Marketing (migración 021): lo que la base pondría por defecto
+  marketing_projects: {
+    status: "Activo",
+    finance: "Eduardo Évora",
+    end_month: null,
+    priorities: "",
+    drive_folder_url: "",
+    dashboard_url: "",
+    slack_channel_url: "",
+    notes: "",
+    internal_notes: "",
+  },
+  marketing_steps: {
+    status: "Pendiente",
+    result: "",
+    due_date: null,
+    evidence_url: "",
+    notes: "",
+    blocker: "",
+    blocker_at: null,
+    completed_at: null,
+    rounds: 0,
+    updated_by: "",
+  },
+  marketing_periods: { bonus_criteria: "", notes: "" },
+  marketing_sends: {
+    send_date: null,
+    send_time: null,
+    type: "Correo",
+    base: "",
+    subject: "",
+    objective: "",
+    cta: "",
+    resource: "",
+    content_url: "",
+    status: "En preparación",
+    evidence_url: "",
+    incidents: "",
+    base_size: null,
+    delivered: null,
+    bounces: null,
+    unsubscribes: null,
+    clicks: null,
+    signups: null,
+    replies: null,
+    leads: null,
+    scheduled_at: null,
+    sent_at: null,
+    notes: "",
+    position: 0,
+  },
+  marketing_leads: {
+    project_id: null,
+    channel: "Mailing",
+    name: "",
+    email: "",
+    company: "",
+    job_title: "",
+    source: "",
+    segment: "",
+    consent: "Sí",
+    lead_type: "Suscripción",
+    commercial_action: "",
+    responsible: "",
+    next_step: "",
+    duplicate: false,
+    sent_to_commercial: null,
+    notes: "",
+  },
+  marketing_pages: {
+    service: "",
+    city: "CDMX",
+    url: "",
+    reference_url: "",
+    audience: "",
+    offer: "",
+    objective: "",
+    cta: "",
+    main_query: "",
+    architecture: "Por decidir",
+    domain: "",
+    target_date: null,
+    status: "En curso",
+    data_url: "",
+    lead_origin: "Pendiente",
+    notes: "",
+    position: 0,
+  },
+  marketing_urls: {
+    service: "",
+    city: "",
+    purpose: "",
+    indexing: "Por revisar",
+    form: "",
+    responsible: "",
+    last_updated: null,
+    improvement: "",
+    notes: "",
+  },
 };
 
 function compare(a: any, b: any): number {
@@ -173,6 +272,17 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
     }
     return this;
   }
+  lte(field: string, value: any) {
+    this.filters.push((r) => r[field] !== null && r[field] !== undefined && String(r[field]) <= String(value));
+    return this;
+  }
+  like(field: string, pattern: string) {
+    const re = new RegExp(
+      "^" + pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*").replace(/_/g, ".") + "$"
+    );
+    this.filters.push((r) => re.test(String(r[field] ?? "")));
+    return this;
+  }
   in(field: string, values: any[]) {
     const set = new Set(values.map(String));
     this.filters.push((r) => set.has(String(r[field])));
@@ -248,8 +358,10 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
     if (this.mode === "upsert") {
       const items = (Array.isArray(this.payload) ? this.payload : [this.payload]) as Row[];
       const saved = items.map((item) => {
-        const existing = rows.find(
-          (r) => String(r[this.conflictField]) === String(item[this.conflictField])
+        // onConflict puede ser compuesto: "project_id,step_key"
+        const fields = this.conflictField.split(",").map((f) => f.trim());
+        const existing = rows.find((r) =>
+          fields.every((f) => String(r[f]) === String(item[f]))
         );
         if (existing) {
           Object.assign(existing, item, { updated_at: now });

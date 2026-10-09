@@ -48,9 +48,21 @@ export async function proxy(request: NextRequest) {
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
+  // Usuario invitado (migración 022): solo ve Marketing y sus tareas. La
+  // base ya le niega lo demás; esto evita que llegue a pantallas vacías.
+  const guest = user?.app_metadata?.role === "invitado";
+  const path = request.nextUrl.pathname;
+  const guestAllowed = path.startsWith("/marketing") || path.startsWith("/tareas");
+
   if (user && isLogin) {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = guest ? "/marketing" : "/";
+    return NextResponse.redirect(url);
+  }
+  if (user && guest && !guestAllowed) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/marketing";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

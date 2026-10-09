@@ -16,6 +16,10 @@ import {
   updateRecruitmentField,
   stampRecruitmentDateAction,
   updateCandidateField,
+  completeMarketingStepAction,
+  advanceMarketingSendsAction,
+  updateMarketingSendField,
+  markMarketingLeadSentAction,
   addTimeEntryAction,
   deleteTimeEntryAction,
   addSubtaskAction,
@@ -602,6 +606,7 @@ const KIND_STYLE: Record<string, string> = {
   Petición: "bg-orange-100 text-orange-700",
   Consultoría: "bg-indigo-100 text-indigo-700",
   Reclutamiento: "bg-fuchsia-100 text-fuchsia-700",
+  Marketing: "bg-teal-100 text-teal-700",
 };
 
 export function TasksList({
@@ -752,6 +757,14 @@ export function TasksList({
         return stampRecruitmentDateAction(c.vacancyId, c.field);
       } else if (c.type === "recruitment_candidate") {
         return updateCandidateField(c.candidateId, c.vacancyId, c.field, c.value);
+      } else if (c.type === "marketing_step") {
+        return completeMarketingStepAction(c.projectId, c.stepKey, c.result);
+      } else if (c.type === "marketing_sends") {
+        return advanceMarketingSendsAction(c.projectId, c.period, c.from, c.to);
+      } else if (c.type === "marketing_send") {
+        return updateMarketingSendField(c.sendId, c.projectId, "status", c.value);
+      } else if (c.type === "marketing_lead") {
+        return markMarketingLeadSentAction(c.leadId);
       }
       return completeCustomTaskAction(c.taskId);
     }, () => dropProgress(task.key));
@@ -931,6 +944,14 @@ export function TasksList({
                             {t.trainingName}
                             {t.clientName ? ` · ${t.clientName}` : ""}
                           </Link>
+                        ) : t.href ? (
+                          <p className="text-xs text-slate-400">
+                            <Link href={t.href} className="hover:text-brand-cyan-dark hover:underline">
+                              {t.trainingName}
+                              {t.clientName ? ` · ${t.clientName}` : ""}
+                            </Link>
+                            {t.details ? ` — ${t.details}` : ""}
+                          </p>
                         ) : (
                           <p className="text-xs text-slate-400">
                             {t.clientName}

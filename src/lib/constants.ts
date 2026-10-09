@@ -257,3 +257,80 @@ STATUS_COLORS["No aprobada"] = "bg-red-500";
 STATUS_COLORS["Enviadas"] = "bg-emerald-500";
 STATUS_COLORS["Sí"] = "bg-emerald-500";
 STATUS_COLORS["No"] = "bg-red-500";
+
+// ---------------- Marketing (migración 021) ----------------
+
+// Quien ocupa cada rol de los mapas de Mailing y SEO cuando se abre un
+// proyecto. "Óscar" en los documentos es el Colaborador responsable: un
+// usuario invitado mientras se define si entra a trabajar.
+export const MARKETING_OWNER = "Antonio Oliver";
+export const MARKETING_DIRECTOR = "Perla Torres";
+export const MARKETING_COLLABORATOR = "Colaborador responsable";
+
+export const MARKETING_KINDS = ["Mailing", "SEO"] as const;
+
+export const MARKETING_PROJECT_STATUSES = ["Activo", "En pausa", "Cerrado"] as const;
+
+export const MARKETING_STEP_STATUSES = ["Pendiente", "En proceso", "Listo", "No aplica"] as const;
+
+// Estados de cada envío (criterios de cierre del mapa de mailing)
+export const SEND_STATUSES = [
+  "En preparación",
+  "Pendiente de aprobación",
+  "Aprobado",
+  "Probado",
+  "Programado",
+  "Enviado",
+  "Reportado",
+] as const;
+
+export const SEND_TYPES = ["Correo", "Masterclass", "Recurso"] as const;
+
+export const LEAD_TYPES = ["Suscripción", "Oportunidad comercial"] as const;
+export const LEAD_CHANNELS = ["Mailing", "SEO", "Otro"] as const;
+export const CONSENT_STATUSES = ["Sí", "Por confirmar", "No"] as const;
+
+export const PAGE_ARCHITECTURES = [
+  "Por decidir",
+  "Mejorar URL existente",
+  "Nueva URL en sitio principal",
+  "Dominio nuevo",
+] as const;
+
+export const PAGE_STATUSES = ["En curso", "Cerrada", "En pausa"] as const;
+
+export const URL_INDEXING = ["Por revisar", "Indexada", "No indexada", "Excluida"] as const;
+
+STATUS_COLORS["Activo"] = "bg-brand-cyan";
+STATUS_COLORS["En pausa"] = "bg-amber-400";
+STATUS_COLORS["Cerrado"] = "bg-slate-500";
+STATUS_COLORS["Cerrada"] = "bg-emerald-600";
+STATUS_COLORS["En preparación"] = "bg-amber-400";
+STATUS_COLORS["Pendiente de aprobación"] = "bg-violet-500";
+STATUS_COLORS["Probado"] = "bg-sky-500";
+STATUS_COLORS["Programado"] = "bg-indigo-500";
+STATUS_COLORS["Enviado"] = "bg-emerald-500";
+STATUS_COLORS["Reportado"] = "bg-emerald-700";
+STATUS_COLORS["Correo"] = "bg-brand-cyan";
+STATUS_COLORS["Masterclass"] = "bg-brand-magenta";
+STATUS_COLORS["Recurso"] = "bg-violet-500";
+STATUS_COLORS["Suscripción"] = "bg-sky-500";
+STATUS_COLORS["Oportunidad comercial"] = "bg-brand-magenta";
+STATUS_COLORS["Por confirmar"] = "bg-amber-400";
+STATUS_COLORS["Por decidir"] = "bg-slate-400";
+STATUS_COLORS["Mejorar URL existente"] = "bg-sky-500";
+STATUS_COLORS["Nueva URL en sitio principal"] = "bg-brand-cyan";
+STATUS_COLORS["Dominio nuevo"] = "bg-violet-500";
+STATUS_COLORS["Por revisar"] = "bg-violet-500";
+STATUS_COLORS["Indexada"] = "bg-emerald-500";
+STATUS_COLORS["No indexada"] = "bg-red-500";
+STATUS_COLORS["Excluida"] = "bg-slate-300 !text-slate-600";
+// Rombos de los mapas de marketing
+STATUS_COLORS["Sin hallazgos"] = "bg-emerald-500";
+STATUS_COLORS["Con hallazgos"] = "bg-amber-500";
+STATUS_COLORS["Corregido"] = "bg-emerald-600";
+STATUS_COLORS["Funciona"] = "bg-emerald-500";
+STATUS_COLORS["Falla"] = "bg-red-500";
+STATUS_COLORS["Validado"] = "bg-emerald-500";
+STATUS_COLORS["Nueva práctica"] = "bg-amber-500";
+STATUS_COLORS["No autorizado"] = "bg-red-500";

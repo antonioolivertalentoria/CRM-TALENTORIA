@@ -19,7 +19,7 @@ import type { Client, CustomTask, Material, Session, Training, TrainingRequest }
 
 export type ComputedTask = {
   key: string;
-  kind: "Logística" | "Preparación" | "Material" | "Revisión" | "Entrega" | "Seguimiento" | "Personal" | "Petición" | "Consultoría" | "Reclutamiento";
+  kind: "Logística" | "Preparación" | "Material" | "Revisión" | "Entrega" | "Seguimiento" | "Personal" | "Petición" | "Consultoría" | "Reclutamiento" | "Marketing";
   title: string;
   /** Vacío en tareas personales (no cuelgan de una capacitación). */
   trainingId: string;
@@ -30,6 +30,8 @@ export type ComputedTask = {
   details?: string;
   /** La tarea propia original (solo en tareas kind "Personal"), para editarla. */
   custom?: CustomTask;
+  /** A dónde lleva el renglón cuando la tarea no cuelga de una capacitación. */
+  href?: string;
   due: string | null;
   complete:
     | { type: "training_field"; field: string; value: string }
@@ -43,7 +45,13 @@ export type ComputedTask = {
     | { type: "recruitment_field"; vacancyId: string; field: string; value?: string }
     /** Sella una fecha del proceso (publicación, terna) con el día de hoy. */
     | { type: "recruitment_stamp"; vacancyId: string; field: string }
-    | { type: "recruitment_candidate"; candidateId: string; vacancyId: string; field: string; value: string };
+    | { type: "recruitment_candidate"; candidateId: string; vacancyId: string; field: string; value: string }
+    /** Cierra un paso de los mapas de Marketing (con el resultado del rombo, si lo tiene). */
+    | { type: "marketing_step"; projectId: string; stepKey: string; result?: string }
+    /** Pasa todos los envíos del mes de una etapa a la siguiente. */
+    | { type: "marketing_sends"; projectId: string; period: string; from: string; to: string }
+    | { type: "marketing_send"; projectId: string; sendId: string; value: string }
+    | { type: "marketing_lead"; leadId: string };
 };
 
 type TrainingFull = Training & {

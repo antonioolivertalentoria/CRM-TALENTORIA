@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
 import { computeConsultingTasks } from "@/lib/consulting-tasks";
 import { computeRecruitmentTasks } from "@/lib/recruitment-tasks";
+import { computeMarketingTasks } from "@/lib/marketing-tasks";
+import { loadMarketingData } from "@/lib/marketing-data";
 import { addDays, formatDate, todayISO } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
@@ -103,6 +105,7 @@ export async function GET(request: Request) {
     { data: rCandidatesData },
     { data: progressData },
     { data: progressNotesData },
+    marketingData,
   ] =
     await Promise.all([
       supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
@@ -120,6 +123,8 @@ export async function GET(request: Request) {
       // Avance de tareas (migración 016)
       supabase.from("task_progress").select("*"),
       supabase.from("task_progress_notes").select("*").order("created_at"),
+      // Marketing (migración 021)
+      loadMarketingData(supabase),
     ]);
 
   // Tareas empezadas pero sin cerrar: en el PDF salen marcadas y con la
@@ -183,6 +188,7 @@ export async function GET(request: Request) {
     ...(canSeeConsulting(user.email) ? computeConsultingTasks(consultingProjects as any) : []),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...(canSeeRecruitment(user.email) ? computeRecruitmentTasks(vacancies as any) : []),
+    ...computeMarketingTasks(marketingData),
 
     ...customToComputed((customData ?? []) as (CustomTask & { clients: { id: string; company: string } | null })[]),
   ]);

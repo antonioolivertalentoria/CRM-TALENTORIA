@@ -15,6 +15,9 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Usuario invitado (migración 022): solo Marketing y sus tareas
+  const guest = user?.app_metadata?.role === "invitado";
+
   let displayName = user?.email ?? "";
   if (user) {
     const { data: profile } = await supabase
@@ -30,7 +33,7 @@ export default async function AppLayout({
       {/* Barra lateral */}
       <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-brand-navy text-white">
         <div className="border-b border-white/10 p-4">
-          <Link href="/">
+          <Link href={guest ? "/marketing" : "/"}>
             <span className="block rounded-lg bg-white p-2.5">
               <Image
                 src="/logo-talentoria.png"
@@ -43,11 +46,12 @@ export default async function AppLayout({
           </Link>
         </div>
 
-        <NavLinks />
+        <NavLinks guest={guest} />
 
         <div className="mt-auto border-t border-white/10 p-4">
           <p className="truncate text-sm font-medium">{displayName}</p>
           <p className="truncate text-xs text-white/50">{user?.email}</p>
+          {guest && <p className="mt-1 text-[11px] font-semibold text-brand-cyan">Usuario invitado</p>}
           <form action={logout} className="mt-3">
             <button
               type="submit"

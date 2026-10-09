@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
 import { computeConsultingTasks } from "@/lib/consulting-tasks";
 import { computeRecruitmentTasks } from "@/lib/recruitment-tasks";
+import { computeMarketingTasks } from "@/lib/marketing-tasks";
+import { loadMarketingData } from "@/lib/marketing-data";
 import { todayISO, formatDate } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
@@ -20,6 +22,9 @@ import type { ReminderPrefs } from "@/lib/types";
  * hitos del proceso —los propios y, peor, todos los pendientes sin dueño de
  * los cuatro módulos— y pidió enterarse únicamente de cuándo se cerró el
  * proyecto. Ver también withoutCommercial en src/lib/calendar.ts.
+ * En Marketing sí recibe lo suyo (09-oct-2026): ahí es Dirección y aprueba
+ * el plan del mes, las versiones finales y las páginas; sin aviso el flujo
+ * se detiene en ella.
  *
  * Requiere en Vercel: SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, CRON_SECRET.
  * Sin RESEND_API_KEY responde sin enviar nada (modo apagado).
@@ -98,6 +103,7 @@ export async function GET(request: Request) {
     { data: rCandidatesData },
     { data: progressData },
     { data: progressNotesData },
+    marketingData,
   ] = await Promise.all([
     supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
@@ -114,6 +120,8 @@ export async function GET(request: Request) {
     // Avance de tareas (migración 016)
     supabase.from("task_progress").select("*"),
     supabase.from("task_progress_notes").select("*").order("created_at"),
+    // Marketing (migración 021)
+    loadMarketingData(supabase),
   ]);
 
   // Estado de avance por tarea, con la última anotación de la bitácora
@@ -190,6 +198,7 @@ export async function GET(request: Request) {
     ...computeConsultingTasks(consultingProjects as any),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...computeRecruitmentTasks(vacancies as any),
+    ...computeMarketingTasks(marketingData),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...customToComputed((customData ?? []) as any),
   ]);
@@ -214,7 +223,7 @@ export async function GET(request: Request) {
     const mine = tasks.filter(
       (t) =>
         (commercialOnlyClose
-          ? t.assignee === p.full_name && isCommercialCloseTask(t.key)
+          ? t.assignee === p.full_name && (isCommercialCloseTask(t.key) || t.kind === "Marketing")
           : t.assignee === p.full_name || !t.assignee) &&
         kinds.includes(t.kind) &&
         // Consultoría en estreno: sus tareas solo a quien ve el módulo

@@ -464,3 +464,159 @@ export type RecruitmentAttachment = {
   category: string;
   created_at: string;
 };
+
+// ---------------- Marketing (migración 021) ----------------
+
+export type MarketingProject = {
+  id: string;
+  /** "Mailing" | "SEO" */
+  kind: string;
+  name: string;
+  status: string;
+  /** Oliver: responsable general / calidad y transferencia. */
+  owner: string;
+  /** Perla: dirección y aprobación. */
+  director: string;
+  /** Óscar en el documento: "Colaborador responsable" (usuario invitado). */
+  collaborator: string;
+  /** Eduardo: compra de dominios (SEO paso 6). */
+  finance: string;
+  /** Lo que vencía antes de esta fecha se hizo fuera del CRM. */
+  started_at: string;
+  /** Primer mes del ciclo mensual (día 1). */
+  start_month: string;
+  end_month: string | null;
+  priorities: string;
+  drive_folder_url: string;
+  dashboard_url: string;
+  slack_channel_url: string;
+  notes: string;
+  internal_notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Lo capturado de un paso del flujo (los pasos viven en marketing-flows.ts). */
+export type MarketingStep = {
+  id: string;
+  project_id: string;
+  step_key: string;
+  status: string;
+  result: string;
+  due_date: string | null;
+  evidence_url: string;
+  notes: string;
+  blocker: string;
+  blocker_at: string | null;
+  completed_at: string | null;
+  rounds: number;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MarketingPeriod = {
+  id: string;
+  project_id: string;
+  period: string;
+  bonus_criteria: string;
+  notes: string;
+};
+
+export type MarketingSend = {
+  id: string;
+  project_id: string;
+  period: string;
+  send_date: string | null;
+  send_time: string | null;
+  /** Correo | Masterclass | Recurso */
+  type: string;
+  base: string;
+  subject: string;
+  objective: string;
+  cta: string;
+  resource: string;
+  content_url: string;
+  status: string;
+  evidence_url: string;
+  incidents: string;
+  base_size: number | null;
+  delivered: number | null;
+  bounces: number | null;
+  unsubscribes: number | null;
+  clicks: number | null;
+  signups: number | null;
+  replies: number | null;
+  leads: number | null;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  notes: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MarketingLead = {
+  id: string;
+  project_id: string | null;
+  channel: string;
+  lead_date: string;
+  name: string;
+  email: string;
+  company: string;
+  job_title: string;
+  source: string;
+  segment: string;
+  consent: string;
+  /** Suscripción | Oportunidad comercial */
+  lead_type: string;
+  commercial_action: string;
+  responsible: string;
+  next_step: string;
+  duplicate: boolean;
+  sent_to_commercial: string | null;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MarketingPage = {
+  id: string;
+  project_id: string;
+  name: string;
+  service: string;
+  city: string;
+  url: string;
+  reference_url: string;
+  audience: string;
+  offer: string;
+  objective: string;
+  cta: string;
+  main_query: string;
+  architecture: string;
+  domain: string;
+  target_date: string | null;
+  status: string;
+  data_url: string;
+  lead_origin: string;
+  notes: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MarketingUrl = {
+  id: string;
+  project_id: string;
+  url: string;
+  service: string;
+  city: string;
+  purpose: string;
+  indexing: string;
+  form: string;
+  responsible: string;
+  last_updated: string | null;
+  improvement: string;
+  notes: string;
+  created_at: string;
+};
