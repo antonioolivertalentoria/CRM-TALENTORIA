@@ -1,13 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { LOGISTICS_PRESENCIAL, LOGISTICS_ONLINE, pickTemplate } from "@/lib/templates";
+import {
+  LOGISTICS_TEMPLATES,
+  MESSAGE_VARIANTS,
+  OPEN_COURSE_HINT,
+  pickTemplate,
+  type MessageVariant,
+} from "@/lib/templates";
 import { updateTrainingField } from "@/lib/actions";
 
 /**
  * Botón "Mensaje de logística": muestra la plantilla adecuada según la
  * modalidad de las sesiones (presencial u online), con copiar al portapapeles,
- * abrir WhatsApp directo y marcar como enviado.
+ * abrir WhatsApp directo y marcar como enviado. La versión de curso abierto al
+ * público (tipo INDEX) se elige a mano.
  */
 export function LogisticsMessage({
   trainingId,
@@ -22,11 +29,11 @@ export function LogisticsMessage({
 }) {
   const suggested = pickTemplate(modalities);
   const [open, setOpen] = useState(false);
-  const [variant, setVariant] = useState<"Presencial" | "Online">(suggested);
+  const [variant, setVariant] = useState<MessageVariant>(suggested);
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const text = variant === "Presencial" ? LOGISTICS_PRESENCIAL : LOGISTICS_ONLINE;
+  const text = LOGISTICS_TEMPLATES[variant];
   const waLink = whatsapp
     ? `https://wa.me/${whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`
     : null;
@@ -58,22 +65,25 @@ export function LogisticsMessage({
               <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
-            <div className="flex items-center gap-2 px-5 pt-3">
-              {(["Presencial", "Online"] as const).map((v) => (
+            <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
+              {MESSAGE_VARIANTS.map(({ value, label }) => (
                 <button
-                  key={v}
-                  onClick={() => setVariant(v)}
+                  key={value}
+                  onClick={() => setVariant(value)}
                   className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                    variant === v
+                    variant === value
                       ? "bg-brand-cyan text-white"
                       : "border border-slate-300 text-slate-500 hover:border-brand-cyan"
                   }`}
                 >
-                  {v}
-                  {v === suggested && " (según las sesiones)"}
+                  {label}
+                  {value === suggested && " (según las sesiones)"}
                 </button>
               ))}
             </div>
+            {variant === "Online abierto" && (
+              <p className="mx-5 mt-2 text-xs text-slate-500">{OPEN_COURSE_HINT}</p>
+            )}
 
             <pre className="m-5 flex-1 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
               {text}

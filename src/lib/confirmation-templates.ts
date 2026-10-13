@@ -39,4 +39,18 @@ Logística confirmada:
 {logistica}
 
 ¡Cualquier cosa, estoy al pendiente!`,
+
+  // Curso abierto al público (tipo INDEX): la liga la mandan ellos a sus inscritos.
+  "Online abierto": `¡Hola, {contacto}! Buen día. Te comparto la confirmación del curso:
+
+*{nombre}*
+Fecha: {fechas}
+Modalidad: en línea por {plataforma}, con la liga que ustedes comparten a los inscritos.
+Inscritos a la fecha: {numero}
+Facilita: {facilita}
+
+Logística confirmada:
+{logistica}
+
+¡Cualquier cosa, estoy al pendiente!`,
 } as const;

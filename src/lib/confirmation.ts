@@ -1,5 +1,6 @@
 import { CONFIRMATION_TEMPLATES } from "./confirmation-templates";
 import { formatLongDate, todayISO } from "./format";
+import type { MessageVariant } from "./templates";
 import type { Session } from "./types";
 
 export type ConfirmationInput = {
@@ -48,7 +49,7 @@ function bullets(info: string): string[] {
  * Lo que falta queda como marcador [así] y se reporta en `missing`.
  */
 export function buildConfirmation(
-  variant: "Presencial" | "Online",
+  variant: MessageVariant,
   d: ConfirmationInput
 ): ConfirmationMessage {
   const missing: string[] = [];
@@ -113,7 +114,7 @@ export function buildConfirmation(
     nombre,
     fechas,
     plataforma:
-      variant === "Online"
+      variant !== "Presencial"
         ? pick(
             unique(upcoming.filter((s) => s.modality !== "Presencial").map((s) => s.platform)).join(" y "),
             "plataforma",

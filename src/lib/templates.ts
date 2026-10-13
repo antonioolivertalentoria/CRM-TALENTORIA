@@ -25,6 +25,44 @@ export const LOGISTICS_ONLINE = `Para preparar adecuadamente la capacitación en
 Por último, ¿hay alguna indicación adicional que debamos considerar, como políticas de grabación o permisos de su área de sistemas para el uso de la plataforma?
 Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que la capacitación se desarrolle de la mejor manera.`;
 
+// Curso en línea que un cliente como INDEX abre al público en general (no a
+// una empresa en particular). Comentarios de Arianna: no aplica lo de la sala
+// conjunta, la liga siempre la mandan ellos y no hay lista una semana antes
+// porque las inscripciones siguen abiertas hasta un día antes.
+export const LOGISTICS_ONLINE_ABIERTO = `Para preparar adecuadamente el curso en línea, ¿me podrías apoyar confirmándome algunos puntos logísticos?
+* ¿En qué plataforma será la sesión? En cuanto tengan la liga, ¿nos la podrían compartir? Si es posible, nos ayuda que el facilitador tenga permisos de coanfitrión para compartir pantalla y lanzar encuestas.
+* ¿Podemos conectarnos 30 minutos antes del inicio para hacer una prueba de audio, video y presentación con la persona que administra la sesión?
+* ¿Quién dará la bienvenida y presentará al facilitador? Con gusto les compartimos su semblanza.
+* ¿Cuántas personas llevan inscritas a la fecha? Sabemos que pueden seguir sumándose hasta el último momento, solo nos sirve para planear las dinámicas.
+* Para los certificados del curso, ¿nos podrían compartir la lista final con nombre completo y correo de los participantes cuando cierren las inscripciones, o el registro de asistencia de la plataforma al terminar la sesión?
+* Algunos ejercicios requieren responder encuestas en línea desde el celular o la computadora, ¿podemos compartir las ligas por el chat de la sesión?
+* El material del curso, ¿se los hacemos llegar a ustedes para que lo compartan con los participantes, o prefieren que se lo enviemos directo?
+* ¿Contaremos con una persona de contacto durante la sesión para apoyarnos con cualquier tema técnico, como admitir participantes o silenciar micrófonos?
+Por último, ¿hay alguna indicación adicional que debamos considerar, como si la sesión se va a grabar y para qué se usará la grabación?
+Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que el curso se desarrolle de la mejor manera.`;
+
+/**
+ * Versiones de los mensajes de logística y confirmación. "Online abierto" no
+ * se puede deducir de los datos (INDEX y similares lo mismo abren un curso al
+ * público que lo dan a otra empresa), así que siempre se elige a mano.
+ */
+export type MessageVariant = "Presencial" | "Online" | "Online abierto";
+
+export const MESSAGE_VARIANTS: { value: MessageVariant; label: string }[] = [
+  { value: "Presencial", label: "Presencial" },
+  { value: "Online", label: "Online · para una empresa" },
+  { value: "Online abierto", label: "Online · abierto al público" },
+];
+
+export const OPEN_COURSE_HINT =
+  "Para cursos que un cliente como INDEX abre al público en general: ellos mandan la liga y las inscripciones siguen abiertas hasta el último día. Si el curso es para una empresa en particular, usa «Online · para una empresa».";
+
+export const LOGISTICS_TEMPLATES: Record<MessageVariant, string> = {
+  Presencial: LOGISTICS_PRESENCIAL,
+  Online: LOGISTICS_ONLINE,
+  "Online abierto": LOGISTICS_ONLINE_ABIERTO,
+};
+
 // Mensajes de seguimiento posteriores al curso (días 20 y 30 del proceso).
 // El de los 20 días pregunta cómo les ha ido aplicando lo aprendido; el de
 // los 30 cierra el acompañamiento, invita a seguir trabajando juntos y es

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { pickTemplate } from "@/lib/templates";
+import { MESSAGE_VARIANTS, OPEN_COURSE_HINT, pickTemplate, type MessageVariant } from "@/lib/templates";
 import { buildConfirmation, type ConfirmationInput } from "@/lib/confirmation";
 import { updateTrainingField } from "@/lib/actions";
 
@@ -23,7 +23,7 @@ export function ConfirmationMessage({
 }) {
   const suggested = pickTemplate(data.sessions.map((s) => s.modality));
   const [open, setOpen] = useState(false);
-  const [variant, setVariant] = useState<"Presencial" | "Online">(suggested);
+  const [variant, setVariant] = useState<MessageVariant>(suggested);
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -59,22 +59,25 @@ export function ConfirmationMessage({
               <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
-            <div className="flex items-center gap-2 px-5 pt-3">
-              {(["Presencial", "Online"] as const).map((v) => (
+            <div className="flex flex-wrap items-center gap-2 px-5 pt-3">
+              {MESSAGE_VARIANTS.map(({ value, label }) => (
                 <button
-                  key={v}
-                  onClick={() => setVariant(v)}
+                  key={value}
+                  onClick={() => setVariant(value)}
                   className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                    variant === v
+                    variant === value
                       ? "bg-brand-cyan text-white"
                       : "border border-slate-300 text-slate-500 hover:border-brand-cyan"
                   }`}
                 >
-                  {v}
-                  {v === suggested && " (según las sesiones)"}
+                  {label}
+                  {value === suggested && " (según las sesiones)"}
                 </button>
               ))}
             </div>
+            {variant === "Online abierto" && (
+              <p className="mx-5 mt-2 text-xs text-slate-500">{OPEN_COURSE_HINT}</p>
+            )}
 
             {missing.length > 0 && (
               <div className="mx-5 mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
