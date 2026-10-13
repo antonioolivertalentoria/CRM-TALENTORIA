@@ -30,11 +30,11 @@ Muchas gracias por el apoyo. Con esta información podremos preparar todo lo nec
 // conjunta, la liga siempre la mandan ellos y no hay lista una semana antes
 // porque las inscripciones siguen abiertas hasta un día antes.
 export const LOGISTICS_ONLINE_ABIERTO = `Para preparar adecuadamente el curso en línea, ¿me podrías apoyar confirmándome algunos puntos logísticos?
-* ¿En qué plataforma será la sesión? En cuanto tengan la liga, ¿nos la podrían compartir? Si es posible, nos ayuda que el facilitador tenga permisos de coanfitrión para compartir pantalla y lanzar encuestas.
+* ¿En qué plataforma será la sesión? En cuanto tengan la liga, ¿nos la podrían compartir? Si es posible, nos ayuda que el facilitador tenga permisos de coanfitrión para compartir pantalla, lanzar encuestas y hacer salas pequeñas.
 * ¿Podemos conectarnos 30 minutos antes del inicio para hacer una prueba de audio, video y presentación con la persona que administra la sesión?
 * ¿Quién dará la bienvenida y presentará al facilitador? Con gusto les compartimos su semblanza.
 * ¿Cuántas personas llevan inscritas a la fecha? Sabemos que pueden seguir sumándose hasta el último momento, solo nos sirve para planear las dinámicas.
-* Para los certificados del curso, ¿nos podrían compartir la lista final con nombre completo y correo de los participantes cuando cierren las inscripciones, o el registro de asistencia de la plataforma al terminar la sesión?
+* Para las constancias de participación, ¿necesitan apoyo de nuestra parte o bien ustedes las realizan?
 * Algunos ejercicios requieren responder encuestas en línea desde el celular o la computadora, ¿podemos compartir las ligas por el chat de la sesión?
 * ¿Contaremos con una persona de contacto durante la sesión para apoyarnos a solucionar cualquier problema técnico que se llegara a presentar?
 Por último, ¿hay alguna indicación adicional que debamos considerar?
