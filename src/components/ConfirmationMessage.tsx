@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { MESSAGE_VARIANTS, OPEN_COURSE_HINT, pickTemplate, type MessageVariant } from "@/lib/templates";
+import { MESSAGE_VARIANTS, OPEN_COURSE_HINT, isOpenCourse, pickTemplate, type MessageVariant } from "@/lib/templates";
 import { buildConfirmation, type ConfirmationInput } from "@/lib/confirmation";
 import { updateTrainingField } from "@/lib/actions";
 
@@ -75,7 +75,7 @@ export function ConfirmationMessage({
                 </button>
               ))}
             </div>
-            {variant === "Online abierto" && (
+            {isOpenCourse(variant) && (
               <p className="mx-5 mt-2 text-xs text-slate-500">{OPEN_COURSE_HINT}</p>
             )}
 

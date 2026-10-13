@@ -27,6 +27,22 @@ Logística confirmada:
 
 ¡Cualquier cosa, estoy al pendiente!`,
 
+  // Curso abierto al público (tipo INDEX): se reportan los inscritos a la fecha.
+  "Presencial abierto": `¡Hola, {contacto}! Buen día. Te comparto la confirmación del curso:
+
+*{nombre}*
+Fecha: {fechas}
+Modalidad: presencial
+Lugar: {sede}
+Inscritos a la fecha: {numero}
+Facilita: {facilita}
+
+Logística confirmada:
+- Llegamos 30 minutos antes para instalarnos
+{logistica}
+
+¡Cualquier cosa, estoy al pendiente!`,
+
   Online: `¡Hola, {contacto}! Buen día. Te comparto la confirmación de la capacitación:
 
 *{nombre}*

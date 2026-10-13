@@ -1,6 +1,6 @@
 import { CONFIRMATION_TEMPLATES } from "./confirmation-templates";
 import { formatLongDate, todayISO } from "./format";
-import type { MessageVariant } from "./templates";
+import { isPresencial, type MessageVariant } from "./templates";
 import type { Session } from "./types";
 
 export type ConfirmationInput = {
@@ -114,14 +114,14 @@ export function buildConfirmation(
     nombre,
     fechas,
     plataforma:
-      variant !== "Presencial"
+      !isPresencial(variant)
         ? pick(
             unique(upcoming.filter((s) => s.modality !== "Presencial").map((s) => s.platform)).join(" y "),
             "plataforma",
             "Plataforma de la sesión"
           )
         : "",
-    sede: variant === "Presencial" ? pick(venue, "sede / dirección", "Sede / dirección") : "",
+    sede: isPresencial(variant) ? pick(venue, "sede / dirección", "Sede / dirección") : "",
     numero: pick(
       unique(upcoming.map((s) => s.enrolled?.toString())).join(" / "),
       "número de participantes",

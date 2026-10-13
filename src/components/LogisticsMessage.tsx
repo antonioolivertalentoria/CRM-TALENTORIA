@@ -5,6 +5,7 @@ import {
   LOGISTICS_TEMPLATES,
   MESSAGE_VARIANTS,
   OPEN_COURSE_HINT,
+  isOpenCourse,
   pickTemplate,
   type MessageVariant,
 } from "@/lib/templates";
@@ -81,7 +82,7 @@ export function LogisticsMessage({
                 </button>
               ))}
             </div>
-            {variant === "Online abierto" && (
+            {isOpenCourse(variant) && (
               <p className="mx-5 mt-2 text-xs text-slate-500">{OPEN_COURSE_HINT}</p>
             )}
 

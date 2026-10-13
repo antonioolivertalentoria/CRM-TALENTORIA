@@ -40,24 +40,48 @@ export const LOGISTICS_ONLINE_ABIERTO = `Para preparar adecuadamente el curso en
 Por último, ¿hay alguna indicación adicional que debamos considerar?
 Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que el curso se desarrolle de la mejor manera.`;
 
+// Curso presencial que un cliente como INDEX abre al público en general.
+// Mismos criterios que el online abierto: no hay lista una semana antes (las
+// inscripciones siguen abiertas hasta un día antes) y las constancias se
+// preguntan como sugirió Arianna. Sin lo de ropa o equipo de seguridad, que es
+// para cursos dentro de las instalaciones de una empresa.
+export const LOGISTICS_PRESENCIAL_ABIERTO = `Para preparar adecuadamente el curso, ¿me podrías apoyar confirmándome algunos puntos logísticos?
+* ¿Me podrías confirmar la dirección completa de la sede (calle y número, colonia y ciudad) y, si es posible, compartirnos la ubicación por aquí? También nos ayuda saber en qué salón o sala será el curso y alguna referencia para llegar.
+* ¿Podemos ingresar a la sala 30min antes de la hora de inicio para instalarnos adecuadamente?
+* ¿Nos podrían apoyar con pantalla o proyector, conexión eléctrica y, si el grupo es grande, micrófono? Algunos ejercicios requieren responder encuestas en línea, ¿tendremos acceso a una red WiFi?
+* De ser posible, agradeceríamos que el espacio estuviera acomodado en herradura o en una distribución que facilite la participación y el trabajo en equipo. Nos confirman si es posible por favor.
+* ¿Quién dará la bienvenida y presentará al facilitador? Con gusto les compartimos su semblanza.
+* ¿Cuántas personas llevan inscritas a la fecha? Sabemos que pueden seguir sumándose hasta el último momento, solo nos sirve para planear las dinámicas y los materiales.
+* ¿Ustedes se encargan del registro de los participantes a su llegada?
+* Para las constancias de participación, ¿necesitan apoyo de nuestra parte o bien ustedes las realizan?
+* Sugerimos tener un pequeño coffee break para los participantes, pero es opcional.
+* ¿Contaremos con una persona de contacto para apoyarnos con el acceso y cualquier necesidad logística al momento de llegar?
+Por último, ¿hay alguna indicación adicional que debamos considerar, como acceso al estacionamiento, registro de visitantes u otra disposición de la sede?
+Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que el curso se desarrolle de la mejor manera.`;
+
 /**
- * Versiones de los mensajes de logística y confirmación. "Online abierto" no
- * se puede deducir de los datos (INDEX y similares lo mismo abren un curso al
- * público que lo dan a otra empresa), así que siempre se elige a mano.
+ * Versiones de los mensajes de logística y confirmación. Las "abierto" no se
+ * pueden deducir de los datos (INDEX y similares lo mismo abren un curso al
+ * público que lo dan a otra empresa), así que siempre se eligen a mano.
  */
-export type MessageVariant = "Presencial" | "Online" | "Online abierto";
+export type MessageVariant = "Presencial" | "Presencial abierto" | "Online" | "Online abierto";
 
 export const MESSAGE_VARIANTS: { value: MessageVariant; label: string }[] = [
-  { value: "Presencial", label: "Presencial" },
+  { value: "Presencial", label: "Presencial · para una empresa" },
+  { value: "Presencial abierto", label: "Presencial · abierto al público" },
   { value: "Online", label: "Online · para una empresa" },
   { value: "Online abierto", label: "Online · abierto al público" },
 ];
 
+export const isOpenCourse = (v: MessageVariant) => v.endsWith("abierto");
+export const isPresencial = (v: MessageVariant) => v.startsWith("Presencial");
+
 export const OPEN_COURSE_HINT =
-  "Para cursos que un cliente como INDEX abre al público en general: ellos mandan la liga y las inscripciones siguen abiertas hasta el último día. Si el curso es para una empresa en particular, usa «Online · para una empresa».";
+  "Para cursos que un cliente como INDEX abre al público en general: las inscripciones siguen abiertas hasta el último día y, en línea, la liga la mandan ellos. Si el curso es para una empresa en particular, usa la versión «para una empresa».";
 
 export const LOGISTICS_TEMPLATES: Record<MessageVariant, string> = {
   Presencial: LOGISTICS_PRESENCIAL,
+  "Presencial abierto": LOGISTICS_PRESENCIAL_ABIERTO,
   Online: LOGISTICS_ONLINE,
   "Online abierto": LOGISTICS_ONLINE_ABIERTO,
 };
