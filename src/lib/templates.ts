@@ -36,7 +36,7 @@ export const LOGISTICS_ONLINE_ABIERTO = `Para preparar adecuadamente el curso en
 * ¿Cuántas personas llevan inscritas a la fecha? Sabemos que pueden seguir sumándose hasta el último momento, solo nos sirve para planear las dinámicas.
 * Para los certificados del curso, ¿nos podrían compartir la lista final con nombre completo y correo de los participantes cuando cierren las inscripciones, o el registro de asistencia de la plataforma al terminar la sesión?
 * Algunos ejercicios requieren responder encuestas en línea desde el celular o la computadora, ¿podemos compartir las ligas por el chat de la sesión?
-* ¿Contaremos con una persona de contacto durante la sesión para apoyarnos con cualquier tema técnico, como admitir participantes o silenciar micrófonos?
+* ¿Contaremos con una persona de contacto durante la sesión para apoyarnos a solucionar cualquier problema técnico que se llegara a presentar?
 Por último, ¿hay alguna indicación adicional que debamos considerar?
 Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que el curso se desarrolle de la mejor manera.`;
 
