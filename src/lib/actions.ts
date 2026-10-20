@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { createClient as createSupabase } from "@/lib/supabase/server";
-import { addDays, formatDate, todayISO } from "@/lib/format";
+import { addDays, daysBetween, formatDate, todayISO } from "@/lib/format";
 import {
   CHECKLIST_FIELDS,
   COMMERCIAL_OWNER,
@@ -20,7 +20,7 @@ import {
 import { NEGATIVE_RESULTS, POSITIVE_RESULTS, addWorkingDays, findDef, loopRange } from "@/lib/marketing-flows";
 import { isPast, syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
 import { DEFAULT_TZ, normalizeTz, tzShort } from "@/lib/timezones";
-import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, MarketingLead, MarketingPage, MarketingSend, MarketingStep, MarketingUrl, RecruitmentAttachment, RecruitmentCandidate, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
+import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, MarketingLead, MarketingPage, MarketingSend, MarketingStep, MarketingUrl, RecruitmentAttachment, RecruitmentCandidate, RecruitmentVacancy, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
 
@@ -2554,11 +2554,21 @@ async function advanceVacancyPhase(
 ) {
   const { data } = await supabase
     .from("recruitment_vacancies")
-    .select("status")
+    .select("*")
     .eq("id", id)
     .maybeSingle();
-  const current = (data as { status: string } | null)?.status ?? "";
+  const row = data as Pick<RecruitmentVacancy, "status" | "paused_from"> | null;
+  const current = row?.status ?? "";
   if (current === "Cancelada") return;
+  // Pausada: el hito queda registrado pero la vacante sigue detenida; lo
+  // que avanza es la fase a la que regresará al reanudarse.
+  if (current === "Pausada") {
+    const from = row?.paused_from ?? "";
+    if (from && VACANCY_PHASES.indexOf(phase) > VACANCY_PHASES.indexOf(from)) {
+      await supabase.from("recruitment_vacancies").update({ paused_from: phase }).eq("id", id);
+    }
+    return;
+  }
   if (VACANCY_PHASES.indexOf(phase) > VACANCY_PHASES.indexOf(current)) {
     await supabase.from("recruitment_vacancies").update({ status: phase }).eq("id", id);
   }
@@ -2640,7 +2650,33 @@ export async function updateRecruitmentField(
     update.profile_authorized_at = todayISO();
   }
 
-  const { error } = await supabase.from("recruitment_vacancies").update(update).eq("id", id);
+  // Pausar guarda en qué fase iba; reanudar la limpia y, si la terna ya
+  // estaba corriendo, suma los días detenida para recorrer su plazo.
+  if (field === "status") {
+    const { data: cur } = await supabase
+      .from("recruitment_vacancies")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    const row = cur as RecruitmentVacancy | null;
+    if (row && value === "Pausada" && row.status !== "Pausada") {
+      update.paused_from = row.status;
+      update.paused_at = todayISO();
+    }
+    if (row && row.status === "Pausada" && value !== "Pausada") {
+      const ternaRunning = !!row.published_at && !row.candidates_sent_at;
+      const days = row.paused_at ? Math.max(daysBetween(row.paused_at, todayISO()), 0) : 0;
+      update.paused_from = null;
+      update.paused_at = null;
+      update.paused_days = (row.paused_days ?? 0) + (ternaRunning ? days : 0);
+    }
+  }
+
+  let { error } = await supabase.from("recruitment_vacancies").update(update).eq("id", id);
+  // Sin la migración 023 la pausa funciona igual, solo sin memoria de fase
+  if (error && field === "status" && error.message.includes("paused_")) {
+    ({ error } = await supabase.from("recruitment_vacancies").update({ status: value }).eq("id", id));
+  }
   if (error) return { error: error.message };
 
   // La fase avanza sola con los hitos del flujo
@@ -2678,6 +2714,19 @@ export async function updateRecruitmentField(
   revalidatePath("/reclutamiento");
   revalidatePath("/tareas");
   return null;
+}
+
+/** Reanuda una vacante pausada en la fase donde iba. */
+export async function resumeVacancyAction(id: string) {
+  const supabase = await createSupabase();
+  const { data } = await supabase
+    .from("recruitment_vacancies")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  const row = data as Pick<RecruitmentVacancy, "status" | "paused_from"> | null;
+  if (row?.status !== "Pausada" || !row.paused_from) return;
+  await updateRecruitmentField(id, "status", row.paused_from);
 }
 
 /** Sella con la fecha de hoy un hito del proceso (publicación, terna). */

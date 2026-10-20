@@ -9,7 +9,7 @@ import { NewVacancyForm } from "@/components/NewVacancyForm";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
 import { canSeeRecruitment } from "@/lib/recruitment-access";
-import { statusColor } from "@/lib/constants";
+import { byUrgency, statusColor } from "@/lib/constants";
 import type { Client, ConsultingProject, RecruitmentVacancy, Training, Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -136,7 +136,7 @@ export default async function ClientDetailPage({
     .select("*")
     .eq("client_id", id)
     .order("created_at", { ascending: false });
-  const vacancies = (vacanciesData ?? []) as unknown as RecruitmentVacancy[];
+  const vacancies = byUrgency((vacanciesData ?? []) as unknown as RecruitmentVacancy[]);
   const showRecruitment = canSeeRecruitment(userRes.data.user?.email);
 
   // Capacitaciones que este cliente dio a sus subclientes
@@ -333,6 +333,11 @@ export default async function ClientDetailPage({
                   {v.recruiter ? `Reclutador: ${v.recruiter}` : "Sin reclutador asignado"}
                   {v.openings > 1 ? ` · ${v.openings} plazas` : ""}
                 </p>
+                {v.priority === "Alta" && (
+                  <span className="mt-1.5 inline-block rounded-full bg-brand-magenta/10 px-2 py-0.5 text-[11px] font-semibold text-brand-magenta">
+                    🔥 Urgente
+                  </span>
+                )}
               </Link>
             ))}
           </div>

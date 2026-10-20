@@ -56,6 +56,11 @@ export function addDays(iso: string, days: number): string {
   return toISO(d);
 }
 
+/** Días naturales de `from` a `to` (negativo si `to` va antes). */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((toDate(to).getTime() - toDate(from).getTime()) / 86_400_000);
+}
+
 /** Suma días hábiles (salta sábados y domingos). */
 export function addBusinessDays(iso: string, days: number): string {
   const d = toDate(iso);

@@ -409,6 +409,12 @@ export type RecruitmentVacancy = {
   candidates_sent_at: string | null;
   hire_date: string | null;
   guarantee_days: number;
+  /** Fase en la que iba cuando se pausó (migración 023). */
+  paused_from?: string | null;
+  /** Día en que se pausó (migración 023). */
+  paused_at?: string | null;
+  /** Días que estuvo en pausa con la terna corriendo: recorren su plazo (migración 023). */
+  paused_days?: number;
   levantamiento_autorizado: string;
   continua_persona: string;
   factura_anticipo: string;

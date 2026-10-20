@@ -217,8 +217,9 @@ function resolveSelect(store: DemoStore, table: string, row: Row, sel: string): 
         : { ...t }
       : null;
   }
-  // Consultoría: el proyecto trae su cliente y la sesión trae su proyecto
-  if (table === "consulting_projects" && sel.includes("clients(")) {
+  // Consultoría y reclutamiento: el proyecto/vacante trae su cliente y la
+  // sesión trae su proyecto
+  if ((table === "consulting_projects" || table === "recruitment_vacancies") && sel.includes("clients(")) {
     out.clients = store.clients.find((c) => c.id === row.client_id) ?? null;
   }
   if (table === "consulting_sessions" && sel.includes("consulting_projects(")) {

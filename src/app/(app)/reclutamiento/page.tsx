@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { canSeeRecruitment } from "@/lib/recruitment-access";
 import { UnderConstruction } from "@/components/UnderConstruction";
-import { statusColor, VACANCY_STATUSES } from "@/lib/constants";
+import { byUrgency, statusColor, VACANCY_STATUSES } from "@/lib/constants";
 import { addDays, formatDate, todayISO } from "@/lib/format";
 import type { Client, RecruitmentCandidate, RecruitmentVacancy } from "@/lib/types";
 
@@ -14,6 +14,10 @@ type VacancyRow = RecruitmentVacancy & { clients: Pick<Client, "id" | "company">
  * Módulo de Reclutamiento: vacantes según el Flujo del Proceso (22 pasos).
  * Cada tarjeta muestra fase, reclutador, avance de la terna y el próximo
  * hito con fecha (publicación, ingreso o término de garantía).
+ *
+ * Orden (pedido de Reclutamiento): arriba un bloque con las urgentes que se
+ * están trabajando, cualquiera que sea su fase; abajo, las demás por fase
+ * como siempre, y dentro de cada fase primero las de urgencia media.
  */
 export default async function RecruitmentPage() {
   const supabase = await createClient();
@@ -41,10 +45,23 @@ export default async function RecruitmentPage() {
   }
 
   const today = todayISO();
-  const groups = VACANCY_STATUSES.map((status) => ({
-    status,
-    items: vacancies.filter((v) => v.status === status),
-  })).filter((g) => g.items.length > 0);
+  const inactive = new Set(["Pausada", "Cerrada", "Cancelada"]);
+  const isUrgent = (v: VacancyRow) => v.priority === "Alta" && !inactive.has(v.status);
+  // Las urgentes van por fase del proceso (la más cercana a cerrarse al final)
+  const urgent = vacancies
+    .filter(isUrgent)
+    .sort(
+      (a, b) =>
+        VACANCY_STATUSES.indexOf(a.status as (typeof VACANCY_STATUSES)[number]) -
+        VACANCY_STATUSES.indexOf(b.status as (typeof VACANCY_STATUSES)[number])
+    );
+  const groups = [
+    ...(urgent.length > 0 ? [{ status: "🔥 Urgentes", items: urgent }] : []),
+    ...VACANCY_STATUSES.map((status) => ({
+      status: status as string,
+      items: byUrgency(vacancies.filter((v) => v.status === status && !isUrgent(v))),
+    })),
+  ].filter((g) => g.items.length > 0);
 
   return (
     <div className="space-y-8">
@@ -82,7 +99,11 @@ export default async function RecruitmentPage() {
       ) : (
         groups.map((group) => (
           <section key={group.status}>
-            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+            <h2
+              className={`mb-2 text-sm font-bold uppercase tracking-wide ${
+                group.status === "🔥 Urgentes" ? "text-brand-magenta" : "text-slate-500"
+              }`}
+            >
               {group.status}
               <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-500">
                 {group.items.length}
@@ -105,11 +126,14 @@ export default async function RecruitmentPage() {
                       : v.published_at
                         ? { label: "Publicada", date: v.published_at }
                         : null;
+                const paused = v.status === "Pausada";
                 return (
                   <Link
                     key={v.id}
                     href={`/reclutamiento/${v.id}`}
-                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-magenta hover:shadow-md"
+                    className={`rounded-xl border bg-white p-4 shadow-sm transition hover:border-brand-magenta hover:shadow-md ${
+                      isUrgent(v) ? "border-slate-200 border-l-4 border-l-brand-magenta" : "border-slate-200"
+                    } ${paused ? "opacity-70" : ""}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-semibold text-brand-navy">{v.position}</p>
@@ -124,8 +148,19 @@ export default async function RecruitmentPage() {
                       {v.recruiter ? ` · ${v.recruiter}` : ""}
                       {v.openings > 1 ? ` · ${v.openings} plazas` : ""}
                     </p>
+                    {v.priority === "Alta" && (
+                      <span className="mt-1.5 inline-block rounded-full bg-brand-magenta/10 px-2 py-0.5 text-[11px] font-semibold text-brand-magenta">
+                        🔥 Urgente
+                      </span>
+                    )}
                     <p className="mt-2 text-xs text-slate-500">
-                      {next ? `📅 ${next.label}: ${formatDate(next.date)}` : "Sin fecha próxima"}
+                      {paused
+                        ? `⏸ Pausada${v.paused_at ? ` desde el ${formatDate(v.paused_at)}` : ""}${
+                            v.paused_from ? ` · iba en ${v.paused_from}` : ""
+                          }`
+                        : next
+                          ? `📅 ${next.label}: ${formatDate(next.date)}`
+                          : "Sin fecha próxima"}
                       {cands.length > 0 && ` · 👥 ${cands.length} candidatos`}
                     </p>
                     <div className="mt-3 flex items-center gap-2">

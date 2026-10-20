@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canSeeRecruitment } from "@/lib/recruitment-access";
 import { UnderConstruction } from "@/components/UnderConstruction";
-import { updateRecruitmentField } from "@/lib/actions";
+import { resumeVacancyAction, updateRecruitmentField } from "@/lib/actions";
 import {
   VACANCY_STATUSES,
   VACANCY_MODALITIES,
@@ -130,6 +130,28 @@ export default async function VacancyDetailPage({
             <StatusSelect value={vacancy.priority} options={PRIORITIES} onChange={save("priority")} />
           </div>
         </div>
+
+        {vacancy.status === "Pausada" && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+            <p>
+              ⏸ <span className="font-semibold">Vacante pausada</span>
+              {vacancy.paused_at ? ` desde el ${formatDate(vacancy.paused_at)}` : ""}
+              {vacancy.paused_from ? ` · iba en ${vacancy.paused_from}` : ""}. Mientras siga así no genera
+              tareas ni recordatorios; al reanudarla, el plazo de la terna se recorre los días que estuvo
+              detenida.
+            </p>
+            {vacancy.paused_from && (
+              <form action={resumeVacancyAction.bind(null, vacancy.id)}>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-600"
+                >
+                  ▶ Reanudar en {vacancy.paused_from}
+                </button>
+              </form>
+            )}
+          </div>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="h-2 w-48 overflow-hidden rounded-full bg-slate-200">

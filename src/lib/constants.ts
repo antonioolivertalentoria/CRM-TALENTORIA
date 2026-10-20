@@ -178,9 +178,26 @@ export const VACANCY_STATUSES = [
   "Validación",
   "Contratado",
   "En garantía",
+  // Se dejó de trabajar sin cancelarla: sin tareas ni plazos corriendo
+  // hasta que se reanuda en la fase donde iba.
+  "Pausada",
   "Cerrada",
   "Cancelada",
 ] as const;
+
+STATUS_COLORS["Pausada"] = "bg-orange-400";
+
+/**
+ * Orden de las vacantes: primero por urgencia (Alta → Media → Baja) y,
+ * dentro de la misma urgencia, se respeta el orden que ya traían
+ * (sort es estable: más recientes primero).
+ */
+const PRIORITY_RANK: Record<string, number> = { Alta: 0, Media: 1, Baja: 2 };
+export function byUrgency<T extends { priority: string }>(items: T[]): T[] {
+  return [...items].sort(
+    (a, b) => (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1)
+  );
+}
 
 // Embudo del candidato (pasos 12-19 del flujo)
 export const CANDIDATE_STATUSES = [

@@ -40,7 +40,8 @@ export function computeRecruitmentTasks(vacancies: RecruitmentVacancyFull[]): Co
   const tasks: ComputedTask[] = [];
 
   for (const v of vacancies) {
-    if (v.status === "Cancelada" || v.status === "Cerrada") continue;
+    // Pausada: nadie la está trabajando, así que no genera tareas
+    if (v.status === "Cancelada" || v.status === "Cerrada" || v.status === "Pausada") continue;
 
     const clientName = v.clients?.company ?? "";
     const candidates = v.candidates ?? [];
@@ -176,13 +177,15 @@ export function computeRecruitmentTasks(vacancies: RecruitmentVacancyFull[]): Co
     }
 
     // ---- Búsqueda y terna (pasos 12-15) ----
+    // Los días que estuvo pausada con la búsqueda abierta recorren el plazo
     if (v.published_at) {
+      const searchFrom = addDays(v.published_at, v.paused_days ?? 0);
       if (v.filtrado_entrevistas === "Pendiente") {
         push(
           "filtrado",
           "Filtrar currículums, capturar candidatos y entrevistar",
           v.recruiter,
-          addDays(v.published_at, 3),
+          addDays(searchFrom, 3),
           field("filtrado_entrevistas")
         );
       }
@@ -194,7 +197,7 @@ export function computeRecruitmentTasks(vacancies: RecruitmentVacancyFull[]): Co
           "terna",
           `Enviar de 3 a 5 candidatos al cliente${listos ? ` (${listos} listos)` : ""}`,
           v.recruiter,
-          addBusinessDays(v.published_at, 10),
+          addBusinessDays(searchFrom, 10),
           { type: "recruitment_stamp", vacancyId: v.id, field: "candidates_sent_at" },
           "Al palomearla se registra hoy como fecha de envío de la terna."
         );
