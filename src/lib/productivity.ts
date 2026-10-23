@@ -2,25 +2,25 @@ import { addBusinessDays, addDays } from "./format";
 import { TEAM_TZ } from "./timezones";
 
 /**
- * Reporte de productividad (23-oct-2026, pedido de Perla y Ari).
+ * Indicador de cumplimiento (reporte de productividad, oct-2026).
  *
- * Mide si las tareas que salen de los procesos se cerraron a tiempo, con
- * candados para que sea justo y no un instrumento de presión:
- *  1. Lo bloqueado no cuenta en contra: si la tarea quedó "⏸ En espera"
- *     (con de quién dependía) antes de vencer, sale como bloqueada.
- *  2. La misma vara para todos, dirección incluida.
- *  3. Sin ranking: personas en orden alfabético y el porcentaje siempre
- *     junto a la carga.
- *  4. Las horas (⏱) no entran: sirven para costear, no para medir gente.
- *  5. Cada tarea tarde puede llevar su "¿qué pasó?", que sale junto al número.
- *  6. Los acuerdos del mes se escriben al inicio y queda a la vista quién
- *     y cuándo los editó.
- * Además: toda tarea tiene al menos un día hábil desde que aparece, lo que
- * vence en fin de semana se puede cerrar el siguiente día hábil, y lo que
- * ya venía atrasado cuando arrancó la bitácora no cuenta.
+ * Mide si las tareas que generan los procesos del CRM se cierran en su
+ * fecha compromiso. Criterios de medición:
+ *  - Una tarea pertenece al mes de su fecha compromiso (los vencimientos en
+ *    fin de semana se recorren al siguiente día hábil).
+ *  - Toda tarea cuenta con al menos un día hábil desde su asignación.
+ *  - Si la fecha del evento cambia, la fecha compromiso se recalcula; en
+ *    tareas propias aplica la fecha vigente.
+ *  - Las tareas registradas "En espera" antes de vencer se reportan como
+ *    dependencias externas y no entran al porcentaje.
+ *  - Se excluyen canceladas, eliminadas, "No aplica", proyectos en pausa o
+ *    cerrados y los pendientes previos al inicio de la medición.
+ *  - El tiempo registrado (⏱) no forma parte del indicador.
+ * Cada colaborador consulta su información; dirección, la del equipo.
  *
- * Este archivo es lógica pura (sin Supabase) para poder probarla aparte.
- * La sincronización vive en task-ledger.ts.
+ * Este archivo es lógica pura (sin Supabase) para poder probarla aparte y
+ * usarla también en el dashboard del navegador. La sincronización vive en
+ * task-ledger.ts.
  */
 
 /** Ven el reporte de todo el equipo. Debe coincidir con la migración 024. */
@@ -230,4 +230,73 @@ export const NO_ASSIGNEE = "Sin responsable";
 
 export function personOf(row: LedgerRow): string {
   return row.assignee.trim() || NO_ASSIGNEE;
+}
+
+// ---------------- Dashboard ----------------
+
+/** Estados que se grafican (las excluidas y previas se quedan fuera). */
+export type DashOutcome = "a_tiempo" | "tarde" | "bloqueada" | "vencida" | "por_vencer";
+
+/** Una tarea ya clasificada en el servidor, lista para el dashboard. */
+export type DashRow = {
+  key: string;
+  title: string;
+  module: string;
+  project: string;
+  client: string;
+  person: string;
+  href: string;
+  /** Mes de su fecha compromiso ("AAAA-MM"). */
+  period: string;
+  /** Fecha compromiso efectiva (día hábil). */
+  deadline: string;
+  closedAt: string | null;
+  open: boolean;
+  outcome: DashOutcome;
+  daysLate: number;
+  waitingFor: string;
+  waitingSince: string | null;
+  context: string;
+  contextBy: string;
+  contextAt: string | null;
+  canComment: boolean;
+};
+
+export type PersonAgreement = {
+  person: string;
+  body: string;
+  target_pct: number | null;
+  updated_by: string;
+  updated_at: string | null;
+  acknowledged_at: string | null;
+};
+
+const SHORT_MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+export function shortPeriodLabel(period: string): string {
+  const [, m] = period.split("-").map(Number);
+  return SHORT_MONTHS[m - 1];
+}
+
+/** Semanas hábiles (lunes a viernes) que tocan el mes, recortadas al mes. */
+export function weeksOfMonth(period: string): { start: string; end: string; label: string }[] {
+  const first = `${period}-01`;
+  const last = addDays(`${addMonths(period, 1)}-01`, -1);
+  const [y, m] = period.split("-").map(Number);
+  const dow = new Date(y, m - 1, 1).getDay(); // 0 domingo
+  let monday = addDays(first, -((dow + 6) % 7));
+  const weeks: { start: string; end: string; label: string }[] = [];
+  while (monday <= last) {
+    const friday = addDays(monday, 4);
+    const start = monday < first ? first : monday;
+    const end = friday > last ? last : friday;
+    if (start <= end) {
+      const mon = SHORT_MONTHS[Number(end.slice(5, 7)) - 1];
+      const d1 = Number(start.slice(8, 10));
+      const d2 = Number(end.slice(8, 10));
+      weeks.push({ start, end, label: d1 === d2 ? `${d1} ${mon}` : `${d1}–${d2} ${mon}` });
+    }
+    monday = addDays(monday, 7);
+  }
+  return weeks;
 }

@@ -3732,9 +3732,9 @@ export async function deleteMarketingUrlAction(id: string, projectId: string): P
 // acciones revisan permisos aquí y escriben con la llave de servicio.
 
 /**
- * "¿Qué pasó?" de una tarea tarde o vencida. Es la voz de la persona
- * responsable: solo ella lo escribe. Dirección puede escribirlo solo en
- * tareas sin una persona del equipo detrás (sin responsable o un rol).
+ * Comentario del responsable sobre una tarea con retraso, vencida o en
+ * espera. Lo registra la persona responsable; dirección solo en tareas sin
+ * una persona del equipo detrás (sin responsable o un rol).
  */
 export async function updateLedgerContextAction(taskKey: string, text: string): Promise<FormState> {
   const supabase = await createSupabase();
@@ -3758,7 +3758,7 @@ export async function updateLedgerContextAction(taskKey: string, text: string): 
     const teamNames = new Set(((people ?? []) as { full_name: string }[]).map((p) => p.full_name));
     allowed = !teamNames.has(row.assignee);
   }
-  if (!allowed) return { error: "El contexto de una tarea solo lo escribe la persona responsable." };
+  if (!allowed) return { error: "El comentario lo registra la persona responsable de la tarea." };
 
   const sb = ledgerServiceClient();
   if (!sb) return { error: "Falta la llave de servicio en el servidor." };
@@ -3771,32 +3771,82 @@ export async function updateLedgerContextAction(taskKey: string, text: string): 
   return null;
 }
 
-/** Acuerdos del mes: los escribe dirección; queda a la vista quién y cuándo. */
-export async function updateProductivityAgreementsAction(period: string, body: string): Promise<FormState> {
+/**
+ * Acuerdos del mes de una persona (migración 025): prioridades y meta de
+ * cumplimiento opcional. Los registra dirección; si cambian después de que
+ * la persona dio "Enterado", el acuse se reinicia.
+ */
+export async function updatePersonAgreementAction(
+  period: string,
+  person: string,
+  field: "body" | "target_pct",
+  value: string
+): Promise<FormState> {
   if (!/^\d{4}-\d{2}$/.test(period)) return { error: "Mes inválido." };
+  if (!person.trim()) return { error: "Falta la persona." };
   const supabase = await createSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "Tu sesión venció; vuelve a entrar." };
   if (!seesAllProductivity(user.email) && !isDemoMode()) {
-    return { error: "Los acuerdos del mes los escribe dirección." };
+    return { error: "Los acuerdos los registra dirección." };
   }
+
+  let parsed: string | number | null;
+  if (field === "body") {
+    parsed = value.trim().slice(0, 4000);
+  } else if (field === "target_pct") {
+    const n = value.trim() === "" ? null : Math.round(Number(value));
+    if (n !== null && (Number.isNaN(n) || n < 0 || n > 100)) return { error: "La meta va de 0 a 100." };
+    parsed = n;
+  } else {
+    return { error: "Campo no permitido." };
+  }
+
   const name = await currentUserName(supabase);
   const sb = ledgerServiceClient();
   if (!sb) return { error: "Falta la llave de servicio en el servidor." };
-  const { error } = await sb
-    .from("productivity_agreements")
-    .upsert(
-      { period, body: body.trim().slice(0, 4000), updated_by: name, updated_at: new Date().toISOString() },
-      { onConflict: "period" }
-    );
+  const { error } = await sb.from("productivity_agreements").upsert(
+    {
+      period,
+      person,
+      [field]: parsed,
+      acknowledged_at: null,
+      updated_by: name,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "period,person" }
+  );
   if (error) {
-    if (error.message.includes("productivity_agreements")) {
-      return { error: "Falta correr la migración 024 en la base (reporte de productividad)." };
+    if (error.message.includes("person") || error.message.includes("target_pct") || error.message.includes("acknowledged_at")) {
+      return { error: "Falta correr la migración 025 en la base (acuerdos por persona)." };
     }
     return { error: error.message };
   }
+  revalidatePath("/productividad");
+  return null;
+}
+
+/** La persona confirma que recibió sus acuerdos del mes ("Enterado"). */
+export async function acknowledgeAgreementAction(period: string): Promise<FormState> {
+  if (!/^\d{4}-\d{2}$/.test(period)) return { error: "Mes inválido." };
+  const supabase = await createSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Tu sesión venció; vuelve a entrar." };
+  const name = await currentUserName(supabase);
+  const sb = ledgerServiceClient();
+  if (!sb) return { error: "Falta la llave de servicio en el servidor." };
+  const { data, error } = await sb
+    .from("productivity_agreements")
+    .update({ acknowledged_at: new Date().toISOString() })
+    .eq("period", period)
+    .eq("person", name)
+    .select("period");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "Todavía no hay acuerdos registrados para este mes." };
   revalidatePath("/productividad");
   return null;
 }
