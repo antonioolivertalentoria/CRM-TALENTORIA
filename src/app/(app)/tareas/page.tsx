@@ -1,4 +1,6 @@
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { syncTaskLedger } from "@/lib/task-ledger";
 import { computeTasks, customToComputed, sortByDue } from "@/lib/tasks";
 import { computeConsultingTasks, type ConsultingProjectFull } from "@/lib/consulting-tasks";
 import { computeRecruitmentTasks, type RecruitmentVacancyFull } from "@/lib/recruitment-tasks";
@@ -31,6 +33,11 @@ export const dynamic = "force-dynamic";
 
 export default async function TasksPage() {
   const supabase = await createClient();
+
+  // Bitácora del reporte de productividad, después de pintar la página
+  after(async () => {
+    await syncTaskLedger();
+  });
 
   const [
     { data: trainingsData },

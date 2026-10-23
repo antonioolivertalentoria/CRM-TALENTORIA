@@ -11,6 +11,7 @@ import { canSeeConsulting } from "@/lib/consulting-access";
 import { canSeeRecruitment } from "@/lib/recruitment-access";
 import { COMMERCIAL_OWNER } from "@/lib/constants";
 import type { ReminderPrefs } from "@/lib/types";
+import { syncTaskLedger } from "@/lib/task-ledger";
 
 /**
  * Recordatorios diarios por correo (Vercel Cron, 8:00 am hora de Chihuahua).
@@ -68,6 +69,10 @@ export async function GET(request: Request) {
   if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+
+  // Bitácora del reporte de productividad: al menos una vez al día, aunque
+  // nadie haya movido nada (así se anotan las tareas que vencen solas).
+  const ledger = await syncTaskLedger();
 
   const resendKey = process.env.RESEND_API_KEY;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -265,5 +270,5 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ sent, results });
+  return NextResponse.json({ sent, results, ledger });
 }

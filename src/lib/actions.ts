@@ -20,6 +20,9 @@ import {
 import { NEGATIVE_RESULTS, POSITIVE_RESULTS, addWorkingDays, findDef, loopRange } from "@/lib/marketing-flows";
 import { isPast, syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
 import { DEFAULT_TZ, normalizeTz, tzShort } from "@/lib/timezones";
+import { ledgerServiceClient, syncTaskLedger } from "@/lib/task-ledger";
+import { isDemoMode } from "@/lib/demo/mock";
+import { seesAllProductivity } from "@/lib/productivity";
 import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, MarketingLead, MarketingPage, MarketingSend, MarketingStep, MarketingUrl, RecruitmentAttachment, RecruitmentCandidate, RecruitmentVacancy, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
@@ -84,6 +87,13 @@ async function logActivity(
         });
       } catch {
         // Nunca debe tumbar la acción que lo llamó.
+      }
+      // Bitácora del reporte de productividad: cada cambio puede cerrar,
+      // abrir o mover tareas, así que se sincroniza aquí mismo.
+      try {
+        await syncTaskLedger();
+      } catch {
+        // Igual: best effort.
       }
     });
   } catch {
@@ -3714,5 +3724,79 @@ export async function deleteMarketingUrlAction(id: string, projectId: string): P
   const { error } = await supabase.from("marketing_urls").delete().eq("id", id);
   if (error) return { error: error.message };
   revalidateMarketing(projectId);
+  return null;
+}
+
+// ---------------- Reporte de productividad (migración 024) ----------------
+// La bitácora no se escribe desde el navegador (RLS solo deja leer): estas
+// acciones revisan permisos aquí y escriben con la llave de servicio.
+
+/**
+ * "¿Qué pasó?" de una tarea tarde o vencida. Es la voz de la persona
+ * responsable: solo ella lo escribe. Dirección puede escribirlo solo en
+ * tareas sin una persona del equipo detrás (sin responsable o un rol).
+ */
+export async function updateLedgerContextAction(taskKey: string, text: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Tu sesión venció; vuelve a entrar." };
+  const name = await currentUserName(supabase);
+
+  // Con el cliente del usuario: si RLS no le deja ver la tarea, no existe para él
+  const { data: row } = await supabase
+    .from("task_ledger")
+    .select("task_key, assignee")
+    .eq("task_key", taskKey)
+    .maybeSingle();
+  if (!row) return { error: "No encontré esa tarea en tu reporte." };
+
+  let allowed = row.assignee === name;
+  if (!allowed && (seesAllProductivity(user.email) || isDemoMode())) {
+    const { data: people } = await supabase.from("profiles").select("full_name");
+    const teamNames = new Set(((people ?? []) as { full_name: string }[]).map((p) => p.full_name));
+    allowed = !teamNames.has(row.assignee);
+  }
+  if (!allowed) return { error: "El contexto de una tarea solo lo escribe la persona responsable." };
+
+  const sb = ledgerServiceClient();
+  if (!sb) return { error: "Falta la llave de servicio en el servidor." };
+  const { error } = await sb
+    .from("task_ledger")
+    .update({ context: text.trim().slice(0, 1000), context_by: name, context_at: new Date().toISOString() })
+    .eq("task_key", taskKey);
+  if (error) return { error: error.message };
+  revalidatePath("/productividad");
+  return null;
+}
+
+/** Acuerdos del mes: los escribe dirección; queda a la vista quién y cuándo. */
+export async function updateProductivityAgreementsAction(period: string, body: string): Promise<FormState> {
+  if (!/^\d{4}-\d{2}$/.test(period)) return { error: "Mes inválido." };
+  const supabase = await createSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Tu sesión venció; vuelve a entrar." };
+  if (!seesAllProductivity(user.email) && !isDemoMode()) {
+    return { error: "Los acuerdos del mes los escribe dirección." };
+  }
+  const name = await currentUserName(supabase);
+  const sb = ledgerServiceClient();
+  if (!sb) return { error: "Falta la llave de servicio en el servidor." };
+  const { error } = await sb
+    .from("productivity_agreements")
+    .upsert(
+      { period, body: body.trim().slice(0, 4000), updated_by: name, updated_at: new Date().toISOString() },
+      { onConflict: "period" }
+    );
+  if (error) {
+    if (error.message.includes("productivity_agreements")) {
+      return { error: "Falta correr la migración 024 en la base (reporte de productividad)." };
+    }
+    return { error: error.message };
+  }
+  revalidatePath("/productividad");
   return null;
 }

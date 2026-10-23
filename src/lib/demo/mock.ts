@@ -250,6 +250,7 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
   private filters: ((r: Row) => boolean)[] = [];
   private orders: { field: string; asc: boolean }[] = [];
   private limitN?: number;
+  private offsetN = 0;
   private mode: "select" | "insert" | "upsert" | "update" | "delete" = "select";
   private conflictField = "id";
   private wantSingle = false;
@@ -271,6 +272,14 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
     if (op === "is" && value === null) {
       this.filters.push((r) => r[field] !== null && r[field] !== undefined);
     }
+    return this;
+  }
+  gte(field: string, value: any) {
+    this.filters.push((r) => r[field] !== null && r[field] !== undefined && String(r[field]) >= String(value));
+    return this;
+  }
+  lt(field: string, value: any) {
+    this.filters.push((r) => r[field] !== null && r[field] !== undefined && String(r[field]) < String(value));
     return this;
   }
   lte(field: string, value: any) {
@@ -295,6 +304,11 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
   }
   limit(n: number) {
     this.limitN = n;
+    return this;
+  }
+  range(from: number, to: number) {
+    this.offsetN = from;
+    this.limitN = to - from + 1;
     return this;
   }
   single() {
@@ -401,7 +415,7 @@ class DemoQuery implements PromiseLike<{ data: any; error: any }> {
         (a, b) => compare(a[o.field], b[o.field]) * (o.asc ? 1 : -1)
       );
     }
-    if (this.limitN !== undefined) result = result.slice(0, this.limitN);
+    if (this.limitN !== undefined) result = result.slice(this.offsetN, this.offsetN + this.limitN);
     return this.finish(store, result);
   }
 
