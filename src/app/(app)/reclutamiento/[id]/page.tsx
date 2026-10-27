@@ -264,7 +264,7 @@ export default async function VacancyDetailPage({
         </h2>
         <p className="mb-3 mt-0.5 text-xs text-slate-400">
           Todos los plazos del flujo cuelgan de estas fechas. La de la requisición es el inicio de
-          tiempos; la de ingreso dispara facturación, avisos y el reloj de la garantía.
+          tiempos; la de ingreso dispara los avisos y el reloj de la garantía.
         </p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
@@ -315,7 +315,7 @@ export default async function VacancyDetailPage({
             <p className="mt-1 text-[11px] text-slate-400">
               {guaranteeEnd
                 ? `Garantía hasta ${formatDate(guaranteeEnd)}${guaranteeEnd < today ? " (terminada)" : ""}`
-                : "Dispara facturación, avisos y garantía."}
+                : "Dispara avisos y garantía."}
             </p>
           </div>
         </div>

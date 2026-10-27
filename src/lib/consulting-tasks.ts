@@ -1,5 +1,5 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
-import { COMMERCIAL_OWNER, FINANCE_OWNER } from "./constants";
+import { COMMERCIAL_OWNER } from "./constants";
 import type { ComputedTask } from "./tasks";
 import type {
   Client,
@@ -16,7 +16,8 @@ import type {
  * los pasos accionables que siguen pendientes.
  *
  * Responsables según el mapa: OPERACIONES → internal_owner del proyecto;
- * LÍDER → leader; COMERCIAL → comercial; FINANZAS → FINANCE_OWNER.
+ * LÍDER → leader; COMERCIAL → comercial. La factura (FINANZAS) quedó fuera
+ * del CRM el 27-oct-2026.
  *
  * Todas las claves de tarea llevan el id del proyecto ("cons-<id>-…")
  * para poder sumar el tiempo ⏱ invertido por proyecto.
@@ -215,9 +216,7 @@ export function computeConsultingTasks(projects: ConsultingProjectFull[]): Compu
       if (p.aceptacion_cliente === "Pendiente") {
         push("aceptacion", "Confirmar aceptación del cliente", p.leader, addBusinessDays(d, 3), field("aceptacion_cliente"));
       }
-      if (p.factura === "Pendiente") {
-        push("factura", "Solicitar emisión y envío de factura", FINANCE_OWNER, d, field("factura"));
-      }
+      // Paso 29 (factura): fuera del CRM desde el 27-oct-2026, no genera tarea.
       if (p.encuesta === "Pendiente") {
         push("encuesta", "Enviar encuesta de satisfacción y dar seguimiento", p.leader, addDays(d, 2), field("encuesta"));
       }
@@ -235,9 +234,7 @@ export function computeConsultingTasks(projects: ConsultingProjectFull[]): Compu
       if (p.cierre_comercial === "Pendiente") {
         push(
           "cierre_comercial",
-          p.factura === "Pendiente"
-            ? "Cierre del proyecto: confirmar entregables y ⚠️ factura pendiente"
-            : "Cierre del proyecto: confirmar entregables enviados y factura",
+          "Cierre del proyecto: confirmar entregables enviados",
           comercial,
           addBusinessDays(d, 2),
           field("cierre_comercial")

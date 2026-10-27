@@ -244,7 +244,7 @@ export default async function TrainingDetailPage({
             <OwnerSelect value={training.internal_owner} people={people} onChange={save("internal_owner")} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400" title="Recibe los avisos de cierre (factura y entregables) y de fin de postventa">
+            <p className="text-xs font-semibold text-slate-400" title="Recibe los avisos de cierre (entregables) y de fin de postventa">
               Comercial
             </p>
             <OwnerSelect value={training.comercial} people={people} onChange={save("comercial")} />

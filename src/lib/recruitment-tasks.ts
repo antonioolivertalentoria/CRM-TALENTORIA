@@ -1,5 +1,4 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
-import { FINANCE_OWNER } from "./constants";
 import type { ComputedTask } from "./tasks";
 import type { Client, RecruitmentCandidate, RecruitmentVacancy } from "./types";
 
@@ -14,7 +13,8 @@ import type { Client, RecruitmentCandidate, RecruitmentVacancy } from "./types";
  * la fecha de alta de la vacante.
  *
  * Responsables según el diagrama: RECLUTADOR → recruiter; COMERCIAL →
- * comercial; FINANZAS → FINANCE_OWNER; CLIENTE → lo persigue el reclutador.
+ * comercial; CLIENTE → lo persigue el reclutador. Las facturas (anticipo y
+ * cobertura) quedaron fuera del CRM el 27-oct-2026.
  *
  * Todas las claves de tarea llevan el id de la vacante ("recl-<id>-…")
  * para poder sumar el tiempo ⏱ invertido por proceso.
@@ -73,16 +73,8 @@ export function computeRecruitmentTasks(vacancies: RecruitmentVacancyFull[]): Co
         complete,
       });
 
-    // ---- Arranque: comercial (pasos 2-3) ----
-    if (v.factura_anticipo === "Pendiente") {
-      push(
-        "anticipo",
-        "Enviar factura de anticipo al cliente",
-        v.comercial,
-        atLeast(v.quote_authorized_at ?? ref, today),
-        field("factura_anticipo")
-      );
-    }
+    // ---- Arranque: comercial (paso 3; el 2, factura de anticipo, quedó
+    // fuera del CRM el 27-oct-2026) ----
     if (v.requisicion_enviada === "Pendiente") {
       push(
         "requisicion",
@@ -284,20 +276,10 @@ export function computeRecruitmentTasks(vacancies: RecruitmentVacancyFull[]): Co
       );
     }
 
-    // ---- Ingreso, facturación y cierre (pasos 21-22) ----
+    // ---- Ingreso y cierre (pasos 21-22; la factura de cobertura quedó
+    // fuera del CRM el 27-oct-2026) ----
     if (v.hire_date) {
       const d = v.hire_date;
-      if (v.factura_cobertura === "Pendiente") {
-        // Antes o el mismo día del ingreso; si la fecha se captura tarde,
-        // la tarea nace para hoy en vez de nacer vencida.
-        push("factura_sol", "Solicitar la factura de cobertura al área de finanzas", v.recruiter, atLeast(addDays(d, -1), today), field("factura_cobertura"));
-      }
-      if (v.factura_cobertura === "Listo" && v.factura_enviada === "Pendiente") {
-        push("factura_env", "Enviar la factura de cobertura al cliente", FINANCE_OWNER, d, field("factura_enviada"));
-      }
-      if (v.factura_enviada === "Listo" && v.factura_confirmada === "Pendiente") {
-        push("factura_conf", "Confirmar con el cliente que le llegó la factura", v.recruiter, d, field("factura_confirmada"));
-      }
       if (today >= d) {
         if (v.ingreso_confirmado === "Pendiente") {
           push("ingreso_ok", "Confirmar que el candidato se presentó y está contratado", v.recruiter, d, field("ingreso_confirmado"));

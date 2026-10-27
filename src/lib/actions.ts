@@ -484,7 +484,7 @@ const TRAINING_FIELDS = new Set([
   "questions",
 ]);
 
-/** Entregas al cliente y factura: lo que el comercial necesita ver al cierre. */
+/** Entregas al cliente: lo que el comercial necesita ver al cierre. */
 const CLOSING_CHECK_KEYS = [
   "envio_manual",
   "envio_constancias",
@@ -494,7 +494,6 @@ const CLOSING_CHECK_KEYS = [
   "informe_encuesta",
   "envio_leads",
   "encuesta_final",
-  "factura",
 ];
 
 /**
@@ -571,7 +570,7 @@ async function notifyCommercialTrainingFinished(
                <ul style="color:#475569;font-size:13px;padding-left:18px;margin:0">${pending
                  .map((x) => `<li>${x}</li>`)
                  .join("")}</ul>`
-            : `<p style="color:#047857;font-size:13px;margin:12px 0 4px">Las entregas al cliente y la factura ya están marcadas.</p>`
+            : `<p style="color:#047857;font-size:13px;margin:12px 0 4px">Las entregas al cliente ya están marcadas.</p>`
         }
         <a href="https://crm-talentoria.vercel.app/capacitaciones/${t.id}" style="display:inline-block;background:linear-gradient(90deg,#00aeef,#e6007e);color:#fff;font-weight:bold;padding:10px 22px;border-radius:8px;text-decoration:none;margin-top:16px">Abrir la ficha</a>
         <p style="color:#94a3b8;font-size:12px;margin-top:20px">

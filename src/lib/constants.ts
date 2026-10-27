@@ -93,10 +93,11 @@ export const CHECKLIST_FIELDS: { key: string; label: string; hint: string }[] = 
   { key: "informe_encuesta", label: "Informe de encuesta", hint: "Entregar al cliente el informe de resultados de la encuesta de satisfacción" },
   { key: "envio_leads", label: "Leads a comercial", hint: "Compartir referidos de la encuesta con comercial" },
   { key: "encuesta_final", label: "Encuesta cliente contratante", hint: "Encuesta de satisfacción del cliente que contrató" },
-  { key: "factura", label: "Factura", hint: "Solicitar emisión/envío de factura el mismo día del curso" },
+  // Sin "factura": las facturas quedaron fuera del CRM el 27-oct-2026 (la
+  // columna sigue en la base, en "No aplica").
   { key: "seguimiento_20", label: "Seguimiento día 20", hint: "Llamada/mensaje para validar aplicación de aprendizajes" },
   { key: "seguimiento_30", label: "Seguimiento día 30", hint: "Cierre formal de soporte y clausura del grupo de WhatsApp" },
-  { key: "cierre_comercial", label: "Cierre comercial", hint: "Comercial confirma que los entregables salieron y que la factura existe (48h después del curso)" },
+  { key: "cierre_comercial", label: "Cierre comercial", hint: "Comercial confirma que los entregables salieron (48h después del curso)" },
   { key: "postventa_comercial", label: "Fin de postventa", hint: "Comercial retoma al cliente al terminar el acompañamiento de 30 días" },
 ];
 
@@ -134,7 +135,8 @@ export const CHANGE_STATUSES = [
   "Aplicado",
 ] as const;
 
-// Quien recibe las tareas de facturación de consultoría (paso 29 del mapa)
+// Rol de Finanzas (hoy solo lo usan los mapas de Marketing: las tareas de
+// factura salieron del CRM el 27-oct-2026)
 export const FINANCE_OWNER = "Eduardo Évora";
 
 // Checklist del proceso de consultoría (con el paso y SLA del mapa)
@@ -147,11 +149,11 @@ export const CONSULTING_CHECKLIST: { key: string; label: string; hint: string }[
   { key: "plan_validado", label: "Plan validado", hint: "Operaciones valida plan, capacidad y fechas (24h)" },
   { key: "entregables_enviados", label: "Entregables finales enviados", hint: "Archivos finales y acta o correo de entrega (24h tras la entrega)" },
   { key: "aceptacion_cliente", label: "Aceptación del cliente", hint: "Cliente confirma aceptación o ajustes finales (3 días hábiles)" },
-  { key: "factura", label: "Factura", hint: "Solicitar y enviar factura (mismo día de la entrega — Finanzas)" },
+  // Sin "factura" (paso 29): fuera del CRM desde el 27-oct-2026.
   { key: "encuesta", label: "Encuesta de satisfacción", hint: "Enviar encuesta y dar seguimiento (48h después de la entrega)" },
   { key: "cierre_interno", label: "Cierre interno", hint: "Horas, documentación y aprendizajes (3 días hábiles)" },
   { key: "seguimiento_20", label: "Seguimiento posproyecto", hint: "Seguimiento al cliente y cierre definitivo (20 días después)" },
-  { key: "cierre_comercial", label: "Cierre comercial", hint: "Comercial confirma que los entregables salieron y que la factura existe (48h después de la entrega)" },
+  { key: "cierre_comercial", label: "Cierre comercial", hint: "Comercial confirma que los entregables salieron (48h después de la entrega)" },
   { key: "postventa_comercial", label: "Fin de postventa", hint: "Comercial retoma al cliente al cumplirse los 20 días de seguimiento posproyecto" },
 ];
 
@@ -226,8 +228,9 @@ export const CONTINUES_STATUSES = ["Pendiente", "Sí", "No"] as const;
 export const VACANCY_MODALITIES = ["Por definir", "Presencial", "Híbrida", "Remoto"] as const;
 
 // Checklist del proceso de reclutamiento (con el paso y SLA del flujo)
+// Sin facturas (paso 2 anticipo y paso 21 cobertura): fuera del CRM desde
+// el 27-oct-2026; las columnas siguen en la base, en "No aplica".
 export const RECRUITMENT_CHECKLIST: { key: string; label: string; hint: string }[] = [
-  { key: "factura_anticipo", label: "Factura de anticipo", hint: "Paso 2 — Comercial envía la factura de anticipo al cliente (inmediato)" },
   { key: "requisicion_enviada", label: "Requisición al reclutador", hint: "Paso 3 — Comercial envía la requisición al reclutador (inmediato)" },
   { key: "contacto_cliente", label: "Contacto para agendar", hint: "Paso 5 — Contactar al cliente para agendar la reunión (máx. 24h)" },
   { key: "levantamiento_perfil", label: "Levantamiento de perfil", hint: "Paso 6 — Levantamiento con el cliente (máx. 48h desde la requisición)" },
@@ -235,9 +238,6 @@ export const RECRUITMENT_CHECKLIST: { key: string; label: string; hint: string }
   { key: "estrategia_publicacion", label: "Estrategia de publicación", hint: "Paso 9 — Medios acordes al perfil, cuidando el presupuesto (inmediato)" },
   { key: "dashboard_actualizado", label: "Información en el dashboard", hint: "Paso 11 — Subir la información de la vacante (mismo día de la publicación)" },
   { key: "filtrado_entrevistas", label: "Filtro de CVs y entrevistas", hint: "Pasos 12-14 — Recibir, filtrar, capturar y entrevistar candidatos (continuo)" },
-  { key: "factura_cobertura", label: "Solicitud de factura de cobertura", hint: "Paso 21 — Solicitar la factura a Finanzas (antes o el mismo día del ingreso)" },
-  { key: "factura_enviada", label: "Factura enviada por Finanzas", hint: "Paso 21 — Finanzas envía la factura de cobertura al cliente (mismo día)" },
-  { key: "factura_confirmada", label: "Factura confirmada con el cliente", hint: "Paso 21 — Confirmar con el cliente que le llegó la factura (mismo día)" },
   { key: "ingreso_confirmado", label: "Ingreso confirmado", hint: "Paso 22 — Confirmar que el candidato se presentó y está contratado" },
   { key: "aviso_candidatos", label: "Aviso a los demás candidatos", hint: "Paso 22 — Informar a los candidatos no seleccionados (máx. 24h desde el ingreso)" },
   { key: "seguimiento_cliente", label: "Seguimiento con el cliente", hint: "Paso 22 — Seguimiento durante la garantía (continuo)" },

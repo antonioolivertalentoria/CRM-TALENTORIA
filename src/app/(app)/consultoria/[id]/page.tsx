@@ -309,7 +309,7 @@ export default async function ConsultingDetailPage({
               start={project.delivery_start}
             />
             <p className="mt-2 text-[11px] text-slate-400">
-              Desde esta fecha corren factura (mismo día), encuesta (48h), cierre (3 días) y seguimiento (+20).
+              Desde esta fecha corren encuesta (48h), cierre (3 días) y seguimiento (+20).
             </p>
           </div>
         </div>

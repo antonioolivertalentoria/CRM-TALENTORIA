@@ -14,7 +14,10 @@ import type { Client, CustomTask, Material, Session, Training, TrainingRequest }
  * - Lista de participantes e impresión de manuales (presencial): 7 días antes.
  * - Encuestas QR y liga de sesión (online): 3 días antes.
  * - Entregas post-curso: 2 días HÁBILES después de la última sesión;
- *   factura el mismo día; seguimientos a 20 y 30 días naturales.
+ *   seguimientos a 20 y 30 días naturales.
+ *
+ * Facturas: fuera del CRM desde el 27-oct-2026 (decisión de Oli). Ningún
+ * módulo genera tareas de factura y los campos quedaron en "No aplica".
  */
 
 export type ComputedTask = {
@@ -302,21 +305,9 @@ export function computeTasks(
       }
     }
 
-    // Factura: el mismo día del curso
-    if (lastDate && today >= lastDate && t.factura === "Pendiente") {
-      tasks.push({
-        ...base,
-        key: `${t.id}-factura`,
-        kind: "Entrega",
-        title: "Solicitar emisión y envío de factura",
-        due: lastDate,
-        complete: trainingField("factura"),
-      });
-    }
-
     // ---- Avisos a Comercial (migración 018) ----
-    // Comercial no se enteraba del cierre y es quien tiene que cuidar
-    // que la factura exista y retomar al cliente cuando se acaba el
+    // Comercial no se enteraba del cierre y es quien tiene que confirmar
+    // que los entregables salieron y retomar al cliente cuando se acaba el
     // acompañamiento. Estos dos avisos son su parte del proceso.
     if (lastDate && today > lastDate) {
       const comercial = t.comercial || COMMERCIAL_OWNER;
@@ -328,14 +319,11 @@ export function computeTasks(
           assignee: comercial,
           key: `${t.id}-cierre_comercial`,
           kind: "Entrega",
-          title: "Cierre del proyecto: confirmar entregables enviados y factura",
+          title: "Cierre del proyecto: confirmar entregables enviados",
           details:
-            (t.factura === "Pendiente"
-              ? "⚠️ La factura sigue pendiente en la ficha. "
-              : "Factura marcada como atendida. ") +
-            (faltan.length > 0
+            faltan.length > 0
               ? `Todavía faltan entregas: ${faltan.join(", ")}.`
-              : "Todas las entregas al cliente ya están marcadas."),
+              : "Todas las entregas al cliente ya están marcadas.",
           due: addBusinessDays(lastDate, 2),
           complete: trainingField("cierre_comercial"),
         });
