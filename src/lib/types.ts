@@ -59,6 +59,12 @@ export type Training = {
   venue?: string;
   /** Mensaje de confirmación al cliente (migración 020; falta si no se ha corrido). */
   mensaje_confirmacion?: string;
+  /** ¿El curso usa IA? '' sin definir | 'Sí' | 'No' (migración 026; falta si no se ha corrido). */
+  usa_ia?: string;
+  /** Herramientas de IA que usarán los participantes (migración 026). */
+  herramientas_ia?: string;
+  /** Presencial: cada participante lleva computadora. '' | 'Sí' | 'No' (migración 026). */
+  requiere_computadora?: string;
   contenido_facilitador: string;
   lista_participantes: string;
   impresion_manuales: string;

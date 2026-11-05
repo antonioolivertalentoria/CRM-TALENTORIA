@@ -85,6 +85,9 @@ create table public.trainings (
   logistics_info text not null default '',     -- Respuestas logísticas confirmadas por el cliente
   venue text not null default '',              -- Sede: dirección, sala o área y referencia para llegar (migración 020)
   mensaje_confirmacion text not null default 'Pendiente', -- Mensaje de confirmación (WhatsApp) 2 días antes (migración 020)
+  usa_ia text not null default '',             -- ¿El curso usa IA? '' sin definir | Sí | No (migración 026)
+  herramientas_ia text not null default '',    -- Herramientas de IA que usarán, para que lleguen con usuario (migración 026)
+  requiere_computadora text not null default '', -- Presencial: cada participante lleva computadora '' | Sí | No (migración 026)
   -- Checklist previo al curso (Pendiente | Listo | No aplica)
   contenido_facilitador text not null default 'Pendiente', -- Contenido completo al facilitador
   lista_participantes text not null default 'Pendiente',   -- Lista confirmada con nombres completos

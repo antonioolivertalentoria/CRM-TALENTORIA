@@ -1,63 +1,13 @@
-// Plantillas del mensaje de logística por WhatsApp.
-// La versión presencial es el texto oficial de Talentoría;
-// la online es su adaptación para sesiones a distancia.
-
-export const LOGISTICS_PRESENCIAL = `Para preparar adecuadamente la capacitación, ¿me podrías apoyar confirmándome algunos puntos logísticos?
-* ¿Me podrías confirmar la dirección completa de la sede (calle y número, colonia y ciudad) y, si es posible, compartirnos la ubicación por aquí? También nos ayuda saber en qué área o sala dentro de las instalaciones será la capacitación y alguna referencia para llegar.
-* ¿Hay alguna especificación especial para ingresar o permanecer en sus instalaciones, como ropa, calzado, equipo de seguridad o identificación?
-* ¿Podemos ingresar a la sala de capacitación 30min antes de la hora de inicio para instalarnos adecuadamente?
-* ¿Nos podrían apoyar con pantalla o proyector y conexión eléctrica? Algunos ejercicios requieren responder encuestas en línea, ¿tendremos acceso a una red WiFi?
-* De ser posible, agradeceríamos que el espacio estuviera acomodado en herradura o en una distribución que facilite la participación y el trabajo en equipo. Nos confirman si es posible por favor.
-* ¿Me podrían confirmar el número final de participantes? Y es importante que tengamos una semana antes de la capacitación la lista con los nombres completos de los asistentes para generar los certificados del curso, ¿es posible?
-* Sugerimos tener un pequeño coffee break para los participantes, pero es opcional.
-* ¿Contaremos con una persona de contacto para apoyarnos con el acceso y cualquier necesidad logística al momento de llegar?
-Por último, ¿hay alguna indicación adicional que debamos considerar, como acceso al estacionamiento, registro de visitantes u otra disposición interna?
-Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que la capacitación se desarrolle de la mejor manera.`;
-
-export const LOGISTICS_ONLINE = `Para preparar adecuadamente la capacitación en línea, ¿me podrías apoyar confirmándome algunos puntos logísticos?
-* Nosotros generamos y compartimos la liga de la sesión con anticipación, ¿o prefieren que se realice en su propia plataforma?
-* ¿Los participantes se conectarán de forma individual, o estarán reunidos en una sala con pantalla compartida?
-* Si estarán en sala conjunta: ¿nos podrían apoyar con pantalla o proyector, buen audio (bocinas y micrófono) y conexión estable a internet?
-* Algunos ejercicios requieren responder encuestas en línea desde el celular o la computadora, ¿los participantes tendrán acceso a WiFi o datos móviles?
-* ¿Me podrían confirmar el número final de participantes? Es importante que tengamos una semana antes la lista con los nombres completos y correos de los asistentes, para los accesos y los certificados del curso, ¿es posible?
-* ¿Podríamos hacer una breve prueba de conexión unos días antes con la persona responsable del grupo o de la sala?
-* ¿Contaremos con una persona de contacto durante la sesión para apoyarnos con cualquier tema técnico o logístico?
-Por último, ¿hay alguna indicación adicional que debamos considerar, como políticas de grabación o permisos de su área de sistemas para el uso de la plataforma?
-Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que la capacitación se desarrolle de la mejor manera.`;
-
-// Curso en línea que un cliente como INDEX abre al público en general (no a
-// una empresa en particular). Comentarios de Arianna: no aplica lo de la sala
-// conjunta, la liga siempre la mandan ellos y no hay lista una semana antes
-// porque las inscripciones siguen abiertas hasta un día antes.
-export const LOGISTICS_ONLINE_ABIERTO = `Para preparar adecuadamente el curso en línea, ¿me podrías apoyar confirmándome algunos puntos logísticos?
-* ¿En qué plataforma será la sesión? En cuanto tengan la liga, ¿nos la podrían compartir? Si es posible, nos ayuda que el facilitador tenga permisos de coanfitrión para compartir pantalla, lanzar encuestas y hacer salas pequeñas.
-* ¿Podemos conectarnos 30 minutos antes del inicio para hacer una prueba de audio, video y presentación con la persona que administra la sesión?
-* ¿Quién dará la bienvenida y presentará al facilitador? Con gusto les compartimos su semblanza.
-* ¿Cuántas personas llevan inscritas a la fecha? Sabemos que pueden seguir sumándose hasta el último momento, solo nos sirve para planear las dinámicas.
-* Para las constancias de participación, ¿necesitan apoyo de nuestra parte o bien ustedes las realizan?
-* Algunos ejercicios requieren responder encuestas en línea desde el celular o la computadora, ¿podemos compartir las ligas por el chat de la sesión?
-* ¿Contaremos con una persona de contacto durante la sesión para apoyarnos a solucionar cualquier problema técnico que se llegara a presentar?
-Por último, ¿hay alguna indicación adicional que debamos considerar?
-Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que el curso se desarrolle de la mejor manera.`;
-
-// Curso presencial que un cliente como INDEX abre al público en general.
-// Mismos criterios que el online abierto: no hay lista una semana antes (las
-// inscripciones siguen abiertas hasta un día antes) y las constancias se
-// preguntan como sugirió Arianna. Sin lo de ropa o equipo de seguridad, que es
-// para cursos dentro de las instalaciones de una empresa.
-export const LOGISTICS_PRESENCIAL_ABIERTO = `Para preparar adecuadamente el curso, ¿me podrías apoyar confirmándome algunos puntos logísticos?
-* ¿Me podrías confirmar la dirección completa de la sede (calle y número, colonia y ciudad) y, si es posible, compartirnos la ubicación por aquí? También nos ayuda saber en qué salón o sala será el curso y alguna referencia para llegar.
-* ¿Podemos ingresar a la sala 30min antes de la hora de inicio para instalarnos adecuadamente?
-* ¿Nos podrían apoyar con pantalla o proyector, conexión eléctrica y, si el grupo es grande, micrófono? Algunos ejercicios requieren responder encuestas en línea, ¿tendremos acceso a una red WiFi?
-* De ser posible, agradeceríamos que el espacio estuviera acomodado en herradura o en una distribución que facilite la participación y el trabajo en equipo. Nos confirman si es posible por favor.
-* ¿Quién dará la bienvenida y presentará al facilitador? Con gusto les compartimos su semblanza.
-* ¿Cuántas personas llevan inscritas a la fecha? Sabemos que pueden seguir sumándose hasta el último momento, solo nos sirve para planear las dinámicas y los materiales.
-* ¿Ustedes se encargan del registro de los participantes a su llegada?
-* Para las constancias de participación, ¿necesitan apoyo de nuestra parte o bien ustedes las realizan?
-* Sugerimos tener un pequeño coffee break para los participantes, pero es opcional.
-* ¿Contaremos con una persona de contacto para apoyarnos con el acceso y cualquier necesidad logística al momento de llegar?
-Por último, ¿hay alguna indicación adicional que debamos considerar, como acceso al estacionamiento, registro de visitantes u otra disposición de la sede?
-Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que el curso se desarrolle de la mejor manera.`;
+// Mensajes de logística por WhatsApp: cuatro versiones (en línea o
+// presencial, para una empresa o abierto al público tipo INDEX) que salen del
+// ejemplo de Arianna y de su revisión del 05-nov-2026:
+//   · Lo de IA y Drive solo va en cursos de IA, y en ellos se dice desde el
+//     primer mensaje qué herramientas usarán para que lleguen con usuario.
+//   · Las encuestas se contestan desde el celular; en presencial se aclara si
+//     cada quien debe llevar computadora (depende del curso).
+//   · En línea para empresa, la prueba de conexión solo si están en sala conjunta.
+//   · En los abiertos no se preguntan los inscritos en este mensaje: se piden
+//     una semana antes, como dice el proceso (tarea de lista de participantes).
 
 /**
  * Versiones de los mensajes de logística y confirmación. Las "abierto" no se
@@ -79,12 +29,131 @@ export const isPresencial = (v: MessageVariant) => v.startsWith("Presencial");
 export const OPEN_COURSE_HINT =
   "Para cursos que un cliente como INDEX abre al público en general: las inscripciones siguen abiertas hasta el último día y, en línea, la liga la mandan ellos. Si el curso es para una empresa en particular, usa la versión «para una empresa».";
 
-export const LOGISTICS_TEMPLATES: Record<MessageVariant, string> = {
-  Presencial: LOGISTICS_PRESENCIAL,
-  "Presencial abierto": LOGISTICS_PRESENCIAL_ABIERTO,
-  Online: LOGISTICS_ONLINE,
-  "Online abierto": LOGISTICS_ONLINE_ABIERTO,
+/** Lo que usan los participantes durante el curso (se define por capacitación). */
+export type CourseNeeds = {
+  /** Curso de IA: se piden usuarios de las herramientas y el material va por Drive. */
+  ia: boolean;
+  /** Herramientas de IA que usarán ("ChatGPT y Gemini"). */
+  tools: string;
+  /** Solo presencial: cada participante lleva su computadora. */
+  computer: boolean;
 };
+
+/** Sugerencia para cursos que aún no lo tienen definido: ¿el nombre habla de IA? */
+export function looksLikeAICourse(...names: string[]): boolean {
+  const text = names.join(" ");
+  return /\bIA\b/.test(text) || /inteligencia artificial|chat ?gpt|prompts?\b|copilot|gemini/i.test(text);
+}
+
+export type LogisticsMessageText = {
+  text: string;
+  /** Datos que faltan; cada uno deja su marcador entre corchetes. */
+  missing: string[];
+};
+
+/** Arma el mensaje de logística de la versión elegida según lo que usa el curso. */
+export function buildLogistics(variant: MessageVariant, needs: CourseNeeds): LogisticsMessageText {
+  const open = isOpenCourse(variant);
+  const missing: string[] = [];
+  let tools = needs.tools.trim();
+  if (needs.ia && !tools) {
+    tools = "[herramientas de IA]";
+    missing.push("Herramientas de IA que usarán");
+  }
+
+  const curso = open ? "el curso" : "la capacitación";
+  const enEste = open ? "En este curso" : "En esta capacitación";
+  const durante = open ? "Durante el curso" : "Durante la capacitación";
+  const avisarles = open ? "¿nos ayudan a avisarles a los inscritos?" : "¿nos ayudan a avisarles?";
+
+  const presenta =
+    "¿Alguien de su equipo presentará al facilitador o prefieren que se presente por su cuenta? Si lo presentan ustedes, con gusto les compartimos su semblanza.";
+
+  // Presencial: qué llevan los participantes y WiFi. Las encuestas siempre son
+  // desde el celular; IA y computadora dependen del curso.
+  const equipo: string[] = [];
+  if (needs.ia && needs.computer) {
+    equipo.push(`${enEste} usaremos ${tools}, así que cada participante necesitará llevar su computadora y tener su usuario listo desde antes, ${avisarles}`);
+  } else if (needs.ia) {
+    equipo.push(`${enEste} usaremos ${tools} desde el celular o la computadora, así que es importante que cada participante tenga su usuario listo desde antes, ${avisarles}`);
+  } else if (needs.computer) {
+    equipo.push(`Para los ejercicios cada participante necesitará llevar su computadora, ${avisarles}`);
+  }
+  equipo.push(
+    needs.ia
+      ? "Además, responderán encuestas en línea desde el celular y les compartiremos el material con un enlace de Drive, ¿tendremos acceso a una red WiFi?"
+      : `${durante} los participantes responderán encuestas en línea desde su celular, ¿tendremos acceso a una red WiFi?`
+  );
+
+  let intro: string;
+  let bullets: (string | false)[];
+  let cierre = "Por último, ¿hay alguna otra indicación que debamos considerar?";
+
+  switch (variant) {
+    case "Online":
+      intro = "Para preparar adecuadamente la capacitación en línea, ¿me podrías apoyar confirmándome algunos puntos logísticos?";
+      bullets = [
+        "Nosotros generamos y compartimos la liga de la sesión en Zoom, ¿están de acuerdo?",
+        "¿Los participantes se conectarán de forma individual o estarán reunidos en una sala con pantalla compartida?",
+        "Si estarán en sala conjunta, ¿nos podrían apoyar con pantalla o proyector, buen audio (bocinas y micrófono) y conexión estable a internet? En ese caso, ¿habrá alguien de apoyo para mover la computadora principal y podríamos hacer una breve prueba de conexión 30 minutos antes de iniciar?",
+        "¿Me podrían confirmar el número final de participantes? Es importante que una semana antes tengamos la lista con los nombres completos y correos de los asistentes, para los accesos y los certificados del curso, ¿es posible?",
+        needs.ia &&
+          `${enEste} usaremos ${tools}, así que es importante que cada participante tenga su usuario listo desde antes. También les compartiremos el material con un enlace de Drive, ¿su área de sistemas les permite el acceso a estas herramientas?`,
+      ];
+      cierre = "Por último, ¿hay alguna otra indicación que debamos considerar, como políticas de grabación?";
+      break;
+
+    case "Presencial":
+      intro = "Para preparar adecuadamente la capacitación, ¿me podrías apoyar confirmándome algunos puntos logísticos?";
+      bullets = [
+        "¿Me podrías confirmar la dirección completa de la sede y compartirnos la ubicación por aquí? También nos ayuda saber en qué sala será y alguna referencia para llegar.",
+        "¿Hay algo que debamos considerar para ingresar a sus instalaciones, como identificación, registro de visitantes, estacionamiento, ropa, calzado o equipo de seguridad?",
+        "¿Podemos entrar a la sala 30 minutos antes para instalarnos? ¿Quién nos recibirá ese día?",
+        "¿Nos podrían apoyar con pantalla o proyector y conexión eléctrica?",
+        ...equipo,
+        "¿Es posible acomodar la sala en herradura (forma de U) o en mesas por equipo? Así todos participan y trabajan mejor en equipo.",
+        "¿Me podrían confirmar el número final de participantes? Es importante que una semana antes tengamos la lista con los nombres completos de los asistentes para los certificados del curso, ¿es posible?",
+        "Sugerimos un pequeño coffee break para los participantes, es opcional.",
+      ];
+      break;
+
+    case "Online abierto":
+      intro = "Para preparar adecuadamente el curso en línea, ¿me podrías apoyar confirmándome algunos puntos logísticos?";
+      bullets = [
+        "¿En qué plataforma será la sesión? En cuanto tengan la liga, ¿nos la comparten? Nos ayuda que el facilitador sea coanfitrión, para compartir pantalla, lanzar encuestas y abrir salas pequeñas.",
+        "¿Podemos conectarnos 30 minutos antes para probar audio, video y presentación? ¿Quién administrará la sesión y nos apoyará si surge algún problema técnico?",
+        presenta,
+        needs.ia &&
+          `${enEste} usaremos ${tools}, así que es importante que cada participante tenga su usuario listo desde antes, ${avisarles}`,
+        `¿Podemos compartir por el chat de la sesión las ligas de las encuestas y ${needs.ia ? "el material (un enlace de Drive)" : "el material"} en ese momento? O si prefieres, el material te lo enviamos antes por correo para que ustedes se lo hagan llegar a los inscritos.`,
+        "Para las constancias de participación, ¿ustedes las realizan o necesitan apoyo de nuestra parte?",
+      ];
+      break;
+
+    case "Presencial abierto":
+      intro = "Para preparar adecuadamente el curso, ¿me podrías apoyar confirmándome algunos puntos logísticos?";
+      bullets = [
+        "¿Me podrías confirmar la dirección completa de la sede y compartirnos la ubicación por aquí? También nos ayuda saber en qué salón será, alguna referencia para llegar y si hay estacionamiento.",
+        "¿Podemos entrar al salón 30 minutos antes para instalarnos? ¿Quién nos recibirá ese día?",
+        "¿Nos podrían apoyar con pantalla o proyector, conexión eléctrica y, si el grupo es grande, micrófono?",
+        ...equipo,
+        "¿Es posible acomodar el salón en herradura (forma de U) o en mesas por equipo? Así todos participan y trabajan mejor en equipo.",
+        presenta,
+        "Para el registro de llegada y las constancias de participación, ¿ustedes se encargan o necesitan apoyo de nuestra parte?",
+        "Sugerimos un pequeño coffee break para los participantes, es opcional.",
+      ];
+      break;
+  }
+
+  const text = [
+    intro,
+    ...bullets.filter((b): b is string => Boolean(b)).map((b) => `* ${b}`),
+    cierre,
+    `Muchas gracias por el apoyo. Con esta información podremos preparar todo lo necesario para que ${curso} se desarrolle de la mejor manera.`,
+  ].join("\n");
+
+  return { text, missing };
+}
 
 // Mensajes de seguimiento posteriores al curso (días 20 y 30 del proceso).
 // El de los 20 días pregunta cómo les ha ido aplicando lo aprendido; el de

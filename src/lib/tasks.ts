@@ -213,7 +213,9 @@ export function computeTasks(
       },
       {
         field: "lista_participantes",
-        label: "Confirmar lista de participantes (nombres completos)",
+        // En los cursos abiertos al público aquí se piden los inscritos a la fecha
+        // (Arianna, 05-nov-2026: no en el mensaje de logística).
+        label: "Confirmar lista de participantes (nombres completos; si es abierto, inscritos a la fecha)",
         days: 7,
         applies: true,
       },

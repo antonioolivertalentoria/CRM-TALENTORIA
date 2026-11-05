@@ -204,6 +204,10 @@ export default async function TrainingDetailPage({
               modalities={sessions.map((s) => s.modality)}
               whatsapp={training.clients.whatsapp}
               status={training.mensaje_logistica}
+              courseNames={[training.short_name ?? "", training.official_name ?? ""]}
+              usaIa={training.usa_ia ?? ""}
+              herramientasIa={training.herramientas_ia ?? ""}
+              requiereComputadora={training.requiere_computadora ?? ""}
             />
           )}
           {!isTeamBuilding && (
