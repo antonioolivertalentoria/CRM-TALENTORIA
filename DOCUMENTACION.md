@@ -189,7 +189,7 @@ Desde el 15-sep-2026:
 - **Invitaciones de calendario:** el comercial de la ficha nunca va como invitado
   (`withoutCommercial` en `src/lib/calendar.ts`). Filtra por correo resuelto, así que
   da igual si entraba como comercial, como responsable o por ser quien creó la sesión.
-  Única excepción: `ALWAYS_INVITED` (Antonio y Arianna) siempre va.
+  Única excepción: `ALWAYS_INVITED` (Antonio, Arianna y Paola) siempre va.
 - **Recordatorio diario:** el correo de `COMMERCIAL_OWNER` solo trae sus tareas de
   `cierre_comercial` y `postventa_comercial` (`src/app/api/recordatorios/route.ts`).
   Todo lo demás sigue visible en "Mis tareas", nada más que ya no va por correo —
@@ -276,7 +276,7 @@ con la hora en UTC calculada desde la zona de la sede): Gmail/Google Calendar la
 invitado con todos los datos. Mover fecha/horario/facilitador manda la
 actualización (mismo UID, SEQUENCE creciente) y cancelar o borrar la sesión
 (o el proyecto) manda la cancelación (METHOD:CANCEL). Invitados: el equipo
-base (ALWAYS_INVITED en calendar.ts: Antonio y Arianna), quien creó el
+base (ALWAYS_INVITED en calendar.ts: Antonio, Arianna y Paola), quien creó el
 proyecto, el responsable interno y el/la facilitador(a) de la sesión,
 **menos el comercial de la ficha** (15-sep-2026, ver arriba) —
 correos resueltos vía profiles, facilitators.email y el mapa EXTRA_EMAILS

@@ -39,10 +39,14 @@ import type { Session, Training } from "./types";
  * el título y el correo dicen además la hora local de la sede.
  */
 
-// Estos dos siempre reciben el evento en su calendario.
+// Estos siempre reciben el evento en su calendario, lo mande quien lo mande
+// (Caro incluida). Paola Olmedo entró el 05-nov-2026 a pedido de Ari: todas
+// las sesiones de capacitaciones y team buildings, y las reuniones y
+// sesiones de consultoría.
 const ALWAYS_INVITED: { name: string; email: string }[] = [
   { name: "Antonio Oliver", email: "antoniooliver@talentoria.com" },
   { name: "Arianna Évora", email: "ariannaevora@talentoria.com" },
+  { name: "Paola Olmedo", email: "paolaolmedo@talentoria.com" },
 ];
 
 // Correos conocidos de gente que aún no es usuaria del CRM ni está en el
