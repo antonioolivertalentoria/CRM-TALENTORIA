@@ -65,6 +65,8 @@ export type Training = {
   herramientas_ia?: string;
   /** Presencial: cada participante lleva computadora. '' | 'Sí' | 'No' (migración 026). */
   requiere_computadora?: string;
+  /** Lo que se llevaron: completa «¿ya pusieron en práctica …?» del seguimiento (migración 027). */
+  aprendizajes?: string;
   contenido_facilitador: string;
   lista_participantes: string;
   impresion_manuales: string;

@@ -63,7 +63,8 @@ export default async function TasksPage() {
   ] = await Promise.all([
     supabase
       .from("trainings")
-      .select("*, clients(id, company), sessions(*), materials(*)")
+      // Contacto y WhatsApp del cliente: con ellos se arman los mensajes de seguimiento
+      .select("*, clients(id, company, contact_name, whatsapp), sessions(*), materials(*)")
       .order("created_at"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs").order("full_name"),
     supabase.from("custom_tasks").select("*").eq("status", "Pendiente").order("due_date"),

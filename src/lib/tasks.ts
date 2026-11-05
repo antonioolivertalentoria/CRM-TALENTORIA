@@ -1,5 +1,6 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
 import { COMMERCIAL_OWNER } from "./constants";
+import { followUpContext, followUpStage, type FollowUpContext, type FollowUpField, type FollowUpStage } from "./follow-up";
 import type { Client, CustomTask, Material, Session, Training, TrainingRequest } from "./types";
 
 /**
@@ -36,6 +37,8 @@ export type ComputedTask = {
   /** A dónde lleva el renglón cuando la tarea no cuelga de una capacitación. */
   href?: string;
   due: string | null;
+  /** Seguimientos día 20/30: el mensaje armado con los datos de la ficha. */
+  followUp?: { stage: FollowUpStage; context: FollowUpContext };
   complete:
     | { type: "training_field"; field: string; value: string }
     | { type: "material_status"; materialId: string; nextStatus: string }
@@ -58,7 +61,8 @@ export type ComputedTask = {
 };
 
 type TrainingFull = Training & {
-  clients: Pick<Client, "id" | "company"> | null;
+  /** Contacto y WhatsApp solo llegan si el select los pide (Mis tareas, para los seguimientos). */
+  clients: (Pick<Client, "id" | "company"> & Partial<Pick<Client, "contact_name" | "whatsapp">>) | null;
   sessions: Session[];
   materials: Material[];
   /** Peticiones de team building (solo llega si el select las incluye). */
@@ -348,12 +352,14 @@ export function computeTasks(
       }
     }
 
-    // Seguimientos día 20 y 30 (aparecen 3 días antes de vencer)
+    // Seguimientos día 20 y 30 (aparecen 3 días antes de vencer), con el
+    // mensaje ya armado para mandarlo desde Mis tareas
     if (lastDate) {
-      const seg = [
+      const seg: { field: FollowUpField; label: string; days: number }[] = [
         { field: "seguimiento_20", label: "Seguimiento día 20: validar aplicación de aprendizajes", days: 20 },
         { field: "seguimiento_30", label: "Seguimiento día 30: cierre y clausura del grupo de WhatsApp", days: 30 },
       ];
+      const context = followUpContext(t);
       for (const s of seg) {
         const due = addDays(lastDate, s.days);
         if (val(s.field) === "Pendiente" && today >= addDays(due, -3)) {
@@ -363,6 +369,7 @@ export function computeTasks(
             kind: "Seguimiento",
             title: s.label,
             due,
+            followUp: { stage: followUpStage(context.statuses, context.lastDate, today, s.field), context },
             complete: trainingField(s.field),
           });
         }

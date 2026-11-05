@@ -32,6 +32,7 @@ function createInitialData(): DemoStore {
   const t1 = "demo-cap-1";
   const t2 = "demo-cap-2";
   const t3 = "demo-cap-3";
+  const t4 = "demo-cap-4";
 
   const training = (base: any) => ({
     official_name: "",
@@ -65,6 +66,7 @@ function createInitialData(): DemoStore {
     impresion_manuales: "Pendiente",
     encuestas_qr: "Pendiente",
     liga_sesion_valida: "Pendiente",
+    aprendizajes: "",
     notes: "",
     internal_notes: "",
     questions: "",
@@ -166,6 +168,33 @@ function createInitialData(): DemoStore {
         internal_owner: "Oliver",
         client_contact: "Ricardo Peña",
       }),
+      // Ya impartido hace 4 semanas: sirve para ver los mensajes de seguimiento 20/30
+      training({
+        id: t4,
+        client_id: c2,
+        short_name: "Administración del tiempo",
+        official_name: "Administración del tiempo",
+        status: "Finalizada",
+        total_sessions: 1,
+        internal_owner: "Oliver",
+        client_contact: "Ricardo Peña",
+        envio_manual: "Listo",
+        envio_constancias: "Listo",
+        envio_insignias: "No aplica",
+        envio_dc3: "Listo",
+        envio_leads: "Listo",
+        encuesta_participantes: "Listo",
+        informe_encuesta: "Listo",
+        encuesta_final: "Listo",
+        factura: "No aplica",
+        mensaje_logistica: "Listo",
+        mensaje_confirmacion: "Listo",
+        contenido_facilitador: "Listo",
+        lista_participantes: "Listo",
+        impresion_manuales: "Listo",
+        encuestas_qr: "Listo",
+        liga_sesion_valida: "Listo",
+      }),
     ],
     sessions: [
       session({
@@ -230,6 +259,20 @@ function createInitialData(): DemoStore {
         modality: "Presencial",
       }),
       session({ id: "demo-s6", training_id: t3, session_number: 1, status: "Pendiente" }),
+      session({
+        id: "demo-s8",
+        training_id: t4,
+        session_number: 1,
+        status: "Impartida",
+        session_date: iso(-28),
+        start_time: "09:00",
+        end_time: "13:00",
+        duration_hours: 4,
+        facilitator: "Carolina García",
+        modality: "Presencial",
+        enrolled: 15,
+        attended: 14,
+      }),
       session({ id: "demo-s7", training_id: t3, session_number: 2, status: "Pendiente" }),
     ],
     materials: [

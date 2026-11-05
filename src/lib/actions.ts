@@ -448,6 +448,7 @@ const TRAINING_FIELDS = new Set([
   "usa_ia",
   "herramientas_ia",
   "requiere_computadora",
+  "aprendizajes",
   "short_name",
   "official_name",
   "status",

@@ -31,6 +31,7 @@ import {
 } from "@/lib/actions";
 import { formatDate, formatMinutes } from "@/lib/format";
 import { TaskAttachments } from "./TaskAttachments";
+import { FollowUpComposer } from "./FollowUpComposer";
 import type { ComputedTask } from "@/lib/tasks";
 import type {
   CustomTask,
@@ -1030,6 +1031,22 @@ export function TasksList({
                         taskTitle={t.title}
                         entries={timeByTask[t.key] ?? []}
                       />
+
+                      {t.followUp && !isDone && (
+                        <FollowUpComposer
+                          trainingId={t.trainingId}
+                          context={t.followUp.context}
+                          stage={t.followUp.stage}
+                          today={today}
+                          compact
+                          onSent={(fields) =>
+                            fields.forEach((f) => {
+                              markDone(`${t.trainingId}-${f}`);
+                              dropProgress(`${t.trainingId}-${f}`);
+                            })
+                          }
+                        />
+                      )}
 
                       {!isDone && !prog && (
                         <button

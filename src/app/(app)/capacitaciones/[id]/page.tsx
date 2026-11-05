@@ -18,7 +18,10 @@ import { DeleteTrainingButton } from "@/components/DeleteTrainingButton";
 import { LogisticsMessage } from "@/components/LogisticsMessage";
 import { ConfirmationMessage } from "@/components/ConfirmationMessage";
 import { FollowUpMessage } from "@/components/FollowUpMessage";
-import { ENCUESTA_CLIENTE, ENCUESTA_CLIENTE_TB, SEGUIMIENTO_20, CIERRE_30 } from "@/lib/templates";
+import { FollowUpComposer } from "@/components/FollowUpComposer";
+import { ENCUESTA_CLIENTE, ENCUESTA_CLIENTE_TB } from "@/lib/templates";
+import { followUpContext, followUpStage } from "@/lib/follow-up";
+import { todayISO } from "@/lib/format";
 import { OwnerSelect } from "@/components/OwnerSelect";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { RequestsSection } from "@/components/RequestsSection";
@@ -102,6 +105,8 @@ export default async function TrainingDetailPage({
   }
 
   const save = (field: string) => updateTrainingField.bind(null, training.id, field);
+  const today = todayISO();
+  const followUp = followUpContext(training);
   const done = sessions.filter((s) => s.status === "Impartida").length;
   const total = training.total_sessions ?? sessions.length;
 
@@ -375,23 +380,32 @@ export default async function TrainingDetailPage({
             whatsapp={training.clients.whatsapp}
             status={training.encuesta_final}
           />
-          <FollowUpMessage
+          <FollowUpComposer
             trainingId={training.id}
-            field="seguimiento_20"
+            context={followUp}
+            stage={followUpStage(followUp.statuses, followUp.lastDate, today, "seguimiento_20")}
+            today={today}
             label="Mensaje día 20"
-            title="Seguimiento día 20: cómo les ha ido aplicando lo aprendido"
-            text={SEGUIMIENTO_20}
-            whatsapp={training.clients.whatsapp}
-            status={training.seguimiento_20}
           />
-          <FollowUpMessage
+          <FollowUpComposer
             trainingId={training.id}
-            field="seguimiento_30"
+            context={followUp}
+            stage={followUpStage(followUp.statuses, followUp.lastDate, today, "seguimiento_30")}
+            today={today}
             label="Mensaje día 30"
-            title="Cierre día 30: cierre del acompañamiento y clausura del grupo"
-            text={CIERRE_30}
-            whatsapp={training.clients.whatsapp}
-            status={training.seguimiento_30}
+          />
+        </div>
+        <div className="mb-4 max-w-2xl text-sm">
+          <p className="text-xs font-semibold text-slate-500">
+            Lo que se llevaron{" "}
+            <span className="font-normal text-slate-400">
+              (para el mensaje del día 20: completa «¿ya pusieron en práctica …?»)
+            </span>
+          </p>
+          <EditableField
+            value={training.aprendizajes ?? ""}
+            onSave={save("aprendizajes")}
+            placeholder="Ej. el feedback con el modelo TALENT o las herramientas de liderazgo situacional"
           />
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
