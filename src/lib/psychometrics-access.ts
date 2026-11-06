@@ -1,14 +1,16 @@
 /**
  * Acceso al módulo de Psicometría.
  *
- * EN ESTRENO desde el 06-nov-2026: lo ven Oli y Jaqui (que hizo el mapa
- * del proceso) para probarlo con casos reales antes de abrirlo. El resto
- * del equipo ve la pantalla de "en construcción" y no recibe sus tareas.
+ * ABIERTO A TODO EL EQUIPO desde el 06-nov-2026 (pedido de Oli el mismo
+ * día del estreno): todos ven el módulo y sus tareas se mezclan en "Mis
+ * tareas", en el reporte semanal y en los recordatorios.
  *
- * Para abrirlo a todos basta poner PSYCHOMETRICS_OPEN_TO_ALL en true y
- * desplegar (mismo patrón que Consultoría y Reclutamiento).
+ * La bandera y la lista se dejan por si algún día hay que volver a cerrar
+ * el módulo: basta poner PSYCHOMETRICS_OPEN_TO_ALL en false y desplegar;
+ * quien no esté en ALLOWED_EMAILS verá la pantalla de "en construcción" y
+ * no recibirá esas tareas.
  */
-export const PSYCHOMETRICS_OPEN_TO_ALL = false;
+export const PSYCHOMETRICS_OPEN_TO_ALL = true;
 
 const ALLOWED_EMAILS = ["antoniooliver@talentoria.com", "jacquelinelara@talentoria.com"];
 
