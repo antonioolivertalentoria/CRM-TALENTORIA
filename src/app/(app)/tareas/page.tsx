@@ -5,11 +5,14 @@ import { computeTasks, customToComputed, sortByDue } from "@/lib/tasks";
 import { computeConsultingTasks, type ConsultingProjectFull } from "@/lib/consulting-tasks";
 import { computeRecruitmentTasks, type RecruitmentVacancyFull } from "@/lib/recruitment-tasks";
 import { computeMarketingTasks } from "@/lib/marketing-tasks";
+import { computePsychometricTasks } from "@/lib/psychometric-tasks";
+import { loadPsychometricRequests } from "@/lib/psychometric-data";
 import { loadMarketingData } from "@/lib/marketing-data";
 import { todayISO } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
 import { canSeeRecruitment } from "@/lib/recruitment-access";
+import { canSeePsychometrics } from "@/lib/psychometrics-access";
 import { TasksList } from "@/components/TasksList";
 import { NewTaskForm } from "@/components/NewTaskForm";
 import { CompletedCustomTasks } from "@/components/CompletedCustomTasks";
@@ -60,6 +63,7 @@ export default async function TasksPage() {
     { data: progressData },
     { data: progressNotesData },
     marketingData,
+    psychometricRequests,
   ] = await Promise.all([
     supabase
       .from("trainings")
@@ -95,6 +99,8 @@ export default async function TasksPage() {
     supabase.from("task_progress_notes").select("*").order("created_at"),
     // Marketing (migración 021): tolerante a que aún no exista
     loadMarketingData(supabase),
+    // Psicometría (migración 028): tolerante a que aún no exista
+    loadPsychometricRequests(supabase),
   ]);
 
   // Peticiones de team building, colgadas de su training para el motor de tareas
@@ -185,6 +191,10 @@ export default async function TasksPage() {
       ? computeRecruitmentTasks(vacancies)
       : []),
     ...computeMarketingTasks(marketingData),
+    // Psicometría en estreno: solo para quien ve el módulo
+    ...(canSeePsychometrics(userRes.data.user?.email)
+      ? computePsychometricTasks(psychometricRequests)
+      : []),
     ...customToComputed(customTasks, clientNameById),
   ]);
 
@@ -194,7 +204,7 @@ export default async function TasksPage() {
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">Mis tareas</h1>
           <p className="text-sm text-slate-500">
-            Se generan solas a partir de capacitaciones, team buildings, consultorías, vacantes y marketing, y se mezclan con las tareas que
+            Se generan solas a partir de capacitaciones, team buildings, consultorías, vacantes, psicometrías y marketing, y se mezclan con las tareas que
             capturen tú o Arianna. Al completarlas aquí, todo se actualiza también (y al revés).
           </p>
         </div>
@@ -215,6 +225,7 @@ export default async function TasksPage() {
                   "Consultoría",
                   "Reclutamiento",
                   "Marketing",
+                  "Psicometría",
                 ],
               }
             }

@@ -351,3 +351,46 @@ STATUS_COLORS["Falla"] = "bg-red-500";
 STATUS_COLORS["Validado"] = "bg-emerald-500";
 STATUS_COLORS["Nueva práctica"] = "bg-amber-500";
 STATUS_COLORS["No autorizado"] = "bg-red-500";
+
+// ---------------- Psicometría (migración 028) ----------------
+
+// PSICOMETRÍA en el mapa de Jaqui: dueña del proceso por default
+export const PSYCHOMETRICS_OWNER = "Jacqueline Lara";
+
+// Las cuatro primeras fases se calculan solas con el avance de las
+// personas; Pausada y Cancelada se eligen a mano.
+export const PSYCHOMETRIC_STATUSES = [
+  "Requisición",
+  "En aplicación",
+  "Reportes",
+  "Entregada",
+  "Pausada",
+  "Cancelada",
+] as const;
+
+// Paso 11: el reporte cambia según quién lo pide (y el 13 solo en guarderías)
+export const PSYCHOMETRIC_REPORT_TYPES = ["Empresa", "Guardería"] as const;
+
+// Rombo 3: ¿información completa y proyecto viable?
+export const INFO_COMPLETE_STATUSES = ["Pendiente", "Sí", "No"] as const;
+
+export const PERSON_STATUSES = ["Activa", "Cancelada"] as const;
+// Rombo 8: ¿recibió las pruebas?
+export const RECEIPT_STATUSES = ["Pendiente", "Recibidas", "No recibidas"] as const;
+export const TESTS_DONE_STATUSES = ["Pendiente", "Completas"] as const;
+export const REPORT_STATUSES = ["Pendiente", "Listo"] as const;
+// Rombo 12: ¿la persona es viable? (criterio de Jaqui: >60 apta, 50-59 con reservas, <50 no apta)
+export const RESULT_STATUSES = ["Pendiente", "Apta", "Apta con reservas", "No apta"] as const;
+
+STATUS_COLORS["En aplicación"] = "bg-brand-cyan";
+STATUS_COLORS["Reportes"] = "bg-violet-500";
+STATUS_COLORS["Entregada"] = "bg-emerald-600";
+STATUS_COLORS["Empresa"] = "bg-sky-500";
+STATUS_COLORS["Guardería"] = "bg-pink-500";
+STATUS_COLORS["Activa"] = "bg-brand-cyan";
+STATUS_COLORS["Recibidas"] = "bg-emerald-500";
+STATUS_COLORS["No recibidas"] = "bg-red-500";
+STATUS_COLORS["Completas"] = "bg-emerald-500";
+STATUS_COLORS["Apta"] = "bg-emerald-500";
+STATUS_COLORS["Apta con reservas"] = "bg-amber-500";
+STATUS_COLORS["No apta"] = "bg-red-500";

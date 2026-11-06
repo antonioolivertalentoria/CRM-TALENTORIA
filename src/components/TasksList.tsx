@@ -16,6 +16,8 @@ import {
   updateRecruitmentField,
   stampRecruitmentDateAction,
   updateCandidateField,
+  updatePsychometricField,
+  updatePsychometricPersonField,
   completeMarketingStepAction,
   advanceMarketingSendsAction,
   updateMarketingSendField,
@@ -608,6 +610,7 @@ const KIND_STYLE: Record<string, string> = {
   Consultoría: "bg-indigo-100 text-indigo-700",
   Reclutamiento: "bg-fuchsia-100 text-fuchsia-700",
   Marketing: "bg-teal-100 text-teal-700",
+  Psicometría: "bg-pink-100 text-pink-700",
 };
 
 export function TasksList({
@@ -758,6 +761,10 @@ export function TasksList({
         return stampRecruitmentDateAction(c.vacancyId, c.field);
       } else if (c.type === "recruitment_candidate") {
         return updateCandidateField(c.candidateId, c.vacancyId, c.field, c.value);
+      } else if (c.type === "psychometric_field") {
+        return updatePsychometricField(c.requestId, c.field, c.value);
+      } else if (c.type === "psychometric_person") {
+        return updatePsychometricPersonField(c.personId, c.requestId, c.field, c.value);
       } else if (c.type === "marketing_step") {
         return completeMarketingStepAction(c.projectId, c.stepKey, c.result);
       } else if (c.type === "marketing_sends") {

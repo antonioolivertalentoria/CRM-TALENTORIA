@@ -634,3 +634,64 @@ export type MarketingUrl = {
   notes: string;
   created_at: string;
 };
+
+// ---------------- Psicometría (migración 028) ----------------
+
+export type PsychometricRequest = {
+  id: string;
+  client_id: string;
+  title: string;
+  /** Requisición | En aplicación | Reportes | Entregada (solas) | Pausada | Cancelada */
+  status: string;
+  /** Empresa | Guardería */
+  report_type: string;
+  /** PSICOMETRÍA en el mapa: dueña del proceso. */
+  evaluator: string;
+  comercial: string;
+  tests: string;
+  /** Ligas y tiempos que van en el mensaje a la persona (paso 6). */
+  test_links: string;
+  /** Paso 1: desde aquí corren los plazos. */
+  requisition_at: string | null;
+  client_deadline: string | null;
+  requisicion_revisada: string;
+  /** Rombo 3: Pendiente | Sí | No */
+  info_completa: string;
+  info_checked_at: string | null;
+  whatsapp_group: string;
+  drive_folder_url: string;
+  notes: string;
+  internal_notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PsychometricPerson = {
+  id: string;
+  request_id: string;
+  name: string;
+  phone: string;
+  email: string;
+  job_title: string;
+  /** Activa | Cancelada */
+  status: string;
+  sent_at: string | null;
+  /** Rombo 8: Pendiente | Recibidas | No recibidas */
+  receipt: string;
+  receipt_at: string | null;
+  client_followup: string;
+  tests_done: string;
+  tests_done_at: string | null;
+  report_status: string;
+  report_done_at: string | null;
+  report_url: string;
+  /** Rombo 12: Pendiente | Apta | Apta con reservas | No apta */
+  result: string;
+  result_at: string | null;
+  validation: string;
+  validated_at: string | null;
+  delivered_at: string | null;
+  notes: string;
+  position: number;
+  created_at: string;
+};

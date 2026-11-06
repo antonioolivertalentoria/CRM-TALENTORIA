@@ -13,6 +13,7 @@ import {
   MARKETING_COLLABORATOR,
   MARKETING_DIRECTOR,
   MARKETING_OWNER,
+  PSYCHOMETRICS_OWNER,
   SEND_STATUSES,
   SEND_TYPES,
   quoteFolder,
@@ -21,9 +22,10 @@ import { NEGATIVE_RESULTS, POSITIVE_RESULTS, addWorkingDays, findDef, loopRange 
 import { isPast, syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
 import { DEFAULT_TZ, normalizeTz, tzShort } from "@/lib/timezones";
 import { ledgerServiceClient, syncTaskLedger } from "@/lib/task-ledger";
+import { psychometricPhase } from "@/lib/psychometric-tasks";
 import { isDemoMode } from "@/lib/demo/mock";
 import { seesAllProductivity } from "@/lib/productivity";
-import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, MarketingLead, MarketingPage, MarketingSend, MarketingStep, MarketingUrl, RecruitmentAttachment, RecruitmentCandidate, RecruitmentVacancy, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
+import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, MarketingLead, MarketingPage, MarketingSend, MarketingStep, MarketingUrl, PsychometricPerson, RecruitmentAttachment, RecruitmentCandidate, RecruitmentVacancy, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
 
@@ -2983,6 +2985,334 @@ export async function getRecruitmentAttachmentUrlAction(
 
   if (error || !data) return { error: error?.message ?? "No se pudo abrir el archivo." };
   return { url: data.signedUrl };
+}
+
+// ================= Psicometría (migración 028) =================
+
+const PSYCHOMETRIC_MISSING = "Falta correr la migración 028 en la base (módulo de psicometría).";
+
+function revalidatePsychometric(id?: string) {
+  if (id) revalidatePath(`/psicometria/${id}`);
+  revalidatePath("/psicometria");
+  revalidatePath("/tareas");
+}
+
+/** Personas pegadas en el alta: una por renglón, "Nombre — Puesto" o "Nombre, Puesto". */
+function parsePeopleLines(text: string): { name: string; job_title: string }[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name, ...rest] = line.split(/\s+[—–-]\s+|,\s*/);
+      return { name: name.trim(), job_title: rest.join(", ").trim() };
+    })
+    .filter((p) => p.name);
+}
+
+/**
+ * La fase de la solicitud se calcula sola con el avance de sus personas
+ * (Requisición → En aplicación → Reportes → Entregada). Pausada y
+ * Cancelada se respetan: esas las elige alguien a mano.
+ */
+async function syncPsychometricPhase(
+  supabase: Awaited<ReturnType<typeof createSupabase>>,
+  requestId: string
+) {
+  const [{ data: req }, { data: people }] = await Promise.all([
+    supabase.from("psychometric_requests").select("status").eq("id", requestId).maybeSingle(),
+    supabase.from("psychometric_people").select("*").eq("request_id", requestId),
+  ]);
+  const current = (req as { status: string } | null)?.status;
+  if (!current || current === "Pausada" || current === "Cancelada") return;
+  const phase = psychometricPhase((people ?? []) as PsychometricPerson[]);
+  if (phase !== current) {
+    await supabase.from("psychometric_requests").update({ status: phase }).eq("id", requestId);
+  }
+}
+
+export async function createPsychometricRequestAction(
+  _prev: FormState,
+  formData: FormData
+): Promise<FormState> {
+  const clientId = str(formData, "client_id");
+  const title = str(formData, "title");
+  if (!clientId || !title) return { error: "Ponle un nombre a la solicitud." };
+
+  const supabase = await createSupabase();
+  const { data, error } = await supabase
+    .from("psychometric_requests")
+    .insert({
+      client_id: clientId,
+      title,
+      report_type: str(formData, "report_type") || "Empresa",
+      evaluator: str(formData, "evaluator") || PSYCHOMETRICS_OWNER,
+      comercial: str(formData, "comercial") || COMMERCIAL_OWNER,
+      tests: str(formData, "tests"),
+      requisition_at: str(formData, "requisition_at") || todayISO(),
+      client_deadline: str(formData, "client_deadline") || null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("psychometric_requests")) return { error: PSYCHOMETRIC_MISSING };
+    return { error: `No se pudo crear la solicitud: ${error?.message}` };
+  }
+
+  const people = parsePeopleLines(str(formData, "people"));
+  if (people.length > 0) {
+    await supabase.from("psychometric_people").insert(
+      people.map((p, i) => ({ request_id: data.id, name: p.name, job_title: p.job_title, position: i }))
+    );
+  }
+
+  await logActivity(
+    supabase,
+    "creó",
+    "psicometria",
+    data.id,
+    `abrió la solicitud de psicometría "${title}"${
+      people.length ? ` con ${people.length} persona${people.length === 1 ? "" : "s"}` : ""
+    }`
+  );
+  revalidatePsychometric();
+  redirect(`/psicometria/${data.id}`);
+}
+
+const PSYCHOMETRIC_REQUEST_FIELDS = new Set([
+  "title",
+  "status",
+  "report_type",
+  "evaluator",
+  "comercial",
+  "tests",
+  "test_links",
+  "requisition_at",
+  "client_deadline",
+  "requisicion_revisada",
+  "info_completa",
+  "whatsapp_group",
+  "drive_folder_url",
+  "notes",
+  "internal_notes",
+]);
+
+export async function updatePsychometricField(
+  id: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  // La tarea "Capturar a las personas" no se palomea: desaparece sola al
+  // agregar a la primera persona en la ficha.
+  if (field === "people_pending") {
+    return { error: "Esta tarea se completa agregando a las personas en la ficha de la solicitud." };
+  }
+  if (!PSYCHOMETRIC_REQUEST_FIELDS.has(field)) return { error: "Campo no permitido." };
+
+  const supabase = await createSupabase();
+  const parsed: string | null = ["requisition_at", "client_deadline"].includes(field) && !value ? null : value;
+  const update: Record<string, string | null> = { [field]: parsed };
+
+  // Rombo 3: el día en que se decide arranca el plazo del paso 4 o del envío
+  if (field === "info_completa") update.info_checked_at = value === "Pendiente" ? null : todayISO();
+
+  // La fase se calcula sola: a mano solo se elige Pausada o Cancelada
+  if (field === "status" && value !== "Pausada" && value !== "Cancelada") {
+    const { data: people } = await supabase.from("psychometric_people").select("*").eq("request_id", id);
+    update.status = psychometricPhase((people ?? []) as PsychometricPerson[]);
+  }
+
+  const { error } = await supabase.from("psychometric_requests").update(update).eq("id", id);
+  if (error) {
+    if (error.message.includes("psychometric_requests")) return { error: PSYCHOMETRIC_MISSING };
+    return { error: error.message };
+  }
+
+  if (field === "status" || field === "info_completa" || value === "Listo") {
+    const { data: req } = await supabase
+      .from("psychometric_requests")
+      .select("title")
+      .eq("id", id)
+      .maybeSingle();
+    const title = (req as { title: string } | null)?.title ?? "";
+    await logActivity(
+      supabase,
+      field === "status" ? "cambió" : "completó",
+      "psicometria",
+      id,
+      field === "status"
+        ? `puso la solicitud "${title}" en ${update.status}`
+        : field === "info_completa"
+          ? `marcó la información de "${title}" como ${
+              value === "Sí" ? "completa" : value === "No" ? "incompleta" : "pendiente"
+            }`
+          : `revisó la requisición de "${title}"`
+    );
+  }
+
+  revalidatePsychometric(id);
+  return null;
+}
+
+export async function deletePsychometricRequestAction(id: string, clientId: string) {
+  const supabase = await createSupabase();
+  const { data: req } = await supabase
+    .from("psychometric_requests")
+    .select("title")
+    .eq("id", id)
+    .maybeSingle();
+  await supabase.from("psychometric_requests").delete().eq("id", id);
+  await logActivity(
+    supabase,
+    "eliminó",
+    "psicometria",
+    id,
+    `eliminó la solicitud de psicometría "${(req as { title: string } | null)?.title ?? ""}"`
+  );
+  revalidatePsychometric();
+  redirect(clientId ? `/clientes/${clientId}` : "/psicometria");
+}
+
+// ---------------- Personas evaluadas ----------------
+
+export async function addPsychometricPersonAction(fields: {
+  requestId: string;
+  name: string;
+  jobTitle: string;
+  phone: string;
+  email: string;
+}): Promise<{ error: string } | { person: PsychometricPerson }> {
+  const name = fields.name.trim();
+  if (!name) return { error: "Escribe el nombre de la persona." };
+
+  const supabase = await createSupabase();
+  const { count } = await supabase
+    .from("psychometric_people")
+    .select("id", { count: "exact", head: true })
+    .eq("request_id", fields.requestId);
+
+  const { data, error } = await supabase
+    .from("psychometric_people")
+    .insert({
+      request_id: fields.requestId,
+      name,
+      job_title: fields.jobTitle.trim(),
+      phone: fields.phone.trim(),
+      email: fields.email.trim(),
+      position: count ?? 0,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    if (error?.message.includes("psychometric_people")) return { error: PSYCHOMETRIC_MISSING };
+    return { error: error?.message ?? "No se pudo agregar a la persona." };
+  }
+  await syncPsychometricPhase(supabase, fields.requestId);
+  revalidatePsychometric(fields.requestId);
+  return { person: data as PsychometricPerson };
+}
+
+const PERSON_FIELDS = new Set([
+  "name",
+  "job_title",
+  "phone",
+  "email",
+  "status",
+  "sent_at",
+  "receipt",
+  "client_followup",
+  "tests_done",
+  "report_status",
+  "report_url",
+  "result",
+  "validation",
+  "delivered_at",
+  "notes",
+]);
+
+export async function updatePsychometricPersonField(
+  id: string,
+  requestId: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!PERSON_FIELDS.has(field)) return { error: "Campo no permitido." };
+
+  const supabase = await createSupabase();
+  const { data: current } = await supabase
+    .from("psychometric_people")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  const row = current as PsychometricPerson | null;
+  if (!row) return { error: "No se encontró a la persona." };
+
+  const today = todayISO();
+  // "hoy" sella la fecha (lo manda la palomita de Mis tareas)
+  const parsed: string | null =
+    field === "sent_at" || field === "delivered_at" ? (value === "hoy" ? today : value || null) : value;
+  const update: Record<string, string | null> = { [field]: parsed };
+
+  // Cada paso sella su fecha: de ahí corre el plazo del siguiente
+  if (field === "receipt") update.receipt_at = value === "Pendiente" ? null : today;
+  if (field === "tests_done") {
+    update.tests_done_at = value === "Completas" ? today : null;
+    // Si ya respondió, es que sí le llegaron
+    if (value === "Completas" && row.receipt === "Pendiente") {
+      update.receipt = "Recibidas";
+      update.receipt_at = today;
+    }
+  }
+  if (field === "report_status") update.report_done_at = value === "Listo" ? today : null;
+  if (field === "result") update.result_at = value === "Pendiente" ? null : today;
+  if (field === "validation") update.validated_at = value === "Listo" ? today : null;
+  // Si avanzó sin fecha de envío capturada, las pruebas salieron hoy a más tardar
+  const progressed =
+    (field === "receipt" && value !== "Pendiente") ||
+    (field === "tests_done" && value === "Completas") ||
+    (field === "report_status" && value === "Listo") ||
+    (field === "result" && value !== "Pendiente") ||
+    (field === "delivered_at" && !!parsed);
+  if (progressed && !row.sent_at) update.sent_at = today;
+
+  const { error } = await supabase.from("psychometric_people").update(update).eq("id", id);
+  if (error) return { error: error.message };
+
+  const name = row.name;
+  const summary: Record<string, string | null> = {
+    sent_at: parsed ? `mandó las pruebas a ${name}` : null,
+    receipt:
+      value === "Recibidas"
+        ? `confirmó que ${name} recibió las pruebas`
+        : value === "No recibidas"
+          ? `marcó que a ${name} no le llegaron las pruebas`
+          : null,
+    client_followup: value === "Listo" ? `le pidió al cliente apoyo con ${name}` : null,
+    tests_done: value === "Completas" ? `verificó que ${name} respondió las pruebas` : null,
+    report_status: value === "Listo" ? `terminó el reporte de ${name}` : null,
+    result: value !== "Pendiente" ? `marcó a ${name} como ${value}` : null,
+    validation: value === "Listo" ? `validó los hallazgos de ${name}` : null,
+    delivered_at: parsed ? `entregó el reporte de ${name}` : null,
+    status: `puso a ${name} como ${value}`,
+  };
+  if (summary[field]) {
+    await logActivity(supabase, "cambió", "psicometria", requestId, summary[field]!);
+  }
+
+  await syncPsychometricPhase(supabase, requestId);
+  revalidatePsychometric(requestId);
+  return null;
+}
+
+export async function deletePsychometricPersonAction(id: string, requestId: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { error } = await supabase.from("psychometric_people").delete().eq("id", id);
+  if (error) return { error: error.message };
+  await syncPsychometricPhase(supabase, requestId);
+  revalidatePsychometric(requestId);
+  return null;
 }
 
 // ================= Marketing (migración 021) =================

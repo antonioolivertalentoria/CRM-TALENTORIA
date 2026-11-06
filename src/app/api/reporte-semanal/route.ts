@@ -6,10 +6,13 @@ import { computeConsultingTasks } from "@/lib/consulting-tasks";
 import { computeRecruitmentTasks } from "@/lib/recruitment-tasks";
 import { computeMarketingTasks } from "@/lib/marketing-tasks";
 import { loadMarketingData } from "@/lib/marketing-data";
+import { computePsychometricTasks } from "@/lib/psychometric-tasks";
+import { loadPsychometricRequests } from "@/lib/psychometric-data";
 import { addDays, formatDate, todayISO } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
 import { canSeeRecruitment } from "@/lib/recruitment-access";
+import { canSeePsychometrics } from "@/lib/psychometrics-access";
 import type { CustomTask, ReminderPrefs } from "@/lib/types";
 
 /**
@@ -106,6 +109,7 @@ export async function GET(request: Request) {
     { data: progressData },
     { data: progressNotesData },
     marketingData,
+    psychometricRequests,
   ] =
     await Promise.all([
       supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
@@ -125,6 +129,8 @@ export async function GET(request: Request) {
       supabase.from("task_progress_notes").select("*").order("created_at"),
       // Marketing (migración 021)
       loadMarketingData(supabase),
+      // Psicometría (migración 028)
+      loadPsychometricRequests(supabase),
     ]);
 
   // Tareas empezadas pero sin cerrar: en el PDF salen marcadas y con la
@@ -189,7 +195,7 @@ export async function GET(request: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...(canSeeRecruitment(user.email) ? computeRecruitmentTasks(vacancies as any) : []),
     ...computeMarketingTasks(marketingData),
-
+    ...(canSeePsychometrics(user.email) ? computePsychometricTasks(psychometricRequests) : []),
     ...customToComputed((customData ?? []) as (CustomTask & { clients: { id: string; company: string } | null })[]),
   ]);
 

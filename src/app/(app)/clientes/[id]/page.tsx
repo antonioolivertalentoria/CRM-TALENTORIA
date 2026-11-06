@@ -6,11 +6,13 @@ import { NewClientForm } from "@/components/NewClientForm";
 import { NewTrainingForm } from "@/components/NewTrainingForm";
 import { NewConsultingForm } from "@/components/NewConsultingForm";
 import { NewVacancyForm } from "@/components/NewVacancyForm";
+import { NewPsychometricForm } from "@/components/NewPsychometricForm";
 import { fetchFacilitators, facilitatorSuggestions } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
 import { canSeeRecruitment } from "@/lib/recruitment-access";
+import { canSeePsychometrics } from "@/lib/psychometrics-access";
 import { byUrgency, statusColor } from "@/lib/constants";
-import type { Client, ConsultingProject, RecruitmentVacancy, Training, Session } from "@/lib/types";
+import type { Client, ConsultingProject, PsychometricRequest, RecruitmentVacancy, Training, Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -139,6 +141,15 @@ export default async function ClientDetailPage({
   const vacancies = byUrgency((vacanciesData ?? []) as unknown as RecruitmentVacancy[]);
   const showRecruitment = canSeeRecruitment(userRes.data.user?.email);
 
+  // Solicitudes de psicometría del cliente (tolerante a que falte la migración 028)
+  const { data: psychometricData } = await supabase
+    .from("psychometric_requests")
+    .select("*")
+    .eq("client_id", id)
+    .order("created_at", { ascending: false });
+  const psychometrics = (psychometricData ?? []) as unknown as PsychometricRequest[];
+  const showPsychometrics = canSeePsychometrics(userRes.data.user?.email);
+
   // Capacitaciones que este cliente dio a sus subclientes
   let subTrainings: TrainingCard[] = [];
   if (subclients.length > 0) {
@@ -211,6 +222,7 @@ export default async function ClientDetailPage({
           {showRecruitment && (
             <NewVacancyForm clientId={client.id} people={people} currentUser={currentUser} />
           )}
+          {showPsychometrics && <NewPsychometricForm clientId={client.id} people={people} />}
         </div>
       </header>
 
@@ -338,6 +350,37 @@ export default async function ClientDetailPage({
                     🔥 Urgente
                   </span>
                 )}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {showPsychometrics && psychometrics.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+            Psicometrías ({psychometrics.length})
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {psychometrics.map((r) => (
+              <Link
+                key={r.id}
+                href={`/psicometria/${r.id}`}
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-cyan hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-brand-navy">{r.title}</p>
+                  <span
+                    className={`${statusColor(r.status)} shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white`}
+                  >
+                    {r.status}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  {r.report_type}
+                  {r.evaluator ? ` · ${r.evaluator}` : ""}
+                  {r.tests ? ` · ${r.tests}` : ""}
+                </p>
               </Link>
             ))}
           </div>

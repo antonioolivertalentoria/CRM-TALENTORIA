@@ -152,7 +152,7 @@ export default async function ProductivityPage({
           <h1 className="text-2xl font-bold text-brand-navy">Productividad</h1>
           <p className="max-w-3xl text-sm text-slate-500">
             Cumplimiento de las tareas que generan los procesos del CRM (capacitaciones, team buildings, consultoría,
-            reclutamiento, marketing y tareas propias), por persona, proceso y mes. La metodología está al final de la
+            reclutamiento, psicometría, marketing y tareas propias), por persona, proceso y mes. La metodología está al final de la
             página.
           </p>
         </div>

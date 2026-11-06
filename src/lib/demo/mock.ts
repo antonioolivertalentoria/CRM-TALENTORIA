@@ -184,6 +184,45 @@ const DEFAULTS: Record<string, Row> = {
     improvement: "",
     notes: "",
   },
+  psychometric_requests: {
+    status: "Requisición",
+    report_type: "Empresa",
+    evaluator: "Jacqueline Lara",
+    comercial: "Perla Torres",
+    tests: "",
+    test_links: "",
+    requisition_at: null,
+    client_deadline: null,
+    requisicion_revisada: "Pendiente",
+    info_completa: "Pendiente",
+    info_checked_at: null,
+    whatsapp_group: "",
+    drive_folder_url: "",
+    notes: "",
+    internal_notes: "",
+  },
+  psychometric_people: {
+    phone: "",
+    email: "",
+    job_title: "",
+    status: "Activa",
+    sent_at: null,
+    receipt: "Pendiente",
+    receipt_at: null,
+    client_followup: "Pendiente",
+    tests_done: "Pendiente",
+    tests_done_at: null,
+    report_status: "Pendiente",
+    report_done_at: null,
+    report_url: "",
+    result: "Pendiente",
+    result_at: null,
+    validation: "Pendiente",
+    validated_at: null,
+    delivered_at: null,
+    notes: "",
+    position: 0,
+  },
 };
 
 function compare(a: any, b: any): number {
@@ -219,7 +258,10 @@ function resolveSelect(store: DemoStore, table: string, row: Row, sel: string): 
   }
   // Consultoría y reclutamiento: el proyecto/vacante trae su cliente y la
   // sesión trae su proyecto
-  if ((table === "consulting_projects" || table === "recruitment_vacancies") && sel.includes("clients(")) {
+  if (
+    (table === "consulting_projects" || table === "recruitment_vacancies" || table === "psychometric_requests") &&
+    sel.includes("clients(")
+  ) {
     out.clients = store.clients.find((c) => c.id === row.client_id) ?? null;
   }
   if (table === "consulting_sessions" && sel.includes("consulting_projects(")) {

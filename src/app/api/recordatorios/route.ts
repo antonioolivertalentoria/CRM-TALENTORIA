@@ -5,10 +5,13 @@ import { computeConsultingTasks } from "@/lib/consulting-tasks";
 import { computeRecruitmentTasks } from "@/lib/recruitment-tasks";
 import { computeMarketingTasks } from "@/lib/marketing-tasks";
 import { loadMarketingData } from "@/lib/marketing-data";
+import { computePsychometricTasks } from "@/lib/psychometric-tasks";
+import { loadPsychometricRequests } from "@/lib/psychometric-data";
 import { todayISO, formatDate } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
 import { canSeeRecruitment } from "@/lib/recruitment-access";
+import { canSeePsychometrics } from "@/lib/psychometrics-access";
 import { COMMERCIAL_OWNER } from "@/lib/constants";
 import type { ReminderPrefs } from "@/lib/types";
 import { syncTaskLedger } from "@/lib/task-ledger";
@@ -109,6 +112,7 @@ export async function GET(request: Request) {
     { data: progressData },
     { data: progressNotesData },
     marketingData,
+    psychometricRequests,
   ] = await Promise.all([
     supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
@@ -127,6 +131,8 @@ export async function GET(request: Request) {
     supabase.from("task_progress_notes").select("*").order("created_at"),
     // Marketing (migración 021)
     loadMarketingData(supabase),
+    // Psicometría (migración 028)
+    loadPsychometricRequests(supabase),
   ]);
 
   // Estado de avance por tarea, con la última anotación de la bitácora
@@ -204,6 +210,7 @@ export async function GET(request: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...computeRecruitmentTasks(vacancies as any),
     ...computeMarketingTasks(marketingData),
+    ...computePsychometricTasks(psychometricRequests),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...customToComputed((customData ?? []) as any),
   ]);
@@ -228,13 +235,17 @@ export async function GET(request: Request) {
     const mine = tasks.filter(
       (t) =>
         (commercialOnlyClose
-          ? t.assignee === p.full_name && (isCommercialCloseTask(t.key) || t.kind === "Marketing")
+          ? t.assignee === p.full_name &&
+            // En psicometría lo suyo (confirmar la información) frena el envío de pruebas
+            (isCommercialCloseTask(t.key) || t.kind === "Marketing" || t.kind === "Psicometría")
           : t.assignee === p.full_name || !t.assignee) &&
         kinds.includes(t.kind) &&
         // Consultoría en estreno: sus tareas solo a quien ve el módulo
         (t.kind !== "Consultoría" || canSeeConsulting(p.email)) &&
         // Reclutamiento en construcción: igual, solo a quien lo ve
         (t.kind !== "Reclutamiento" || canSeeRecruitment(p.email)) &&
+        // Psicometría en estreno: igual
+        (t.kind !== "Psicometría" || canSeePsychometrics(p.email)) &&
         t.due !== null &&
         t.due <= today
     );

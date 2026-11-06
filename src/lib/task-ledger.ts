@@ -5,6 +5,7 @@ import { computeTasks, customToComputed, type ComputedTask } from "./tasks";
 import { computeConsultingTasks, type ConsultingProjectFull } from "./consulting-tasks";
 import { computeRecruitmentTasks, type RecruitmentVacancyFull } from "./recruitment-tasks";
 import { computeMarketingTasks } from "./marketing-tasks";
+import { computePsychometricTasks, type PsychometricRequestFull } from "./psychometric-tasks";
 import { fetchFacilitators, internalFacilitatorNames } from "./facilitators";
 import { addDays, todayISO } from "./format";
 import { mexicoDate, mexicoToday, nextDeadline, type LedgerRow } from "./productivity";
@@ -52,12 +53,24 @@ type Sources = {
   changes: Map<string, any>;
   vacancies: Map<string, any>;
   candidates: Set<string>;
+  psychRequests: Map<string, any>;
+  psychPeople: Map<string, any>;
   marketingProjects: Map<string, any>;
   marketingSteps: Map<string, any>;
   sends: Set<string>;
   leads: Map<string, any>;
   progress: Map<string, any>;
 };
+
+/**
+ * Tablas de una migración que puede no haber corrido aún: si no existen,
+ * cuentan como vacías. Cualquier otro error sí detiene la sincronización.
+ */
+async function optionalTable(query: PromiseLike<any>, table: string): Promise<any> {
+  const r = await query;
+  if (r.error && String(r.error.message ?? "").includes(table)) return { data: [], error: null };
+  return r;
+}
 
 async function loadSources(sb: AnyClient): Promise<Sources | { error: string }> {
   const results = await Promise.all([
@@ -77,12 +90,15 @@ async function loadSources(sb: AnyClient): Promise<Sources | { error: string }> 
     sb.from("marketing_sends").select("*").order("send_date").order("position"),
     sb.from("marketing_leads").select("*").order("lead_date"),
     sb.from("marketing_pages").select("*").order("position"),
+    optionalTable(sb.from("psychometric_requests").select("*, clients(id, company)"), "psychometric_requests"),
+    optionalTable(sb.from("psychometric_people").select("*"), "psychometric_people"),
   ]);
   const failed = results.find((r: any) => r.error);
   if (failed) return { error: failed.error.message ?? "lectura fallida" };
   const [
     trainingsR, profilesR, customR, requestsR, consultingR, milestonesR, inputsR, changesR,
     vacanciesR, candidatesR, progressR, mProjectsR, mStepsR, mSendsR, mLeadsR, mPagesR,
+    psychR, psychPeopleR,
   ] = results.map((r: any) => (r.data ?? []) as any[]);
 
   const facilitators = await fetchFacilitators(sb);
@@ -102,11 +118,16 @@ async function loadSources(sb: AnyClient): Promise<Sources | { error: string }> 
     ...v,
     candidates: candidatesR.filter((c) => c.vacancy_id === v.id),
   }));
+  const psychometricRequests: PsychometricRequestFull[] = psychR.map((r) => ({
+    ...r,
+    people: psychPeopleR.filter((p) => p.request_id === r.id),
+  }));
 
   const tasks = [
     ...computeTasks(trainings, internalNames),
     ...computeConsultingTasks(consultingProjects),
     ...computeRecruitmentTasks(vacancies),
+    ...computePsychometricTasks(psychometricRequests),
     ...computeMarketingTasks({ projects: mProjectsR, steps: mStepsR, sends: mSendsR, leads: mLeadsR, pages: mPagesR }),
     ...customToComputed(customR.filter((c) => c.status !== "Completada")),
   ];
@@ -123,6 +144,8 @@ async function loadSources(sb: AnyClient): Promise<Sources | { error: string }> 
     changes: new Map(changesR.map((c) => [c.id, c])),
     vacancies: new Map(vacanciesR.map((v) => [v.id, v])),
     candidates: new Set(candidatesR.map((c) => c.id)),
+    psychRequests: new Map(psychR.map((r) => [r.id, r])),
+    psychPeople: new Map(psychPeopleR.map((p) => [p.id, p])),
     marketingProjects: new Map(mProjectsR.map((p) => [p.id, p])),
     marketingSteps: new Map(mStepsR.map((s) => [`${s.project_id}|${s.step_key}`, s])),
     sends: new Set(mSendsR.map((s) => s.id)),
@@ -136,6 +159,7 @@ function moduleOf(task: ComputedTask, src: Sources): string {
   const k = task.key;
   if (k.startsWith("cons-")) return "Consultoría";
   if (k.startsWith("recl-")) return "Reclutamiento";
+  if (k.startsWith("psic-")) return "Psicometría";
   if (k.startsWith("mkt-")) return "Marketing";
   if (k.startsWith("custom-")) return "Tareas propias";
   if (k.startsWith("req-")) return "Team buildings";
@@ -143,9 +167,9 @@ function moduleOf(task: ComputedTask, src: Sources): string {
   return t?.kind === "Team building" ? "Team buildings" : "Capacitaciones";
 }
 
-/** Id del proyecto de las claves "cons-<uuid>-…", "recl-<uuid>-…" y "mkt-<uuid>-…". */
+/** Id del proyecto de las claves "cons-<uuid>-…", "recl-<uuid>-…", "psic-<uuid>-…" y "mkt-<uuid>-…". */
 function projectIdOf(key: string): string {
-  if (key.startsWith("cons-") || key.startsWith("recl-")) return key.slice(5, 41);
+  if (key.startsWith("cons-") || key.startsWith("recl-") || key.startsWith("psic-")) return key.slice(5, 41);
   if (key.startsWith("mkt-") && !key.startsWith("mkt-lead-")) return key.slice(4, 40);
   return "";
 }
@@ -181,6 +205,12 @@ function resolve(row: LedgerRow, src: Sources, today: string): Resolution {
     if (v.status === "Cancelada") return excluded("cancelada");
     if (v.status === "Pausada") return excluded("en pausa");
     if (v.status === "Cerrada") return excluded("proyecto cerrado");
+  }
+  if (row.task_key.startsWith("psic-")) {
+    const r = src.psychRequests.get(pid);
+    if (!r) return excluded("eliminada");
+    if (r.status === "Cancelada") return excluded("cancelada");
+    if (r.status === "Pausada") return excluded("en pausa");
   }
   if (pid && row.task_key.startsWith("mkt-")) {
     const p = src.marketingProjects.get(pid);
@@ -231,6 +261,18 @@ function resolve(row: LedgerRow, src: Sources, today: string): Resolution {
     }
     case "recruitment_candidate":
       return src.candidates.has(c.candidateId) ? closed() : excluded("eliminada");
+    case "psychometric_field": {
+      const r = src.psychRequests.get(c.requestId);
+      if (r && r[c.field] === "No aplica") return excluded("no aplica");
+      return closed();
+    }
+    case "psychometric_person": {
+      const p = src.psychPeople.get(c.personId);
+      if (!p) return excluded("eliminada");
+      if (p.status === "Cancelada") return excluded("cancelada");
+      if (p[c.field] === "No aplica") return excluded("no aplica");
+      return closed();
+    }
     case "marketing_step": {
       const s = src.marketingSteps.get(`${c.projectId}|${c.stepKey}`);
       if (s?.status === "No aplica") return excluded("no aplica");
