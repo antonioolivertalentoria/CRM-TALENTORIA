@@ -3118,9 +3118,14 @@ export async function updatePsychometricField(
   if (field === "info_completa") update.info_checked_at = value === "Pendiente" ? null : todayISO();
 
   // La fase se calcula sola: a mano solo se elige Pausada o Cancelada
-  if (field === "status" && value !== "Pausada" && value !== "Cancelada") {
-    const { data: people } = await supabase.from("psychometric_people").select("*").eq("request_id", id);
-    update.status = psychometricPhase((people ?? []) as PsychometricPerson[]);
+  let previousStatus = "";
+  if (field === "status") {
+    const { data: cur } = await supabase.from("psychometric_requests").select("status").eq("id", id).maybeSingle();
+    previousStatus = (cur as { status: string } | null)?.status ?? "";
+    if (value !== "Pausada" && value !== "Cancelada") {
+      const { data: people } = await supabase.from("psychometric_people").select("*").eq("request_id", id);
+      update.status = psychometricPhase((people ?? []) as PsychometricPerson[]);
+    }
   }
 
   const { error } = await supabase.from("psychometric_requests").update(update).eq("id", id);
@@ -3129,7 +3134,9 @@ export async function updatePsychometricField(
     return { error: error.message };
   }
 
-  if (field === "status" || field === "info_completa" || value === "Listo") {
+  // Una fase que no cambió no es actividad
+  const statusChanged = field === "status" && update.status !== previousStatus;
+  if (statusChanged || field === "info_completa" || (field !== "status" && value === "Listo")) {
     const { data: req } = await supabase
       .from("psychometric_requests")
       .select("title")

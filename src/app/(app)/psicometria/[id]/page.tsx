@@ -4,13 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { canSeePsychometrics } from "@/lib/psychometrics-access";
 import { UnderConstruction } from "@/components/UnderConstruction";
 import { updatePsychometricField } from "@/lib/actions";
-import {
-  CHECK_STATUSES,
-  INFO_COMPLETE_STATUSES,
-  PSYCHOMETRIC_REPORT_TYPES,
-  PSYCHOMETRIC_STATUSES,
-} from "@/lib/constants";
-import { activePeople } from "@/lib/psychometric-tasks";
+import { CHECK_STATUSES, INFO_COMPLETE_STATUSES, PSYCHOMETRIC_REPORT_TYPES } from "@/lib/constants";
+import { activePeople, nextPhaseHint, psychometricPhase } from "@/lib/psychometric-tasks";
 import { StatusSelect } from "@/components/StatusSelect";
 import { EditableField } from "@/components/EditableField";
 import { LinkChip } from "@/components/LinkChip";
@@ -63,6 +58,10 @@ export default async function PsychometricDetailPage({
   const active = activePeople(people);
   const delivered = active.filter((p) => p.delivered_at).length;
 
+  // La fase va sola: el menú solo ofrece la que le toca, pausar y cancelar
+  // (y, si está pausada o cancelada, la fase a la que regresaría).
+  const phaseOptions = [...new Set([request.status, psychometricPhase(people), "Pausada", "Cancelada"])];
+
   return (
     <div className="space-y-6">
       <nav className="flex items-center justify-between text-sm text-slate-400">
@@ -92,12 +91,12 @@ export default async function PsychometricDetailPage({
             />
             <p className="mt-1 px-2 text-xs text-slate-400">
               Requisición recibida:{" "}
-              {request.requisition_at ? formatDate(request.requisition_at) : "sin fecha"} · La fase se
-              acomoda sola con el avance de las personas; a mano solo se pausa o se cancela.
+              {request.requisition_at ? formatDate(request.requisition_at) : "sin fecha"}
+              {nextPhaseHint(request.status) ? ` · ${nextPhaseHint(request.status)}` : ""}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <StatusSelect value={request.status} options={PSYCHOMETRIC_STATUSES} onChange={save("status")} />
+          <div className="flex items-center gap-2" title="La fase avanza sola con las personas; a mano solo se pausa o se cancela.">
+            <StatusSelect value={request.status} options={phaseOptions} onChange={save("status")} />
             <StatusSelect value={request.report_type} options={PSYCHOMETRIC_REPORT_TYPES} onChange={save("report_type")} />
           </div>
         </div>

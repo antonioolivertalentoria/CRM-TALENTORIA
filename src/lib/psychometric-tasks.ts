@@ -53,6 +53,24 @@ export function psychometricPhase(people: PsychometricPerson[]): string {
   return "En aplicación";
 }
 
+/** Qué falta para que la solicitud pase a la siguiente fase (para la ficha). */
+export function nextPhaseHint(status: string): string {
+  switch (status) {
+    case "Requisición":
+      return "Pasa sola a En aplicación en cuanto se le manden las pruebas a la primera persona.";
+    case "En aplicación":
+      return "Pasa sola a Reportes cuando todas las personas hayan respondido sus pruebas.";
+    case "Reportes":
+      return "Pasa sola a Entregada cuando se entregue el último reporte.";
+    case "Entregada":
+      return "Todos los reportes están entregados.";
+    case "Pausada":
+      return "Para reanudarla, elige la fase en el menú: el CRM la deja en la que le toca.";
+    default:
+      return "";
+  }
+}
+
 export function computePsychometricTasks(requests: PsychometricRequestFull[]): ComputedTask[] {
   const today = todayISO();
   const tasks: ComputedTask[] = [];
