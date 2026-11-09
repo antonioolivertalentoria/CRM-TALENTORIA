@@ -105,6 +105,12 @@ export const CHECKLIST_FIELDS: { key: string; label: string; hint: string }[] = 
 // comercial capturado (migración 018).
 export const COMMERCIAL_OWNER = "Perla Torres";
 
+// Consultoría: toda tarea sin responsable (Operaciones, líder o comercial
+// vacíos) le cae a Caro en vez de salir "sin asignar" en el perfil de
+// todos. También es la Operaciones por default al dar de alta un proyecto
+// (Oli, 09-nov-2026: "si no asignan, de consultoría pon a Caro").
+export const CONSULTING_DEFAULT_OWNER = "Carolina García";
+
 // ---------------- Pedidos de constancias, DC-3 y gafetes (migración 029) ----------------
 // Desde el 09-nov-2026 quien lleva el proyecto los PIDE, América los HACE
 // y se los ENTREGA, y quien pidió los ENVÍA al cliente.

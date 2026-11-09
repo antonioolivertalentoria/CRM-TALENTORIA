@@ -1,5 +1,5 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
-import { COMMERCIAL_OWNER } from "./constants";
+import { COMMERCIAL_OWNER, CONSULTING_DEFAULT_OWNER } from "./constants";
 import type { ComputedTask } from "./tasks";
 import type {
   Client,
@@ -16,7 +16,8 @@ import type {
  * los pasos accionables que siguen pendientes.
  *
  * Responsables según el mapa: OPERACIONES → internal_owner del proyecto;
- * LÍDER → leader; COMERCIAL → comercial. La factura (FINANZAS) quedó fuera
+ * LÍDER → leader; COMERCIAL → comercial. Si el rol está vacío, la tarea es
+ * de CONSULTING_DEFAULT_OWNER (Caro). La factura (FINANZAS) quedó fuera
  * del CRM el 27-oct-2026.
  *
  * Todas las claves de tarea llevan el id del proyecto ("cons-<id>-…")
@@ -254,5 +255,9 @@ export function computeConsultingTasks(projects: ConsultingProjectFull[]): Compu
     }
   }
 
+  // Sin responsable capturado → Caro (nunca "sin asignar" para todos)
+  for (const t of tasks) {
+    if (!t.assignee?.trim()) t.assignee = CONSULTING_DEFAULT_OWNER;
+  }
   return tasks;
 }

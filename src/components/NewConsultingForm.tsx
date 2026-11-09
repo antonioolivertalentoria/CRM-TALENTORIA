@@ -2,6 +2,7 @@
 
 import { useState, useActionState } from "react";
 import { createConsultingProjectAction } from "@/lib/actions";
+import { CONSULTING_DEFAULT_OWNER } from "@/lib/constants";
 
 const input =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-cyan focus:ring-2 focus:ring-brand-cyan/30";
@@ -71,7 +72,7 @@ export function NewConsultingForm({
           <label className="mb-1 block text-xs font-semibold text-slate-500">Operaciones (revisiones y cierre)</label>
           <select
             name="internal_owner"
-            defaultValue={people.find((p) => p.includes("Oliver")) ?? currentUser}
+            defaultValue={people.includes(CONSULTING_DEFAULT_OWNER) ? CONSULTING_DEFAULT_OWNER : currentUser}
             className={input}
           >
             <option value="">— Por asignar</option>

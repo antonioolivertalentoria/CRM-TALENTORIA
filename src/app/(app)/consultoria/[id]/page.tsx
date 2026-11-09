@@ -8,6 +8,7 @@ import {
   CONSULTING_STATUSES,
   CONSULTING_CHECKLIST,
   CHECK_STATUSES,
+  CONSULTING_DEFAULT_OWNER,
   PRIORITIES,
 } from "@/lib/constants";
 import { StatusSelect } from "@/components/StatusSelect";
@@ -199,11 +200,11 @@ export default async function ConsultingDetailPage({
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <p className="text-xs font-semibold text-slate-400">Líder de proyecto</p>
-            <OwnerSelect value={project.leader} people={people} onChange={save("leader")} />
+            <OwnerSelect value={project.leader} people={people} onChange={save("leader")} emptyLabel={`— Sin asignar (le toca a ${CONSULTING_DEFAULT_OWNER.split(" ")[0]})`} />
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-400">Operaciones (revisiones y cierre)</p>
-            <OwnerSelect value={project.internal_owner} people={people} onChange={save("internal_owner")} />
+            <OwnerSelect value={project.internal_owner} people={people} onChange={save("internal_owner")} emptyLabel={`— Sin asignar (le toca a ${CONSULTING_DEFAULT_OWNER.split(" ")[0]})`} />
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-400">Comercial</p>

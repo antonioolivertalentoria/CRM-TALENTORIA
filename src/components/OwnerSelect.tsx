@@ -7,10 +7,13 @@ export function OwnerSelect({
   value,
   people,
   onChange,
+  emptyLabel = "— Sin responsable",
 }: {
   value: string;
   people: string[];
   onChange: (v: string) => Promise<unknown>;
+  /** Texto de la opción vacía (p. ej. a quién le cae la tarea si no se asigna). */
+  emptyLabel?: string;
 }) {
   const [pending, startTransition] = useTransition();
   const options = value && !people.includes(value) ? [value, ...people] : people;
@@ -29,7 +32,7 @@ export function OwnerSelect({
         value ? "text-slate-800" : "text-slate-400"
       } disabled:opacity-50`}
     >
-      <option value="">— Sin responsable</option>
+      <option value="">{emptyLabel}</option>
       {options.map((p) => (
         <option key={p} value={p}>{p}</option>
       ))}
