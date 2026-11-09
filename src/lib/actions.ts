@@ -8,6 +8,10 @@ import { addDays, daysBetween, formatDate, todayISO } from "@/lib/format";
 import {
   CHECKLIST_FIELDS,
   COMMERCIAL_OWNER,
+  DOC_ORDER_STATUSES,
+  DOC_SEND_FIELD,
+  DOC_TYPES,
+  DOCUMENTS_MAKER,
   FINANCE_OWNER,
   LEAD_CHANNELS,
   MARKETING_COLLABORATOR,
@@ -16,8 +20,10 @@ import {
   PSYCHOMETRICS_OWNER,
   SEND_STATUSES,
   SEND_TYPES,
+  firstName,
   quoteFolder,
 } from "@/lib/constants";
+import { defaultNeededBy, orderMaker, orderWhat } from "@/lib/document-orders";
 import { NEGATIVE_RESULTS, POSITIVE_RESULTS, addWorkingDays, findDef, loopRange } from "@/lib/marketing-flows";
 import { isPast, syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
 import { DEFAULT_TZ, normalizeTz, tzShort } from "@/lib/timezones";
@@ -25,7 +31,7 @@ import { ledgerServiceClient, syncTaskLedger } from "@/lib/task-ledger";
 import { psychometricPhase } from "@/lib/psychometric-tasks";
 import { isDemoMode } from "@/lib/demo/mock";
 import { seesAllProductivity } from "@/lib/productivity";
-import type { ConsultingAttachment, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, MarketingLead, MarketingPage, MarketingSend, MarketingStep, MarketingUrl, PsychometricPerson, RecruitmentAttachment, RecruitmentCandidate, RecruitmentVacancy, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
+import type { ConsultingAttachment, DocumentOrder, ConsultingChange, ConsultingInput, ConsultingMilestone, ConsultingSession, MarketingLead, MarketingPage, MarketingSend, MarketingStep, MarketingUrl, PsychometricPerson, RecruitmentAttachment, RecruitmentCandidate, RecruitmentVacancy, Subtask, TaskAttachment, TaskProgress, TaskProgressNote, TimeEntry, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export type FormState = { error: string } | null;
 
@@ -1700,6 +1706,402 @@ export async function deleteTrainingRequestAction(id: string): Promise<FormState
   if (req) revalidatePath(`/capacitaciones/${req.training_id}`);
   revalidatePath("/tareas");
   revalidatePath("/teambuildings");
+  return null;
+}
+
+// ---------------- Pedidos de constancias, DC-3 y gafetes (migración 029) ----------------
+// Quien lleva el proyecto pide → América hace → América entrega → quien
+// pidió envía al cliente (en capacitaciones, envio_constancias/envio_dc3).
+
+const ORDERS_MISSING = "Falta correr la migración 029 en la base (pedidos de constancias, DC-3 y gafetes).";
+
+type OrderTraining = {
+  id: string;
+  short_name: string;
+  official_name: string;
+  kind?: string;
+  internal_owner: string;
+  participants_url: string;
+  drive_folder_url: string;
+  envio_constancias: string;
+  envio_dc3: string;
+  clients: { company: string } | null;
+  sessions: {
+    session_date: string | null;
+    duration_hours: number | null;
+    facilitator: string;
+    modality: string;
+    status: string;
+    enrolled: number | null;
+    attended: number | null;
+  }[];
+};
+
+async function loadOrderTraining(
+  supabase: Awaited<ReturnType<typeof createSupabase>>,
+  trainingId: string
+): Promise<OrderTraining | null> {
+  const { data } = await supabase
+    .from("trainings")
+    .select(
+      "id, short_name, official_name, kind, internal_owner, participants_url, drive_folder_url, envio_constancias, envio_dc3, clients(company), sessions(session_date, duration_hours, facilitator, modality, status, enrolled, attended)"
+    )
+    .eq("id", trainingId)
+    .maybeSingle();
+  return (data as unknown as OrderTraining) ?? null;
+}
+
+function orderTrainingDates(t: OrderTraining): string[] {
+  return t.sessions
+    .filter((s) => s.status !== "Cancelada" && s.session_date)
+    .map((s) => s.session_date!)
+    .sort();
+}
+
+/** Cuántas piezas sugerir: asistentes reales o, si no hay, inscritos. */
+function suggestedQuantity(t: OrderTraining): number | null {
+  const active = t.sessions.filter((s) => s.status !== "Cancelada");
+  const attended = Math.max(0, ...active.map((s) => s.attended ?? 0));
+  if (attended > 0) return attended;
+  const enrolled = Math.max(0, ...active.map((s) => s.enrolled ?? 0));
+  return enrolled > 0 ? enrolled : null;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+/**
+ * Avisos por correo del pedido: a América cuando se lo piden o se lo
+ * regresan a corregir, y a quien pidió cuando ya se lo entregaron. Nunca
+ * se le avisa a quien hizo el cambio. Best effort: si falla, el pedido
+ * queda guardado igual.
+ */
+async function notifyDocumentOrder(
+  supabase: Awaited<ReturnType<typeof createSupabase>>,
+  event: "nuevo" | "correccion" | "entregado",
+  order: DocumentOrder,
+  actor: string
+) {
+  try {
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) return;
+
+    const recipient = event === "entregado" ? order.requested_by : orderMaker(order);
+    if (!recipient || recipient === actor) return;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email, full_name")
+      .eq("full_name", recipient)
+      .maybeSingle();
+    if (!profile?.email) return;
+
+    const t = await loadOrderTraining(supabase, order.training_id);
+    if (!t) return;
+    const what = orderWhat(order);
+    const project = `${t.short_name}${t.clients?.company ? ` (${t.clients.company})` : ""}`;
+    const dates = orderTrainingDates(t);
+    const active = t.sessions.filter((s) => s.status !== "Cancelada");
+    const hours = active.reduce((a, s) => a + (Number(s.duration_hours) || 0), 0);
+    const facilitators = [...new Set(active.map((s) => s.facilitator).filter(Boolean))];
+    const link = `https://crm-talentoria.vercel.app/capacitaciones/${t.id}`;
+    const row = (label: string, value: string) =>
+      value
+        ? `<tr><td style="padding:3px 12px 3px 0;color:#64748b;vertical-align:top">${label}</td><td style="padding:3px 0"><strong>${value}</strong></td></tr>`
+        : "";
+    const a = (url: string, text: string) =>
+      url ? `<a href="${escapeHtml(url)}" style="color:#0088bb">${text}</a>` : "";
+
+    let subject = "";
+    let heading = "";
+    let intro = "";
+    if (event === "nuevo") {
+      subject = `📄 Pedido: ${what} — ${project}`;
+      heading = `📄 ${escapeHtml(firstName(order.requested_by) || "Te")} te pide ${what}`;
+      intro = order.needed_by
+        ? `Para el <strong>${formatDate(order.needed_by)}</strong>.`
+        : "Sin fecha: en cuanto puedas.";
+    } else if (event === "correccion") {
+      subject = `↩ Corrección: ${what} — ${project}`;
+      heading = `↩ Hay que corregir ${what}`;
+      intro = `<strong>${escapeHtml(order.correction_note || "Revisa el pedido en el CRM.")}</strong>`;
+    } else {
+      subject = `✅ ${firstName(actor) || "América"} te entregó ${what} — ${project}`;
+      heading = `✅ Ya están ${what}`;
+      intro =
+        t.kind === "Team building" || !DOC_SEND_FIELD[order.doc_type]
+          ? "Ya te las entregaron."
+          : "Ya te las entregaron: ahora te toca enviarlas al cliente (la tarea ya está en tus pendientes).";
+    }
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;color:#16345f;max-width:560px">
+        <div style="height:6px;background:linear-gradient(90deg,#00aeef,#e6007e);border-radius:3px"></div>
+        <h2 style="margin:16px 0 4px">${heading}</h2>
+        <p style="font-size:15px;margin:8px 0">${intro}</p>
+        <table style="font-size:14px;border-collapse:collapse;margin:12px 0">
+          ${row("Proyecto", escapeHtml(project))}
+          ${row("Nombre oficial", escapeHtml(t.official_name || ""))}
+          ${row("Fechas", dates.map((d) => formatDate(d)).join(", "))}
+          ${row("Horas", hours > 0 ? `${hours} h` : "")}
+          ${row("Facilitador", escapeHtml(facilitators.join(", ")))}
+          ${row("Pidió", escapeHtml(order.requested_by))}
+          ${event !== "entregado" ? row("Instrucciones", escapeHtml(order.details || "").replaceAll("\n", "<br>")) : ""}
+          ${row("Lista de participantes", a(t.participants_url, "Abrir lista"))}
+          ${row("Archivos", a(order.files_url, "Abrir archivos"))}
+        </table>
+        <a href="${link}" style="display:inline-block;background:linear-gradient(90deg,#00aeef,#e6007e);color:#fff;font-weight:bold;padding:10px 22px;border-radius:8px;text-decoration:none;margin-top:8px">Abrir la ficha</a>
+        <p style="color:#94a3b8;font-size:12px;margin-top:16px">
+          ${actor ? `Lo registró ${escapeHtml(actor)} en el CRM. ` : ""}— CRM Talentoría
+        </p>
+      </div>`;
+
+    const from = process.env.REMINDER_FROM ?? "CRM Talentoría <crm@talentoriacursos.com>";
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [profile.email], subject, html }),
+    });
+  } catch {
+    // Cortesía: el pedido ya quedó guardado.
+  }
+}
+
+function sendOrderMailLater(
+  supabase: Awaited<ReturnType<typeof createSupabase>>,
+  event: "nuevo" | "correccion" | "entregado",
+  order: DocumentOrder,
+  actor: string
+) {
+  try {
+    after(() => notifyDocumentOrder(supabase, event, order, actor));
+  } catch {
+    void notifyDocumentOrder(supabase, event, order, actor);
+  }
+}
+
+function revalidateOrders(trainingId: string) {
+  revalidatePath(`/capacitaciones/${trainingId}`);
+  revalidatePath("/pedidos");
+  revalidatePath("/tareas");
+  revalidatePath("/teambuildings");
+}
+
+/** Pide constancias, DC-3 o gafetes a quien los hace (América). */
+export async function createDocumentOrderAction(fields: {
+  trainingId: string;
+  docType: string;
+  quantity: number | null;
+  neededBy: string | null;
+  details: string;
+  maker: string;
+  notify: boolean;
+}): Promise<{ error: string } | { order: DocumentOrder }> {
+  if (!(DOC_TYPES as readonly string[]).includes(fields.docType)) return { error: "Tipo de documento no válido." };
+
+  const supabase = await createSupabase();
+  const [requestedBy, t] = await Promise.all([
+    currentUserName(supabase),
+    loadOrderTraining(supabase, fields.trainingId),
+  ]);
+  if (!t) return { error: "No encontré el proyecto." };
+
+  const dates = orderTrainingDates(t);
+  const neededBy =
+    fields.neededBy ||
+    defaultNeededBy(fields.docType, dates[0] ?? null, dates[dates.length - 1] ?? null, todayISO());
+  const quantity = fields.quantity && fields.quantity > 0 ? Math.round(fields.quantity) : null;
+
+  const { data, error } = await supabase
+    .from("document_orders")
+    .insert({
+      training_id: fields.trainingId,
+      doc_type: fields.docType,
+      status: "Pedida",
+      quantity,
+      details: fields.details.trim(),
+      maker: fields.maker.trim() || DOCUMENTS_MAKER,
+      requested_by: requestedBy,
+      needed_by: neededBy,
+    })
+    .select("*")
+    .single();
+  if (error || !data) {
+    if (error?.message.includes("document_orders")) return { error: ORDERS_MISSING };
+    return { error: error?.message ?? "No se pudo registrar el pedido." };
+  }
+  const order = data as DocumentOrder;
+
+  // Si se piden, sí llevan: el "Enviar al cliente" del checklist vuelve a
+  // Pendiente para que aparezca cuando se las entreguen.
+  const sendField = t.kind === "Team building" ? undefined : DOC_SEND_FIELD[fields.docType];
+  if (sendField && (t as unknown as Record<string, string>)[sendField] === "No aplica") {
+    await supabase.from("trainings").update({ [sendField]: "Pendiente" }).eq("id", t.id);
+  }
+
+  await logActivity(
+    supabase,
+    "creó",
+    "pedido",
+    order.id,
+    `pidió ${orderWhat(order)} a ${order.maker} para "${t.short_name}"`
+  );
+  if (fields.notify) sendOrderMailLater(supabase, "nuevo", order, requestedBy);
+  revalidateOrders(fields.trainingId);
+  return { order };
+}
+
+/** Desde Mis tareas: "Pedir constancias a América" palomeado = pedido con los datos de la ficha. */
+export async function createDocumentOrderFromTaskAction(
+  trainingId: string,
+  docType: string
+): Promise<FormState> {
+  const supabase = await createSupabase();
+  const t = await loadOrderTraining(supabase, trainingId);
+  if (!t) return { error: "No encontré el proyecto." };
+  const res = await createDocumentOrderAction({
+    trainingId,
+    docType,
+    quantity: suggestedQuantity(t),
+    neededBy: null,
+    details: "",
+    maker: "",
+    notify: true,
+  });
+  return "error" in res ? { error: res.error } : null;
+}
+
+/**
+ * Mueve el pedido de estado (Pedida ↔ Realizada ↔ Entregada) y sella la
+ * fecha del paso. Al entregarse se le avisa a quien lo pidió.
+ */
+export async function setDocumentOrderStatusAction(
+  id: string,
+  status: string
+): Promise<{ error: string } | { order: DocumentOrder }> {
+  if (!(DOC_ORDER_STATUSES as readonly string[]).includes(status)) return { error: "Estado no válido." };
+
+  const supabase = await createSupabase();
+  const { data: before } = await supabase.from("document_orders").select("*").eq("id", id).maybeSingle();
+  if (!before) return { error: "No encontré el pedido (¿ya lo borraron?)." };
+  const prev = before as DocumentOrder;
+  if (prev.status === status) return { order: prev };
+
+  const now = new Date().toISOString();
+  const patch: Record<string, string | null> = { status };
+  if (status === "Pedida") {
+    patch.made_at = null;
+    patch.delivered_at = null;
+  } else if (status === "Realizada") {
+    patch.made_at = prev.made_at ?? now;
+    patch.delivered_at = null;
+  } else {
+    patch.made_at = prev.made_at ?? now;
+    patch.delivered_at = now;
+  }
+
+  const { data, error } = await supabase
+    .from("document_orders")
+    .update(patch)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error || !data) return { error: error?.message ?? "No se pudo guardar." };
+  const order = data as DocumentOrder;
+
+  const actor = await currentUserName(supabase);
+  const verb = status === "Realizada" ? "terminó" : status === "Entregada" ? "entregó" : "regresó a pedida";
+  await logActivity(supabase, "completó", "pedido", id, `${verb} ${orderWhat(order)}`);
+  if (status === "Entregada") sendOrderMailLater(supabase, "entregado", order, actor);
+  revalidateOrders(order.training_id);
+  return { order };
+}
+
+/** Para Mis tareas (allí solo importa si salió bien). */
+export async function advanceDocumentOrderAction(id: string, status: string): Promise<FormState> {
+  const res = await setDocumentOrderStatusAction(id, status);
+  return "error" in res ? { error: res.error } : null;
+}
+
+/** Regresa el pedido a América con lo que hay que corregir. */
+export async function requestDocumentCorrectionAction(
+  id: string,
+  note: string
+): Promise<{ error: string } | { order: DocumentOrder }> {
+  const text = note.trim();
+  if (!text) return { error: "Escribe qué hay que corregir." };
+
+  const supabase = await createSupabase();
+  const { data: before } = await supabase
+    .from("document_orders")
+    .select("corrections")
+    .eq("id", id)
+    .maybeSingle();
+  if (!before) return { error: "No encontré el pedido." };
+
+  const { data, error } = await supabase
+    .from("document_orders")
+    .update({
+      status: "Pedida",
+      made_at: null,
+      delivered_at: null,
+      corrections: (before.corrections ?? 0) + 1,
+      correction_note: text,
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error || !data) return { error: error?.message ?? "No se pudo guardar." };
+  const order = data as DocumentOrder;
+
+  const actor = await currentUserName(supabase);
+  await logActivity(supabase, "cambió", "pedido", id, `pidió corregir ${orderWhat(order)}: ${text}`);
+  sendOrderMailLater(supabase, "correccion", order, actor);
+  revalidateOrders(order.training_id);
+  return { order };
+}
+
+const ORDER_FIELDS = new Set(["quantity", "needed_by", "details", "files_url", "maker"]);
+
+export async function updateDocumentOrderField(
+  id: string,
+  field: string,
+  value: string
+): Promise<FormState> {
+  if (!ORDER_FIELDS.has(field)) return { error: "Campo no permitido." };
+  let parsed: string | number | null = value.trim();
+  if (field === "quantity") {
+    const n = parseInt(value, 10);
+    parsed = Number.isNaN(n) || n <= 0 ? null : n;
+  }
+  if (field === "needed_by" && !value) parsed = null;
+
+  const supabase = await createSupabase();
+  const { data, error } = await supabase
+    .from("document_orders")
+    .update({ [field]: parsed })
+    .eq("id", id)
+    .select("training_id")
+    .single();
+  if (error) return { error: error.message };
+  revalidateOrders(data.training_id);
+  return null;
+}
+
+export async function deleteDocumentOrderAction(id: string): Promise<FormState> {
+  const supabase = await createSupabase();
+  const { data: before } = await supabase.from("document_orders").select("*").eq("id", id).maybeSingle();
+  const { error } = await supabase.from("document_orders").delete().eq("id", id);
+  if (error) return { error: error.message };
+  if (before) {
+    const o = before as DocumentOrder;
+    await logActivity(supabase, "eliminó", "pedido", id, `canceló el pedido de ${orderWhat(o)}`);
+    revalidateOrders(o.training_id);
+  }
   return null;
 }
 

@@ -28,6 +28,8 @@ import { RequestsSection } from "@/components/RequestsSection";
 import { TrainingAttachments } from "@/components/TrainingAttachments";
 import { QuoteFiles } from "@/components/QuoteFiles";
 import { SurveyReports } from "@/components/SurveyReports";
+import { DocumentOrdersSection } from "@/components/DocumentOrdersSection";
+import { loadDocumentOrders } from "@/lib/document-orders";
 import type { Client, Training, Session, Material, MaterialComment, Profile, TrainingAttachment, TrainingRequest } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +70,7 @@ export default async function TrainingDetailPage({
     catalog,
     { data: requestsData },
     { data: filesData },
+    documentOrders,
   ] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email").order("full_name"),
     materials.length > 0
@@ -85,6 +88,8 @@ export default async function TrainingDetailPage({
       : Promise.resolve({ data: [] }),
     // Archivos: los del team building y, en capacitaciones, la cotización.
     supabase.from("training_attachments").select("*").eq("training_id", id).order("created_at"),
+    // Pedidos de constancias, DC-3 y gafetes (migración 029; vacío si no ha corrido)
+    loadDocumentOrders(supabase, id),
   ]);
   const requests = (requestsData ?? []) as unknown as TrainingRequest[];
   const tbFiles = (filesData ?? []) as unknown as TrainingAttachment[];
@@ -116,6 +121,11 @@ export default async function TrainingDetailPage({
     uniqueModalities.length === 0 ? "" : uniqueModalities.length === 1 ? uniqueModalities[0] : "Mixta";
   const totalHours = active.reduce((acc, s) => acc + (Number(s.duration_hours) || 0), 0);
   const facilitators = [...new Set(active.map((s) => s.facilitator).filter(Boolean))];
+  const activeDates = active.filter((s) => s.session_date).map((s) => s.session_date!).sort();
+  // Cuántas constancias sugerir: asistentes reales o, si no hay, inscritos
+  const maxAttended = Math.max(0, ...active.map((s) => s.attended ?? 0));
+  const maxEnrolled = Math.max(0, ...active.map((s) => s.enrolled ?? 0));
+  const suggestedQuantity = maxAttended || maxEnrolled || null;
 
   return (
     <div className="space-y-6">
@@ -334,6 +344,26 @@ export default async function TrainingDetailPage({
       />
 
       {isTeamBuilding && <TrainingAttachments trainingId={training.id} attachments={tbFiles} />}
+
+      <DocumentOrdersSection
+        trainingId={training.id}
+        orders={documentOrders.orders}
+        people={people}
+        isTeamBuilding={isTeamBuilding}
+        today={today}
+        suggestedQuantity={suggestedQuantity}
+        course={{
+          officialName: training.official_name ?? "",
+          dates: activeDates,
+          hours: totalHours,
+          facilitators,
+          participantsUrl: training.participants_url ?? "",
+        }}
+        sendStatus={{
+          envio_constancias: training.envio_constancias ?? "Pendiente",
+          envio_dc3: training.envio_dc3 ?? "Pendiente",
+        }}
+      />
 
       {/* Seguimiento del team building: encuesta al cliente contratante */}
       {isTeamBuilding && (

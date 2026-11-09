@@ -7,6 +7,7 @@ import { computeRecruitmentTasks, type RecruitmentVacancyFull } from "@/lib/recr
 import { computeMarketingTasks } from "@/lib/marketing-tasks";
 import { computePsychometricTasks } from "@/lib/psychometric-tasks";
 import { loadPsychometricRequests } from "@/lib/psychometric-data";
+import { loadDocumentOrders } from "@/lib/document-orders";
 import { loadMarketingData } from "@/lib/marketing-data";
 import { todayISO } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
@@ -64,6 +65,7 @@ export default async function TasksPage() {
     { data: progressNotesData },
     marketingData,
     psychometricRequests,
+    documentOrders,
   ] = await Promise.all([
     supabase
       .from("trainings")
@@ -101,6 +103,8 @@ export default async function TasksPage() {
     loadMarketingData(supabase),
     // Psicometría (migración 028): tolerante a que aún no exista
     loadPsychometricRequests(supabase),
+    // Pedidos de constancias, DC-3 y gafetes (migración 029)
+    loadDocumentOrders(supabase),
   ]);
 
   // Peticiones de team building, colgadas de su training para el motor de tareas
@@ -114,7 +118,7 @@ export default async function TasksPage() {
     clients: Pick<Client, "id" | "company"> | null;
     sessions: Session[];
     materials: Material[];
-  })[]).map((t) => ({ ...t, training_requests: requestsByTraining[t.id] ?? [] }));
+  })[]).map((t) => ({ ...t, training_requests: requestsByTraining[t.id] ?? [], document_orders: documentOrders.byTraining[t.id] ?? [] }));
   const profiles = (profilesData ?? []) as unknown as Profile[];
   const customTasks = (customData ?? []) as unknown as CustomTask[];
   const completedTasks = (completedData ?? []) as unknown as (CustomTask & {

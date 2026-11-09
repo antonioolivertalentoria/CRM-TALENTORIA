@@ -95,6 +95,11 @@ export function ReminderSettings({ prefs }: { prefs: ReminderPrefs }) {
                 capacitación o team building se marca como Finalizada.
               </li>
               <li>
+                <strong className="text-slate-700">🎓 Pedidos de constancias, DC-3 y gafetes:</strong>{" "}a
+                quien los hace, cuando se los piden (si se deja marcado &quot;Avisarle por correo&quot;) o se
+                los regresan a corregir; y a quien los pidió, cuando ya se los entregaron.
+              </li>
+              <li>
                 Crear o asignar una tarea, agregar hitos, subir archivos o palomear el checklist{" "}
                 <strong className="text-slate-700">no manda correo</strong>: lo ves en Mis tareas y en
                 tu recordatorio del día que vence.

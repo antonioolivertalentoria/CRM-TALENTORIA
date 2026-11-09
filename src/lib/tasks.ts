@@ -1,7 +1,8 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
-import { COMMERCIAL_OWNER } from "./constants";
+import { COMMERCIAL_OWNER, DOC_ORDERS_START, DOC_SEND_FIELD, DOCUMENTS_MAKER, firstName } from "./constants";
+import { orderMaker, orderWhat, receiverShort } from "./document-orders";
 import { followUpContext, followUpStage, type FollowUpContext, type FollowUpField, type FollowUpStage } from "./follow-up";
-import type { Client, CustomTask, Material, Session, Training, TrainingRequest } from "./types";
+import type { Client, CustomTask, DocumentOrder, Material, Session, Training, TrainingRequest } from "./types";
 
 /**
  * Motor de tareas: las tareas NO se capturan aparte, se derivan de las
@@ -44,6 +45,10 @@ export type ComputedTask = {
     | { type: "material_status"; materialId: string; nextStatus: string }
     | { type: "custom_task"; taskId: string }
     | { type: "training_request"; requestId: string }
+    /** Pedido de constancias/DC-3/gafetes: pasa al siguiente estado (Realizada, Entregada). */
+    | { type: "document_order"; orderId: string; nextStatus: string }
+    /** "Pedir constancias a América" palomeado desde Mis tareas: crea el pedido. */
+    | { type: "document_order_new"; trainingId: string; docType: string }
     | { type: "consulting_field"; projectId: string; field: string }
     | { type: "consulting_milestone"; milestoneId: string; nextStatus: string }
     | { type: "consulting_input"; inputId: string }
@@ -71,7 +76,51 @@ type TrainingFull = Training & {
   materials: Material[];
   /** Peticiones de team building (solo llega si el select las incluye). */
   training_requests?: TrainingRequest[];
+  /** Pedidos de constancias, DC-3 y gafetes (migración 029; se cuelgan aparte). */
+  document_orders?: DocumentOrder[];
 };
+
+/**
+ * Las tareas de América por cada pedido abierto: hacerlo y entregarlo a
+ * quien lo pidió. Al entregarse ya no le toca nada a ella.
+ */
+function documentOrderTasks(
+  t: TrainingFull,
+  clientName: string
+): ComputedTask[] {
+  const out: ComputedTask[] = [];
+  for (const o of t.document_orders ?? []) {
+    const base = {
+      trainingId: t.id,
+      trainingName: t.short_name,
+      clientName,
+      assignee: orderMaker(o),
+      requestedBy: o.requested_by,
+      due: o.needed_by,
+    };
+    if (o.status === "Pedida") {
+      const correction = o.corrections > 0 && o.correction_note;
+      out.push({
+        ...base,
+        key: `ped-${o.id}-hacer`,
+        kind: "Petición",
+        title: `${correction ? "Corregir" : "Hacer"} ${orderWhat(o)}`,
+        details: correction ? `Corrección: ${o.correction_note}` : o.details || undefined,
+        complete: { type: "document_order", orderId: o.id, nextStatus: "Realizada" },
+      });
+    } else if (o.status === "Realizada") {
+      out.push({
+        ...base,
+        key: `ped-${o.id}-entregar`,
+        kind: "Petición",
+        title: `Entregar ${orderWhat(o)} a ${receiverShort(o)}`,
+        details: o.files_url ? `Archivos: ${o.files_url}` : undefined,
+        complete: { type: "document_order", orderId: o.id, nextStatus: "Entregada" },
+      });
+    }
+  }
+  return out;
+}
 
 const POST_ITEMS: { field: string; label: string }[] = [
   { field: "envio_manual", label: "Enviar manual del participante" },
@@ -122,6 +171,9 @@ export function computeTasks(
     if (t.status === "Cancelada") continue;
 
     const clientName = t.clients?.company ?? "";
+
+    // Pedidos de constancias, DC-3 y gafetes: las tareas de quien los hace
+    tasks.push(...documentOrderTasks(t, clientName));
 
     // Team buildings: sin checklist/materiales/logística. Sus tareas son
     // las peticiones pendientes (gafetes, tarjetas, lo que pida el cliente)
@@ -298,16 +350,58 @@ export function computeTasks(
       }
     }
 
+    // ---- Constancias y DC-3: pedirlas a América (desde el 09-nov-2026) ----
+    // Cursos que terminan desde DOC_ORDERS_START: primero se piden, y el
+    // "Enviar" solo aparece cuando América ya las entregó. Los que
+    // terminaron antes siguen como siempre (solo "Enviar"), salvo que se
+    // les haga un pedido desde la ficha.
+    const orders = t.document_orders ?? [];
+    const newFlow = !!lastDate && lastDate >= DOC_ORDERS_START;
+    const sendState: Record<string, "legacy" | "esperando" | "lista"> = {};
+    for (const [docType, field] of Object.entries(DOC_SEND_FIELD)) {
+      if (val(field) !== "Pendiente") continue;
+      const mine = orders.filter((o) => o.doc_type === docType);
+      if (mine.length === 0 && !newFlow) {
+        sendState[field] = "legacy";
+        continue;
+      }
+      sendState[field] = mine.some((o) => o.status === "Entregada") ? "lista" : "esperando";
+      // Recordatorio de pedirlas: aparece 3 días antes del último día
+      // del curso y vence ese día (América tiene 1 día hábil para hacerlas).
+      if (mine.length === 0 && lastDate && today >= addDays(lastDate, -3)) {
+        tasks.push({
+          ...base,
+          key: `${t.id}-pedir_${field.replace("envio_", "")}`,
+          kind: "Entrega",
+          title: `Pedir ${docType === "DC-3" ? "DC-3" : "constancias"} a ${firstName(DOCUMENTS_MAKER)}`,
+          details:
+            "Desde la ficha puedes poner cuántas, para cuándo e instrucciones. Si la palomeas aquí, se piden con los datos de la ficha. Si no llevan, márcalas «No aplica» en el checklist.",
+          due: atLeast(lastDate, today),
+          complete: { type: "document_order_new", trainingId: t.id, docType },
+        });
+      }
+    }
+
     // ---- Después del curso ----
     if (lastDate && today > lastDate) {
       const due48h = addBusinessDays(lastDate, 2);
       for (const item of POST_ITEMS) {
         if (val(item.field) === "Pendiente") {
+          // Constancias y DC-3 del flujo nuevo: solo cuando ya se las entregaron
+          const state = sendState[item.field];
+          if (state === "esperando") continue;
+          const delivered =
+            state === "lista"
+              ? orders.find((o) => DOC_SEND_FIELD[o.doc_type] === item.field && o.status === "Entregada")
+              : undefined;
           tasks.push({
             ...base,
             key: `${t.id}-${item.field}`,
             kind: "Entrega",
-            title: item.label,
+            title: delivered ? `${item.label} al cliente` : item.label,
+            details: delivered
+              ? `${firstName(orderMaker(delivered))} ya te las entregó${delivered.files_url ? `: ${delivered.files_url}` : "."}`
+              : undefined,
             due: due48h,
             complete: trainingField(item.field),
           });

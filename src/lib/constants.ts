@@ -105,6 +105,42 @@ export const CHECKLIST_FIELDS: { key: string; label: string; hint: string }[] = 
 // comercial capturado (migración 018).
 export const COMMERCIAL_OWNER = "Perla Torres";
 
+// ---------------- Pedidos de constancias, DC-3 y gafetes (migración 029) ----------------
+// Desde el 09-nov-2026 quien lleva el proyecto los PIDE, América los HACE
+// y se los ENTREGA, y quien pidió los ENVÍA al cliente.
+
+/** Quien hace los documentos (nombre tal cual está en su perfil). */
+export const DOCUMENTS_MAKER = "América Nohema Díaz Carrera";
+
+export const DOC_TYPES = ["Constancias", "DC-3", "Gafetes"] as const;
+
+export const DOC_ORDER_STATUSES = ["Pedida", "Realizada", "Entregada"] as const;
+
+/** El paso de "enviar al cliente" de cada documento en el checklist de capacitaciones. */
+export const DOC_SEND_FIELD: Record<string, string> = {
+  Constancias: "envio_constancias",
+  "DC-3": "envio_dc3",
+};
+
+/**
+ * Cursos que terminaron antes de esta fecha siguen con el proceso de
+ * antes (solo "Enviar constancias"); los demás arrancan pidiéndolas.
+ */
+export const DOC_ORDERS_START = "2026-11-09";
+
+/** Colores propios (Realizada y Entregada ya tienen otro color en consultoría y psicometría). */
+export const DOC_STATUS_COLORS: Record<string, string> = {
+  Pedida: "bg-amber-400",
+  Realizada: "bg-violet-500",
+  Entregada: "bg-cyan-500",
+  Enviada: "bg-emerald-500",
+};
+
+/** "América Nohema Díaz Carrera" → "América" (para títulos cortos). */
+export function firstName(fullName: string): string {
+  return (fullName || "").trim().split(/\s+/)[0] ?? "";
+}
+
 // ---------------- Consultoría ----------------
 
 export const CONSULTING_STATUSES = [

@@ -7,6 +7,7 @@ import { computeMarketingTasks } from "@/lib/marketing-tasks";
 import { loadMarketingData } from "@/lib/marketing-data";
 import { computePsychometricTasks } from "@/lib/psychometric-tasks";
 import { loadPsychometricRequests } from "@/lib/psychometric-data";
+import { loadDocumentOrders } from "@/lib/document-orders";
 import { todayISO, formatDate } from "@/lib/format";
 import { fetchFacilitators, internalFacilitatorNames } from "@/lib/facilitators";
 import { canSeeConsulting } from "@/lib/consulting-access";
@@ -113,6 +114,7 @@ export async function GET(request: Request) {
     { data: progressNotesData },
     marketingData,
     psychometricRequests,
+    documentOrders,
   ] = await Promise.all([
     supabase.from("trainings").select("*, clients(id, company), sessions(*), materials(*)"),
     supabase.from("profiles").select("id, full_name, email, reminder_prefs"),
@@ -133,6 +135,8 @@ export async function GET(request: Request) {
     loadMarketingData(supabase),
     // Psicometría (migración 028)
     loadPsychometricRequests(supabase),
+    // Pedidos de constancias, DC-3 y gafetes (migración 029)
+    loadDocumentOrders(supabase),
   ]);
 
   // Estado de avance por tarea, con la última anotación de la bitácora
@@ -178,7 +182,7 @@ export async function GET(request: Request) {
   }
   const trainingsWithRequests = ((trainingsData ?? []) as { id: string }[]).map((t) => ({
     ...t,
-    training_requests: requestsByTraining[t.id] ?? [],
+    training_requests: requestsByTraining[t.id] ?? [], document_orders: documentOrders.byTraining[t.id] ?? [],
   }));
 
   if (trainingsError || profilesError) {

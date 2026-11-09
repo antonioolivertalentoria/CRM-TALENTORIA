@@ -9,6 +9,8 @@ import {
   deleteCustomTaskAction,
   updateCustomTaskAction,
   toggleTrainingRequestAction,
+  advanceDocumentOrderAction,
+  createDocumentOrderFromTaskAction,
   updateConsultingField,
   updateConsultingMilestoneField,
   setConsultingInputReceived,
@@ -747,6 +749,10 @@ export function TasksList({
         return updateMaterialField(c.materialId, task.trainingId, "status", c.nextStatus);
       } else if (c.type === "training_request") {
         return toggleTrainingRequestAction(c.requestId, true);
+      } else if (c.type === "document_order") {
+        return advanceDocumentOrderAction(c.orderId, c.nextStatus);
+      } else if (c.type === "document_order_new") {
+        return createDocumentOrderFromTaskAction(c.trainingId, c.docType);
       } else if (c.type === "consulting_field") {
         return updateConsultingField(c.projectId, c.field, "Listo");
       } else if (c.type === "consulting_milestone") {

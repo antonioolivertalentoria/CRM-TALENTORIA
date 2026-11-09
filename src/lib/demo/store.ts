@@ -106,6 +106,12 @@ function createInitialData(): DemoStore {
         email: "demo@talentoria.com",
         created_at: now,
       },
+      {
+        id: "demo-america",
+        full_name: "América Nohema Díaz Carrera",
+        email: "americadiaz@talentoria.com",
+        created_at: now,
+      },
     ],
     clients: [
       {

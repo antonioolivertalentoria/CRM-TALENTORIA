@@ -233,6 +233,30 @@ export type TrainingRequest = {
   created_at: string;
 };
 
+/**
+ * Pedido de constancias, DC-3 o gafetes (migración 029): quien lleva el
+ * proyecto lo pide, América lo hace y se lo entrega.
+ */
+export type DocumentOrder = {
+  id: string;
+  training_id: string;
+  doc_type: string;
+  /** Pedida → Realizada → Entregada */
+  status: string;
+  quantity: number | null;
+  details: string;
+  maker: string;
+  requested_by: string;
+  needed_by: string | null;
+  files_url: string;
+  corrections: number;
+  correction_note: string;
+  requested_at: string;
+  made_at: string | null;
+  delivered_at: string | null;
+  created_at: string;
+};
+
 export type TrainingAttachment = {
   id: string;
   training_id: string;

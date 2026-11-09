@@ -85,6 +85,21 @@ const DEFAULTS: Record<string, Row> = {
     status: "Pendiente",
     completed_at: null,
   },
+  // Pedidos de constancias, DC-3 y gafetes (migración 029)
+  document_orders: {
+    status: "Pedida",
+    quantity: null,
+    details: "",
+    maker: "",
+    requested_by: "",
+    needed_by: null,
+    files_url: "",
+    corrections: 0,
+    correction_note: "",
+    requested_at: new Date().toISOString(),
+    made_at: null,
+    delivered_at: null,
+  },
   // Marketing (migración 021): lo que la base pondría por defecto
   marketing_projects: {
     status: "Activo",

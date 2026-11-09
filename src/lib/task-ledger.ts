@@ -46,6 +46,7 @@ type Sources = {
   trainings: Map<string, any>;
   materials: Set<string>;
   requests: Set<string>;
+  orders: Map<string, any>;
   custom: Map<string, any>;
   consulting: Map<string, any>;
   milestones: Set<string>;
@@ -92,13 +93,14 @@ async function loadSources(sb: AnyClient): Promise<Sources | { error: string }> 
     sb.from("marketing_pages").select("*").order("position"),
     optionalTable(sb.from("psychometric_requests").select("*, clients(id, company)"), "psychometric_requests"),
     optionalTable(sb.from("psychometric_people").select("*"), "psychometric_people"),
+    optionalTable(sb.from("document_orders").select("*"), "document_orders"),
   ]);
   const failed = results.find((r: any) => r.error);
   if (failed) return { error: failed.error.message ?? "lectura fallida" };
   const [
     trainingsR, profilesR, customR, requestsR, consultingR, milestonesR, inputsR, changesR,
     vacanciesR, candidatesR, progressR, mProjectsR, mStepsR, mSendsR, mLeadsR, mPagesR,
-    psychR, psychPeopleR,
+    psychR, psychPeopleR, ordersR,
   ] = results.map((r: any) => (r.data ?? []) as any[]);
 
   const facilitators = await fetchFacilitators(sb);
@@ -106,7 +108,13 @@ async function loadSources(sb: AnyClient): Promise<Sources | { error: string }> 
 
   const requestsByTraining: Record<string, any[]> = {};
   for (const r of requestsR) (requestsByTraining[r.training_id] ??= []).push(r);
-  const trainings = trainingsR.map((t) => ({ ...t, training_requests: requestsByTraining[t.id] ?? [] }));
+  const ordersByTraining: Record<string, any[]> = {};
+  for (const o of ordersR) (ordersByTraining[o.training_id] ??= []).push(o);
+  const trainings = trainingsR.map((t) => ({
+    ...t,
+    training_requests: requestsByTraining[t.id] ?? [],
+    document_orders: ordersByTraining[t.id] ?? [],
+  }));
 
   const consultingProjects: ConsultingProjectFull[] = consultingR.map((p) => ({
     ...p,
@@ -137,6 +145,7 @@ async function loadSources(sb: AnyClient): Promise<Sources | { error: string }> 
     trainings: new Map(trainingsR.map((t) => [t.id, t])),
     materials: new Set(trainingsR.flatMap((t) => (t.materials ?? []).map((m: any) => m.id))),
     requests: new Set(requestsR.map((r) => r.id)),
+    orders: new Map(ordersR.map((o) => [o.id, o])),
     custom: new Map(customR.map((c) => [c.id, c])),
     consulting: new Map(consultingR.map((p) => [p.id, p])),
     milestones: new Set(milestonesR.map((m) => m.id)),
@@ -236,6 +245,23 @@ function resolve(row: LedgerRow, src: Sources, today: string): Resolution {
     }
     case "training_request":
       return src.requests.has(c.requestId) ? closed() : excluded("eliminada");
+    case "document_order": {
+      // Hacer → Realizada, Entregar → Entregada (con su fecha real)
+      const o = src.orders.get(c.orderId);
+      if (!o) return excluded("eliminada");
+      // Se regresó a corregir antes de llegar a ese paso: no se cerró
+      const rank: Record<string, number> = { Pedida: 0, Realizada: 1, Entregada: 2 };
+      if ((rank[o.status] ?? 0) < (rank[c.nextStatus] ?? 0)) return excluded("regresada a corrección");
+      const stamp = c.nextStatus === "Entregada" ? o.delivered_at : o.made_at;
+      return closed(stamp ? onOrBefore(mexicoDate(stamp), today) : today);
+    }
+    case "document_order_new": {
+      // "Pedir constancias/DC-3": si al final no llevan, no cuenta
+      const t = src.trainings.get(row.training_id);
+      const field = c.docType === "DC-3" ? "envio_dc3" : "envio_constancias";
+      if (t && t[field] === "No aplica") return excluded("no aplica");
+      return closed();
+    }
     case "consulting_field": {
       const p = src.consulting.get(c.projectId);
       if (p && p[c.field] === "No aplica") return excluded("no aplica");
