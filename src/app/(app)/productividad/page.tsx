@@ -1,52 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { isDemoMode } from "@/lib/demo/mock";
 import { syncTaskLedger } from "@/lib/task-ledger";
 import { ProductivityDashboard } from "@/components/ProductivityDashboard";
-import { addDays, formatDate } from "@/lib/format";
-import {
-  NO_ASSIGNEE,
-  PRODUCTIVITY_FULL_ACCESS,
-  addMonths,
-  daysLate,
-  effectiveDeadline,
-  mexicoToday,
-  monthOf,
-  outcomeOf,
-  periodLabel,
-  periodOfRow,
-  personOf,
-  seesAllProductivity,
-  type DashOutcome,
-  type DashRow,
-  type LedgerRow,
-  type PersonAgreement,
-} from "@/lib/productivity";
+import { formatDate } from "@/lib/format";
+import { addMonths, mexicoToday, monthOf, periodLabel } from "@/lib/productivity";
+import { loadProductivity, resolvePeriod } from "@/lib/productivity-data";
 
 export const dynamic = "force-dynamic";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-/** Lee la bitácora en páginas de 1000 (límite de Supabase por consulta). */
-async function readRows(supabase: any, from: string, to: string): Promise<{ rows: LedgerRow[]; error: string | null }> {
-  const rows: LedgerRow[] = [];
-  for (let start = 0; start < 50_000; start += 1000) {
-    const { data, error } = await supabase
-      .from("task_ledger")
-      .select("*")
-      .gte("deadline", from)
-      .lt("deadline", to)
-      .order("deadline")
-      .range(start, start + 999);
-    if (error) return { rows, error: error.message ?? "No se pudo leer la bitácora." };
-    rows.push(...((data ?? []) as LedgerRow[]));
-    if (!data || data.length < 1000) break;
-  }
-  return { rows, error: null };
-}
-
-const MONTHS_SHOWN = 6;
-const CHARTED: DashOutcome[] = ["a_tiempo", "tarde", "bloqueada", "vencida", "por_vencer"];
 
 export default async function ProductivityPage({
   searchParams,
@@ -56,85 +16,18 @@ export default async function ProductivityPage({
   const { mes } = await searchParams;
   const today = mexicoToday();
   const current = monthOf(today);
-  const period = typeof mes === "string" && /^\d{4}-\d{2}$/.test(mes) && mes <= current ? mes : current;
+  const period = resolvePeriod(mes, current);
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const seesAll = seesAllProductivity(user?.email) || isDemoMode();
 
   // Antes de leer, la bitácora se pone al día (con la llave de servicio)
   const sync = await syncTaskLedger();
 
-  const months = Array.from({ length: MONTHS_SHOWN }, (_, i) => addMonths(period, i - (MONTHS_SHOWN - 1)));
-  // Margen de tres días: un vencimiento en fin de semana se recorre al mes siguiente
-  const from = addDays(`${months[0]}-01`, -3);
-  const to = `${addMonths(period, 1)}-01`;
-
-  const [{ rows: allRows, error: readError }, { data: profilesData }, agreementsRes, { data: firstData }] = await Promise.all([
-    readRows(supabase, from, to),
-    supabase.from("profiles").select("id, full_name, email"),
-    supabase
-      .from("productivity_agreements")
-      .select("period, person, body, target_pct, updated_by, updated_at, acknowledged_at")
-      .in("period", months),
-    supabase.from("task_ledger").select("first_seen").order("first_seen").limit(1),
-  ]);
-
-  const profiles = (profilesData ?? []) as { id: string; full_name: string; email: string }[];
-  const me = profiles.find((p) => p.id === user?.id)?.full_name ?? "";
-  const teamNames = new Set(profiles.map((p) => p.full_name));
-  const directionNames = profiles
-    .filter((p) => PRODUCTIVITY_FULL_ACCESS.includes((p.email ?? "").toLowerCase()))
-    .map((p) => p.full_name.split(" ")[0]);
-  const startedOn = ((firstData ?? []) as { first_seen: string }[])[0]?.first_seen ?? null;
-  const agreementsReady = !agreementsRes.error;
-  const agreements = (agreementsReady ? agreementsRes.data ?? [] : []) as (PersonAgreement & { period: string })[];
-
-  // RLS ya filtra; esto es la segunda llave (y lo que aplica en modo demo)
-  const visible = seesAll ? allRows : allRows.filter((r) => r.assignee === me);
-
-  const rows: DashRow[] = [];
-  const excluded: { person: string; module: string }[] = [];
-  for (const r of visible) {
-    const p = periodOfRow(r);
-    if (!p || !r.deadline) continue;
-    const o = outcomeOf(r, today);
-    if (!(CHARTED as string[]).includes(o)) {
-      if (p === period) excluded.push({ person: personOf(r), module: r.module || "Otros" });
-      continue;
-    }
-    const person = personOf(r);
-    rows.push({
-      key: r.task_key,
-      title: r.title,
-      module: r.module,
-      project: r.project,
-      client: r.client,
-      person,
-      href: r.href,
-      period: p,
-      deadline: effectiveDeadline(r.deadline),
-      closedAt: r.state === "cerrada" ? r.closed_at : null,
-      open: r.state === "abierta",
-      outcome: o as DashOutcome,
-      daysLate: o === "tarde" || o === "vencida" ? daysLate(r, today) : 0,
-      waitingFor: r.waiting_for,
-      waitingSince: r.waiting_since,
-      context: r.context,
-      contextBy: r.context_by,
-      contextAt: r.context_at,
-      canComment: r.assignee === me || (seesAll && !teamNames.has(r.assignee)),
-    });
-  }
-
-  // Personas en orden alfabético; "Sin responsable" al final
-  const people = seesAll
-    ? [...new Set(rows.map((r) => r.person))].sort((a, b) =>
-        a === NO_ASSIGNEE ? 1 : b === NO_ASSIGNEE ? -1 : a.localeCompare(b, "es")
-      )
-    : [me];
+  const { months, seesAll, me, people, rows, agreements, agreementsReady, excluded, startedOn, directionNames, readError } =
+    await loadProductivity(supabase, user, period, today);
 
   // Pestañas de meses: desde que arrancó la medición (máximo 6 hacia atrás)
   const firstMonth = startedOn ? monthOf(startedOn) : current;
@@ -262,4 +155,3 @@ function joinNames(names: string[]): string {
   if (names.length <= 1) return names.join("");
   return `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */

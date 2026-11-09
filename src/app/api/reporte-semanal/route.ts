@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFPage } from "pdf-lib";
+import { clean, wrap } from "@/lib/pdf-text";
 import { createClient } from "@/lib/supabase/server";
 import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
 import { computeConsultingTasks } from "@/lib/consulting-tasks";
@@ -55,35 +56,6 @@ function nextBusiness(d: string): string {
     if (dow !== 0 && dow !== 6) return x;
     x = addDays(x, 1);
   }
-}
-
-/** pdf-lib usa WinAnsi: sustituye puntuación tipográfica y quita emojis. */
-function clean(text: string): string {
-  return text
-    .replace(/[—–]/g, "-")
-    .replace(/[’‘]/g, "'")
-    .replace(/[“”]/g, '"')
-    .replace(/…/g, "...")
-    .replace(/[^ -ÿ]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const words = clean(text).split(" ");
-  const lines: string[] = [];
-  let line = "";
-  for (const w of words) {
-    const candidate = line ? `${line} ${w}` : w;
-    if (font.widthOfTextAtSize(candidate, size) > maxWidth && line) {
-      lines.push(line);
-      line = w;
-    } else {
-      line = candidate;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
 }
 
 export async function GET(request: Request) {

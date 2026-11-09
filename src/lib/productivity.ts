@@ -237,6 +237,54 @@ export function personOf(row: LedgerRow): string {
 /** Estados que se grafican (las excluidas y previas se quedan fuera). */
 export type DashOutcome = "a_tiempo" | "tarde" | "bloqueada" | "vencida" | "por_vencer";
 
+/** Orden de apilado en las gráficas (y de las columnas en tablas). */
+export const OUTCOMES: DashOutcome[] = ["a_tiempo", "tarde", "bloqueada", "vencida", "por_vencer"];
+
+export const OUTCOME_LABEL: Record<DashOutcome, string> = {
+  a_tiempo: "A tiempo",
+  tarde: "Con retraso",
+  bloqueada: "En espera de terceros",
+  vencida: "Vencidas",
+  por_vencer: "En plazo",
+};
+
+/**
+ * Paleta de estados validada con validate_palette.js sobre fondo blanco, en
+ * el orden de apilado: verde | amarillo | azul | naranja (todas las parejas
+ * vecinas pasan CVD y visión normal). "En plazo" es el riel gris: todavía
+ * no se evalúa. El amarillo queda bajo 3:1 de contraste, por eso siempre
+ * hay leyenda, etiquetas y tabla.
+ */
+export const OUTCOME_COLOR: Record<DashOutcome, string> = {
+  a_tiempo: "#008300",
+  tarde: "#eda100",
+  bloqueada: "#2a78d6",
+  vencida: "#eb6834",
+  por_vencer: "#e1e0d9",
+};
+
+export type Counts = Record<DashOutcome, number>;
+
+export function emptyCounts(): Counts {
+  return { a_tiempo: 0, tarde: 0, bloqueada: 0, vencida: 0, por_vencer: 0 };
+}
+
+export function countRows(rows: { outcome: DashOutcome }[]): Counts {
+  const c = emptyCounts();
+  for (const r of rows) c[r.outcome]++;
+  return c;
+}
+
+export function totalOf(c: Counts): number {
+  return OUTCOMES.reduce((s, o) => s + c[o], 0);
+}
+
+/** a tiempo ÷ (a tiempo + con retraso + vencidas); null si aún no hay nada evaluable. */
+export function pctOf(c: Counts): number | null {
+  const base = c.a_tiempo + c.tarde + c.vencida;
+  return base > 0 ? Math.round((c.a_tiempo / base) * 100) : null;
+}
+
 /** Una tarea ya clasificada en el servidor, lista para el dashboard. */
 export type DashRow = {
   key: string;

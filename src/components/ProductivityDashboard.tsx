@@ -10,10 +10,17 @@ import {
 } from "@/lib/actions";
 import { formatDate } from "@/lib/format";
 import {
+  OUTCOMES,
+  OUTCOME_COLOR as COLOR,
+  OUTCOME_LABEL as LABEL,
+  countRows,
   mexicoDate,
+  pctOf,
   periodLabel,
   shortPeriodLabel,
+  totalOf as total,
   weeksOfMonth,
+  type Counts,
   type DashOutcome,
   type DashRow,
   type PersonAgreement,
@@ -23,60 +30,15 @@ import {
  * Dashboard de productividad: indicadores, tendencia, carga semanal,
  * desglose por persona y por proceso, dependencias externas, acuerdos del
  * mes por persona y el detalle de tareas. Todo responde a los mismos
- * filtros (persona, proceso y estado).
- *
- * Paleta de estados validada con validate_palette.js sobre fondo blanco, en
- * este orden de apilado: verde | amarillo | azul | naranja (todas las
- * parejas vecinas pasan CVD y visión normal). "En plazo" es el riel gris:
- * todavía no se evalúa. El amarillo queda bajo 3:1 de contraste, por eso
- * siempre hay leyenda, etiquetas y la tabla de resumen.
+ * filtros (persona, proceso y estado). La paleta de estados vive en
+ * lib/productivity.ts (la comparte el reporte en PDF).
  */
-
-const OUTCOMES: DashOutcome[] = ["a_tiempo", "tarde", "bloqueada", "vencida", "por_vencer"];
-
-const LABEL: Record<DashOutcome, string> = {
-  a_tiempo: "A tiempo",
-  tarde: "Con retraso",
-  bloqueada: "En espera de terceros",
-  vencida: "Vencidas",
-  por_vencer: "En plazo",
-};
-
-const COLOR: Record<DashOutcome, string> = {
-  a_tiempo: "#008300",
-  tarde: "#eda100",
-  bloqueada: "#2a78d6",
-  vencida: "#eb6834",
-  por_vencer: "#e1e0d9",
-};
 
 const LINE = "#16345F"; // navy de la marca: serie única de la tendencia
 const GRID = "#e1e0d9";
 const AXIS = "#c3c2b7";
 const MUTED = "#898781";
 const TARGET = "#52514e";
-
-type Counts = Record<DashOutcome, number>;
-
-function emptyCounts(): Counts {
-  return { a_tiempo: 0, tarde: 0, bloqueada: 0, vencida: 0, por_vencer: 0 };
-}
-
-function countRows(rows: DashRow[]): Counts {
-  const c = emptyCounts();
-  for (const r of rows) c[r.outcome]++;
-  return c;
-}
-
-function total(c: Counts): number {
-  return OUTCOMES.reduce((s, o) => s + c[o], 0);
-}
-
-/** a tiempo ÷ (a tiempo + con retraso + vencidas); null si aún no hay nada evaluable. */
-function pctOf(c: Counts): number | null {
-  const base = c.a_tiempo + c.tarde + c.vencida;
-  return base > 0 ? Math.round((c.a_tiempo / base) * 100) : null;
-}
 
 function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
@@ -242,9 +204,12 @@ export function ProductivityDashboard({
             Quitar filtros
           </button>
         )}
-        <p className="ml-auto self-center text-xs text-slate-400">
-          {person || "Todo el equipo"} · {module || "todos los procesos"} · <span className="capitalize">{periodLabel(period)}</span>
-        </p>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3 self-center">
+          <p className="text-xs text-slate-400">
+            {person || "Todo el equipo"} · {module || "todos los procesos"} · <span className="capitalize">{periodLabel(period)}</span>
+          </p>
+          <ReportButton period={period} person={person} module={module} />
+        </div>
       </div>
 
       {/* Indicadores */}
@@ -358,6 +323,66 @@ export function ProductivityDashboard({
         </p>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reporte en PDF
+
+/**
+ * Descarga el reporte del mes con los filtros de arriba: sin persona
+ * elegida sale el del equipo (desglose por persona); con persona, el
+ * individual (acuerdos y detalle de todas sus tareas). Respeta también el
+ * proceso seleccionado.
+ */
+function ReportButton({ period, person, module }: { period: string; person: string; module: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const who = person ? `de ${person.split(" ")[0]}` : "del equipo";
+
+  async function generate() {
+    setBusy(true);
+    setError("");
+    try {
+      const qs = new URLSearchParams({ mes: period });
+      if (person) qs.set("persona", person);
+      if (module) qs.set("proceso", module);
+      const res = await fetch(`/api/reporte-productividad?${qs.toString()}`, { cache: "no-store" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || "No se pudo generar el reporte.");
+      }
+      const blob = await res.blob();
+      const name =
+        /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? `reporte-productividad-${period}.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo generar el reporte.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex flex-col items-end">
+      <button
+        type="button"
+        onClick={generate}
+        disabled={busy}
+        title={`PDF del mes ${person ? `de ${person}` : "de todo el equipo"}${module ? ` en ${module}` : ""}`}
+        className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-brand-cyan to-brand-magenta px-4 py-1.5 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:opacity-60"
+      >
+        {busy ? "Generando…" : `📄 Generar reporte ${who}`}
+      </button>
+      {error && <span className="mt-1 text-xs text-red-600">{error}</span>}
+    </span>
   );
 }
 
