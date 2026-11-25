@@ -116,7 +116,9 @@ export const CONSULTING_DEFAULT_OWNER = "Carolina García";
 // pedidos a América, seguimientos), así que es la responsable por default.
 // Oli solo hace el contenido (PPT, manuales e informe de la encuesta): sube
 // la liga y Pao lo envía.
-export const LOGISTICS_OWNER = "Daysi Paola Olmedo Contreras";
+// Nombres cortos en el CRM desde el 25-nov-2026 (antes "Daysi Paola Olmedo
+// Contreras" y "América Nohema Díaz Carrera").
+export const LOGISTICS_OWNER = "Paola";
 export const CONTENT_OWNER = "Antonio Oliver";
 
 // ---------------- Pedidos de constancias, DC-3 y gafetes (migración 029) ----------------
@@ -124,7 +126,7 @@ export const CONTENT_OWNER = "Antonio Oliver";
 // y se los ENTREGA, y quien pidió los ENVÍA al cliente.
 
 /** Quien hace los documentos (nombre tal cual está en su perfil). */
-export const DOCUMENTS_MAKER = "América Nohema Díaz Carrera";
+export const DOCUMENTS_MAKER = "América";
 
 export const DOC_TYPES = ["Constancias", "DC-3", "Gafetes"] as const;
 
@@ -150,7 +152,7 @@ export const DOC_STATUS_COLORS: Record<string, string> = {
   Enviada: "bg-emerald-500",
 };
 
-/** "América Nohema Díaz Carrera" → "América" (para títulos cortos). */
+/** "Antonio Oliver" → "Antonio" (para títulos cortos). */
 export function firstName(fullName: string): string {
   return (fullName || "").trim().split(/\s+/)[0] ?? "";
 }
