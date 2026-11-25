@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isMuted } from "@/lib/mail";
 import { createClient } from "@supabase/supabase-js";
 import { computeTasks, customToComputed, sortByDue, type ComputedTask } from "@/lib/tasks";
 import { computeConsultingTasks } from "@/lib/consulting-tasks";
@@ -225,6 +226,10 @@ export async function GET(request: Request) {
   const results: string[] = [];
 
   for (const p of profiles) {
+    if (isMuted(p.email)) {
+      results.push(`${p.full_name}: sin correos (lib/mail.ts)`);
+      continue;
+    }
     const prefs = p.reminder_prefs ?? { enabled: true, kinds: [] };
     if (!prefs.enabled) {
       results.push(`${p.full_name}: recordatorios apagados`);

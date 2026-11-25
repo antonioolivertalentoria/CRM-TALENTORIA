@@ -1,4 +1,5 @@
 import { COMMERCIAL_OWNER } from "./constants";
+import { isMuted, withoutMuted } from "./mail";
 import { TEAM_PLACE, TEAM_TZ, describeSchedule, differsFromTeam, toTeamTime, tzShort, zonedToUtc } from "./timezones";
 import type { Session, Training } from "./types";
 
@@ -82,6 +83,12 @@ async function postToResend(
   resendKey: string,
   payload: Record<string, unknown>
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
+  // Red de seguridad: nunca a quien tiene los correos apagados (lib/mail.ts)
+  if (Array.isArray(payload.to)) {
+    const to = withoutMuted(payload.to as string[]);
+    if (to.length === 0) return { ok: true };
+    payload = { ...payload, to };
+  }
   const body = JSON.stringify(payload);
   const post = () =>
     fetch("https://api.resend.com/emails", {
@@ -176,6 +183,8 @@ function withoutCommercial(
   const muted = new Set(
     resolveEmails([name], profiles, facilitators).map((p) => p.email.toLowerCase())
   );
+  // Quien tiene los correos apagados (lib/mail.ts) no va ni en el .ics
+  attendees = attendees.filter((a) => !isMuted(a.email));
   if (muted.size === 0) return attendees;
   const base = new Set(ALWAYS_INVITED.map((p) => p.email.toLowerCase()));
   return attendees.filter((a) => {

@@ -24,6 +24,7 @@ import {
   firstName,
   quoteFolder,
 } from "@/lib/constants";
+import { isMuted } from "@/lib/mail";
 import { defaultNeededBy, orderMaker, orderWhat } from "@/lib/document-orders";
 import { NEGATIVE_RESULTS, POSITIVE_RESULTS, addWorkingDays, findDef, loopRange } from "@/lib/marketing-flows";
 import { isPast, syncConsultingMeeting, syncConsultingSessionEvent, syncSessionEvent, syncTrainingEvents, type InviteResult } from "@/lib/calendar";
@@ -593,6 +594,7 @@ async function notifyCommercialTrainingFinished(
         </p>
       </div>`;
 
+    if (isMuted(profile.email)) return;
     await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
@@ -1158,7 +1160,7 @@ async function notifyTaskCompleted(
       .select("email, full_name")
       .ilike("full_name", `%${task.requested_by}%`)
       .maybeSingle();
-    if (!profile?.email) return;
+    if (!profile?.email || isMuted(profile.email)) return;
 
     const completedBy = await currentUserName(supabase);
     const from = process.env.REMINDER_FROM ?? "CRM Talentoría <crm@talentoriacursos.com>";
@@ -1863,6 +1865,7 @@ async function notifyDocumentOrder(
       </div>`;
 
     const from = process.env.REMINDER_FROM ?? "CRM Talentoría <crm@talentoriacursos.com>";
+    if (isMuted(profile.email)) return;
     await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
