@@ -2,7 +2,7 @@
 
 import { useState, useActionState } from "react";
 import { createTrainingAction } from "@/lib/actions";
-import { TRAINING_STATUSES, PLATFORMS, EXTRA_FACILITATORS } from "@/lib/constants";
+import { TRAINING_STATUSES, PLATFORMS, EXTRA_FACILITATORS, LOGISTICS_OWNER } from "@/lib/constants";
 import { DEFAULT_TZ, normalizeTz } from "@/lib/timezones";
 import { TimezoneOptions } from "./ZoneTime";
 
@@ -120,11 +120,11 @@ export function NewTrainingForm({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold text-slate-500">Responsable interno</label>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Responsable de logística</label>
           {people.length > 0 ? (
             <select
               name="internal_owner"
-              defaultValue={people.find((p) => p.includes("Oliver")) ?? currentUser}
+              defaultValue={people.find((p) => p === LOGISTICS_OWNER) ?? currentUser}
               className={input}
             >
               <option value="">— Sin responsable</option>
@@ -133,7 +133,7 @@ export function NewTrainingForm({
               ))}
             </select>
           ) : (
-            <input name="internal_owner" placeholder="Ej. Oliver" className={input} />
+            <input name="internal_owner" placeholder="Ej. Paola" className={input} />
           )}
         </div>
         <div>

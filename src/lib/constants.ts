@@ -111,6 +111,14 @@ export const COMMERCIAL_OWNER = "Perla Torres";
 // (Oli, 09-nov-2026: "si no asignan, de consultoría pon a Caro").
 export const CONSULTING_DEFAULT_OWNER = "Carolina García";
 
+// Capacitaciones y team buildings (Oli, 25-nov-2026): Pao activa el
+// proyecto y lleva TODA la logística (mensajes, listas, envíos, encuestas,
+// pedidos a América, seguimientos), así que es la responsable por default.
+// Oli solo hace el contenido (PPT, manuales e informe de la encuesta): sube
+// la liga y Pao lo envía.
+export const LOGISTICS_OWNER = "Daysi Paola Olmedo Contreras";
+export const CONTENT_OWNER = "Antonio Oliver";
+
 // ---------------- Pedidos de constancias, DC-3 y gafetes (migración 029) ----------------
 // Desde el 09-nov-2026 quien lleva el proyecto los PIDE, América los HACE
 // y se los ENTREGA, y quien pidió los ENVÍA al cliente.

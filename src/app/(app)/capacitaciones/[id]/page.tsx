@@ -259,7 +259,9 @@ export default async function TrainingDetailPage({
         </h2>
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <p className="text-xs font-semibold text-slate-400">Responsable interno</p>
+            <p className="text-xs font-semibold text-slate-400" title="Lleva la logística: mensajes, listas, envíos, encuestas, pedidos a América y seguimientos. El contenido lo hace quien aparece en cada material.">
+              Responsable de logística
+            </p>
             <OwnerSelect value={training.internal_owner} people={people} onChange={save("internal_owner")} />
           </div>
           <div>

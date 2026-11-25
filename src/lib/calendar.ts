@@ -393,7 +393,7 @@ export async function syncSessionEvent(
       clientName ? `Cliente: ${clientName}` : "",
       `Horario: ${describeSchedule(s.session_date, startTime, endTime, tz)}`,
       s.facilitator ? `Facilita: ${s.facilitator}` : "",
-      t.internal_owner ? `Responsable interno: ${t.internal_owner}` : "",
+      t.internal_owner ? `Responsable de logística: ${t.internal_owner}` : "",
       s.modality ? `Modalidad: ${s.modality}` : "",
       s.platform && s.modality !== "Presencial" ? `Plataforma: ${s.platform}` : "",
       s.session_link ? `Liga: ${s.session_link}` : "",

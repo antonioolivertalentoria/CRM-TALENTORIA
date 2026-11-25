@@ -232,6 +232,16 @@ function resolve(row: LedgerRow, src: Sources, today: string): Resolution {
     case "training_field": {
       const t = src.trainings.get(row.training_id);
       if (t && t[c.field] === "No aplica") return excluded("no aplica");
+      // Se ocultó sin hacerse: espera otro paso (p. ej. el informe espera
+      // la liga, el envío de constancias espera a América). Si vuelve a
+      // aparecer, la bitácora la reabre.
+      if (t && t[c.field] === "Pendiente") return excluded("en espera de otro paso");
+      return closed();
+    }
+    case "training_link": {
+      const t = src.trainings.get(row.training_id);
+      if (t && t[c.statusField] === "No aplica") return excluded("no aplica");
+      if (t && !t[c.field]) return excluded("en espera de otro paso");
       return closed();
     }
     case "material_status":

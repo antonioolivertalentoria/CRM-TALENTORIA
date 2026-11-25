@@ -742,9 +742,22 @@ export function TasksList({
 
   const complete = (task: ComputedTask) => {
     const c = task.complete;
+    // Tareas que se cierran subiendo una liga (p. ej. el informe de la
+    // encuesta): sin liga no se palomea.
+    let link = "";
+    if (c.type === "training_link") {
+      link = (window.prompt(c.prompt) ?? "").trim();
+      if (!link) return;
+      if (!/^https?:\/\//i.test(link)) {
+        setListError("Pega la liga completa (empieza con https://).");
+        return;
+      }
+    }
     runOptimistic(task.key, () => {
       if (c.type === "training_field") {
         return updateTrainingField(task.trainingId, c.field, c.value);
+      } else if (c.type === "training_link") {
+        return updateTrainingField(task.trainingId, c.field, link);
       } else if (c.type === "material_status") {
         return updateMaterialField(c.materialId, task.trainingId, "status", c.nextStatus);
       } else if (c.type === "training_request") {

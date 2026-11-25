@@ -1,5 +1,5 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
-import { COMMERCIAL_OWNER, DOC_ORDERS_START, DOC_SEND_FIELD, DOCUMENTS_MAKER, firstName } from "./constants";
+import { COMMERCIAL_OWNER, CONTENT_OWNER, DOC_ORDERS_START, DOC_SEND_FIELD, DOCUMENTS_MAKER, firstName } from "./constants";
 import { orderMaker, orderWhat, receiverShort } from "./document-orders";
 import { followUpContext, followUpStage, type FollowUpContext, type FollowUpField, type FollowUpStage } from "./follow-up";
 import type { Client, CustomTask, DocumentOrder, Material, Session, Training, TrainingRequest } from "./types";
@@ -17,6 +17,11 @@ import type { Client, CustomTask, DocumentOrder, Material, Session, Training, Tr
  * - Encuestas QR y liga de sesión (online): 3 días antes.
  * - Entregas post-curso: 2 días HÁBILES después de la última sesión;
  *   seguimientos a 20 y 30 días naturales.
+ *
+ * Quién hace qué (Oli, 25-nov-2026): la responsable de la ficha
+ * (internal_owner, por default Pao) lleva toda la logística; quien hace el
+ * contenido (maker de los materiales, por default Oli) prepara PPT y
+ * manuales y arma el informe de la encuesta subiendo la liga, y Pao lo envía.
  *
  * Facturas: fuera del CRM desde el 27-oct-2026 (decisión de Oli). Ningún
  * módulo genera tareas de factura y los campos quedaron en "No aplica".
@@ -42,6 +47,12 @@ export type ComputedTask = {
   followUp?: { stage: FollowUpStage; context: FollowUpContext };
   complete:
     | { type: "training_field"; field: string; value: string }
+    /**
+     * Pide pegar una liga (p. ej. el informe de la encuesta) y la guarda en
+     * `field`. `statusField` es el paso del checklist que habilita: si ese
+     * paso queda "No aplica", la tarea no cuenta en la bitácora.
+     */
+    | { type: "training_link"; field: string; statusField: string; prompt: string }
     | { type: "material_status"; materialId: string; nextStatus: string }
     | { type: "custom_task"; taskId: string }
     | { type: "training_request"; requestId: string }
@@ -157,6 +168,26 @@ export function isInternalFacilitator(facilitators: string[], internalNames: str
     const fl = f.toLowerCase().trim();
     return known.some((k) => k.includes(fl) || fl.includes(k.split(" ")[0]) || k.split(" ").some((part) => part && fl.includes(part)));
   });
+}
+
+/**
+ * Quién hace el contenido del curso (PPT, manuales, informe de la encuesta):
+ * quien más materiales tiene a su cargo en la ficha; si nadie, Oli.
+ */
+export function contentOwner(materials: Pick<Material, "maker">[]): string {
+  const counts = new Map<string, number>();
+  for (const m of materials) {
+    if (m.maker) counts.set(m.maker, (counts.get(m.maker) ?? 0) + 1);
+  }
+  let best = "";
+  let max = 0;
+  for (const [name, n] of counts) {
+    if (n > max) {
+      best = name;
+      max = n;
+    }
+  }
+  return best || CONTENT_OWNER;
 }
 
 export function computeTasks(
@@ -299,6 +330,16 @@ export function computeTasks(
       },
     ];
 
+    // Quien lleva la logística envía el contenido; quien lo hace solo sube
+    // la liga. Que vea desde Mis tareas qué le falta recibir.
+    const notReady = t.materials.filter((m) => m.status !== "Listo");
+    const contentDetails =
+      t.materials.length === 0
+        ? undefined
+        : notReady.length > 0
+          ? `Material que todavía no está listo: ${notReady.map((m) => `${m.type} «${m.name}» (${m.status})`).join(", ")}.`
+          : "Todo el material ya está listo en la ficha.";
+
     for (const item of PRE_ITEMS) {
       if (!item.applies || val(item.field) !== "Pendiente") continue;
       tasks.push({
@@ -306,6 +347,7 @@ export function computeTasks(
         key: `${t.id}-${item.field}`,
         kind: "Preparación",
         title: item.label,
+        details: item.field === "contenido_facilitador" ? contentDetails : undefined,
         due: firstDate ? atLeast(addDays(firstDate, -item.days), tomorrow) : null,
         complete: trainingField(item.field),
       });
@@ -390,6 +432,45 @@ export function computeTasks(
           // Constancias y DC-3 del flujo nuevo: solo cuando ya se las entregaron
           const state = sendState[item.field];
           if (state === "esperando") continue;
+
+          // Informe de la encuesta (Oli, 25-nov-2026): quien hace el contenido
+          // arma el informe y sube la liga en cuanto se recabó la encuesta;
+          // quien lleva la logística lo envía, y solo le aparece con la liga.
+          // Si no hubo encuesta de participantes, queda como antes (lo cierra
+          // o lo marca «No aplica» quien lleva el curso).
+          if (item.field === "informe_encuesta" && !t.informe_encuesta_url && val("encuesta_participantes") !== "No aplica") {
+            if (val("encuesta_participantes") === "Listo") {
+              const sender = t.internal_owner ? firstName(t.internal_owner) : "quien lleva la logística";
+              tasks.push({
+                ...base,
+                assignee: contentOwner(t.materials),
+                key: `${t.id}-hacer_informe`,
+                kind: "Material",
+                title: "Hacer el informe de la encuesta y subir la liga",
+                details: `La encuesta ya se recabó. Pega la liga del informe y ${sender} se lo envía al cliente.`,
+                due: atLeast(due48h, tomorrow),
+                complete: {
+                  type: "training_link",
+                  field: "informe_encuesta_url",
+                  statusField: "informe_encuesta",
+                  prompt: "Pega la liga del informe de la encuesta (Drive o página publicada):",
+                },
+              });
+            }
+            continue;
+          }
+          if (item.field === "informe_encuesta" && t.informe_encuesta_url) {
+            tasks.push({
+              ...base,
+              key: `${t.id}-${item.field}`,
+              kind: "Entrega",
+              title: "Enviar informe de la encuesta de satisfacción al cliente",
+              details: `El informe ya está listo: ${t.informe_encuesta_url}`,
+              due: atLeast(due48h, tomorrow),
+              complete: trainingField(item.field),
+            });
+            continue;
+          }
           const delivered =
             state === "lista"
               ? orders.find((o) => DOC_SEND_FIELD[o.doc_type] === item.field && o.status === "Entregada")

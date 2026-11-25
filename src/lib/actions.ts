@@ -9,6 +9,7 @@ import {
   CHECKLIST_FIELDS,
   COMMERCIAL_OWNER,
   DOC_ORDER_STATUSES,
+  CONTENT_OWNER,
   DOC_SEND_FIELD,
   DOC_TYPES,
   DOCUMENTS_MAKER,
@@ -360,7 +361,8 @@ export async function createTrainingAction(
     // (se envía digital máx. 48h después).
     const { data: profs } = await supabase.from("profiles").select("full_name");
     const names = ((profs ?? []) as { full_name: string }[]).map((p) => p.full_name);
-    const maker = names.find((n) => n.includes("Oliver")) ?? "";
+    // El contenido lo hace Oli aunque la ficha la dé de alta Pao (25-nov-2026)
+    const maker = names.find((n) => n === CONTENT_OWNER) ?? names.find((n) => n.includes("Oliver")) ?? "";
     const reviewer = names.find((n) => n.includes("Arianna")) ?? "";
 
     const internalNames = [...names, "Carolina García", "Caro"];
