@@ -97,13 +97,21 @@ export const CHECKLIST_FIELDS: { key: string; label: string; hint: string }[] = 
   // columna sigue en la base, en "No aplica").
   { key: "seguimiento_20", label: "Seguimiento día 20", hint: "Llamada/mensaje para validar aplicación de aprendizajes" },
   { key: "seguimiento_30", label: "Seguimiento día 30", hint: "Cierre formal de soporte y clausura del grupo de WhatsApp" },
-  { key: "cierre_comercial", label: "Cierre comercial", hint: "Comercial confirma que los entregables salieron (48h después del curso)" },
-  { key: "postventa_comercial", label: "Fin de postventa", hint: "Comercial retoma al cliente al terminar el acompañamiento de 30 días" },
+  // Ari, 26-nov-2026 (#logística): "Fin de postventa" fuera del CRM y el
+  // "Cierre comercial" pasa a ser el aviso que Logística (Pao) le da a
+  // comercial en Slack en cuanto el facilitador dio las sesiones
+  // programadas, sin esperar la encuesta. La columna sigue llamándose
+  // cierre_comercial; postventa_comercial queda en la base en "No aplica".
+  { key: "cierre_comercial", label: "Notificación a comercial del cierre", hint: "Logística avisa en #comercial-capacitación en cuanto el facilitador dio las sesiones programadas (sin esperar la encuesta)" },
 ];
 
-// Quien recibe los avisos de cierre y postventa cuando la ficha no trae
-// comercial capturado (migración 018).
+// Comercial de la ficha cuando no trae uno capturado (migración 018). Desde
+// el 26-nov-2026 ya no le cae ninguna tarea de cierre: se le avisa por Slack.
 export const COMMERCIAL_OWNER = "Perla Torres";
+
+/** Canales de Slack donde Logística le avisa a comercial que terminó un proyecto. */
+export const COMMERCIAL_CHANNEL_TRAININGS = "#comercial-capacitación";
+export const COMMERCIAL_CHANNEL_CONSULTING = "#comercial-consultoría";
 
 // Consultoría: toda tarea sin responsable (Operaciones, líder o comercial
 // vacíos) le cae a Caro en vez de salir "sin asignar" en el perfil de
@@ -205,8 +213,8 @@ export const CONSULTING_CHECKLIST: { key: string; label: string; hint: string }[
   { key: "encuesta", label: "Encuesta de satisfacción", hint: "Enviar encuesta y dar seguimiento (48h después de la entrega)" },
   { key: "cierre_interno", label: "Cierre interno", hint: "Horas, documentación y aprendizajes (3 días hábiles)" },
   { key: "seguimiento_20", label: "Seguimiento posproyecto", hint: "Seguimiento al cliente y cierre definitivo (20 días después)" },
-  { key: "cierre_comercial", label: "Cierre comercial", hint: "Comercial confirma que los entregables salieron (48h después de la entrega)" },
-  { key: "postventa_comercial", label: "Fin de postventa", hint: "Comercial retoma al cliente al cumplirse los 20 días de seguimiento posproyecto" },
+  // Sin "Fin de postventa" desde el 26-nov-2026 (ver CHECKLIST_FIELDS).
+  { key: "cierre_comercial", label: "Notificación a comercial del cierre", hint: "Logística avisa en #comercial-consultoría en cuanto el consultor envió el reporte de cierre (sin esperar la encuesta)" },
 ];
 
 // Colores de estados de consultoría (se suman a STATUS_COLORS)

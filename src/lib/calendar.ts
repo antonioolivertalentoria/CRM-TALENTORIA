@@ -31,7 +31,8 @@ import type { Session, Training } from "./types";
  * y por cada dato editado, y al dar de alta tres proyectos de golpe el
  * equipo recibió decenas de correos. Ahora todo sale solo cuando alguien lo
  * pide (✉️, "Sí, mandar aviso" o la casilla al crear), y nunca para fechas
- * que ya pasaron.
+ * que ya pasaron. Única excepción (27-nov-2026): a quien hace el contenido
+ * de las capacitaciones le llega solo (ver CONTENT_OWNER_EMAIL).
  *
  * La hora sale con la zona de la sede (29-sep-2026). Antes todo iba como
  * hora del centro y una sesión de las 9:00 en Matamoros (una hora
@@ -49,6 +50,28 @@ const ALWAYS_INVITED: { name: string; email: string }[] = [
   { name: "Arianna Évora", email: "ariannaevora@talentoria.com" },
   { name: "Paola Olmedo", email: "paolaolmedo@talentoria.com" },
 ];
+
+/**
+ * Quien hace el contenido (PPT y manuales) de las capacitaciones. Oli,
+ * 27-nov-2026: "siempre me tienes que enviar invitación a mí, porque como
+ * yo hago las ppts necesito estar enterado de cuándo serán". Desde que Pao
+ * da de alta las capacitaciones el aviso al equipo puede no pedirse, así
+ * que a él le llega SOLO, sin preguntar: al crear la capacitación, al
+ * mover fecha/horario/facilitador de una sesión y al cancelarla o borrarla.
+ * Solo capacitaciones (no team buildings ni consultoría).
+ */
+export const CONTENT_OWNER_EMAIL = "antoniooliver@talentoria.com";
+
+/**
+ * A quién se le manda el correo:
+ *  - "all" (default): todos los invitados de la sesión.
+ *  - "content_owner": solo a quien hace el contenido, y solo en
+ *    capacitaciones. El .ics lleva igual la lista completa de invitados
+ *    y el mismo UID, así que el evento es el mismo que el del equipo.
+ * `skipContentOwner` lo quita de un envío al equipo cuando ya le llegó
+ * el suyo por el mismo cambio (para no mandarle dos correos iguales).
+ */
+export type InviteOptions = { to?: "all" | "content_owner"; skipContentOwner?: boolean };
 
 // Correos conocidos de gente que aún no es usuaria del CRM ni está en el
 // catálogo con correo. Se usan cuando su nombre aparece como facilitador
@@ -333,7 +356,8 @@ export type InviteResult =
 export async function syncSessionEvent(
   supabase: SupabaseLike,
   sessionId: string,
-  mode: "request" | "cancel"
+  mode: "request" | "cancel",
+  opts: InviteOptions = {}
 ): Promise<InviteResult> {
   try {
     const resendKey = process.env.RESEND_API_KEY;
@@ -359,6 +383,10 @@ export async function syncSessionEvent(
     const t = s.trainings;
     const clientName = t.clients?.company ?? "";
     const isTB = t.kind === "Team building";
+    const onlyContentOwner = opts.to === "content_owner";
+    if (onlyContentOwner && isTB) {
+      return { sent: false, reason: "En team buildings el aviso solo sale si se pide." };
+    }
 
     const [{ data: profilesData }, { data: facilitatorsData }, userRes] = await Promise.all([
       supabase.from("profiles").select("full_name, email"),
@@ -451,9 +479,19 @@ export async function syncSessionEvent(
         </p>
       </div>`;
 
+    const owner = CONTENT_OWNER_EMAIL.toLowerCase();
+    const to = onlyContentOwner
+      ? [CONTENT_OWNER_EMAIL]
+      : attendees
+          .map((a) => a.email)
+          .filter((e) => !(opts.skipContentOwner && e.toLowerCase() === owner));
+    if (to.length === 0) {
+      return { sent: false, reason: "No hay a quién más avisarle." };
+    }
+
     const res = await postToResend(resendKey, {
       from,
-      to: attendees.map((a) => a.email),
+      to,
       subject,
       html,
       attachments: [
@@ -466,7 +504,7 @@ export async function syncSessionEvent(
     });
     if (!res.ok) return { sent: false, reason: res.reason };
 
-    return { sent: true, to: attendees.map((a) => a.email), mode };
+    return { sent: true, to, mode };
   } catch (e) {
     // Las invitaciones son cortesía: nunca rompen la acción original,
     // pero sí se dice qué pasó.
@@ -481,7 +519,8 @@ export async function syncSessionEvent(
 export async function syncTrainingEvents(
   supabase: SupabaseLike,
   trainingId: string,
-  mode: "request" | "cancel"
+  mode: "request" | "cancel",
+  opts: InviteOptions = {}
 ): Promise<void> {
   try {
     const { data } = await supabase
@@ -491,7 +530,7 @@ export async function syncTrainingEvents(
     const sessions = (data ?? []) as Pick<Session, "id" | "session_date" | "start_time" | "status">[];
     for (const s of sessions) {
       if (!s.session_date || !s.start_time || s.status === "Cancelada" || isPast(s.session_date)) continue;
-      await syncSessionEvent(supabase, s.id, mode);
+      await syncSessionEvent(supabase, s.id, mode, opts);
     }
   } catch {
     // silencioso

@@ -253,6 +253,7 @@ export function NewTrainingForm({
             <span className="block text-xs text-slate-400">
               Una por cada sesión con fecha y hora. Si no lo marcas ahora, puedes mandarla
               después con el botón ✉️ de cada sesión.
+              {kind !== "Team building" && " A Oli le llega siempre, aunque no lo marques, porque hace el contenido."}
             </span>
           </span>
         </label>

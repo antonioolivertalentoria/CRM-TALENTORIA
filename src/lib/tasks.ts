@@ -1,5 +1,5 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
-import { COMMERCIAL_OWNER, CONTENT_OWNER, DOC_ORDERS_START, DOC_SEND_FIELD, DOCUMENTS_MAKER, firstName } from "./constants";
+import { COMMERCIAL_CHANNEL_TRAININGS, CONTENT_OWNER, DOC_ORDERS_START, DOC_SEND_FIELD, DOCUMENTS_MAKER, LOGISTICS_OWNER, firstName } from "./constants";
 import { orderMaker, orderWhat, receiverShort } from "./document-orders";
 import { followUpContext, followUpStage, type FollowUpContext, type FollowUpField, type FollowUpStage } from "./follow-up";
 import type { Client, CustomTask, DocumentOrder, Material, Session, Training, TrainingRequest } from "./types";
@@ -490,45 +490,23 @@ export function computeTasks(
       }
     }
 
-    // ---- Avisos a Comercial (migración 018) ----
-    // Comercial no se enteraba del cierre y es quien tiene que confirmar
-    // que los entregables salieron y retomar al cliente cuando se acaba el
-    // acompañamiento. Estos dos avisos son su parte del proceso.
-    if (lastDate && today > lastDate) {
-      const comercial = t.comercial || COMMERCIAL_OWNER;
-
-      if (t.cierre_comercial === "Pendiente") {
-        const faltan = POST_ITEMS.filter((i) => val(i.field) === "Pendiente").map((i) => i.label);
-        tasks.push({
-          ...base,
-          assignee: comercial,
-          key: `${t.id}-cierre_comercial`,
-          kind: "Entrega",
-          title: "Cierre del proyecto: confirmar entregables enviados",
-          details:
-            faltan.length > 0
-              ? `Todavía faltan entregas: ${faltan.join(", ")}.`
-              : "Todas las entregas al cliente ya están marcadas.",
-          due: addBusinessDays(lastDate, 2),
-          complete: trainingField("cierre_comercial"),
-        });
-      }
-
-      // Fin del acompañamiento: aparece el día que se cumplen los 30 días
-      // (no antes: el punto es avisar que YA pasó el servicio postventa).
-      const postDue = addDays(lastDate, 30);
-      if (t.postventa_comercial === "Pendiente" && today >= postDue) {
-        tasks.push({
-          ...base,
-          assignee: comercial,
-          key: `${t.id}-postventa_comercial`,
-          kind: "Seguimiento",
-          title: "Terminó el servicio postventa (30 días): retomar al cliente",
-          details: "Se acabó el acompañamiento del curso. Buen momento para preguntar resultados y proponer lo que sigue.",
-          due: postDue,
-          complete: trainingField("postventa_comercial"),
-        });
-      }
+    // ---- Notificación a comercial del cierre (Ari, 26-nov-2026) ----
+    // Antes eran dos tareas de Comercial (cierre y fin de postventa). Ahora
+    // es una sola y la hace Logística (Pao): en cuanto el facilitador dio
+    // las sesiones programadas avisa en Slack que el proyecto terminó, sin
+    // esperar la encuesta, y marca la casilla. Llave nueva (aviso_comercial)
+    // para que las de Comercial salgan de la bitácora sin contarse como hechas.
+    if (lastDate && today >= lastDate && t.cierre_comercial === "Pendiente") {
+      tasks.push({
+        ...base,
+        assignee: LOGISTICS_OWNER,
+        key: `${t.id}-aviso_comercial`,
+        kind: "Entrega",
+        title: `Notificar a comercial el cierre en ${COMMERCIAL_CHANNEL_TRAININGS}`,
+        details: `El facilitador ya dio las sesiones programadas: avisa en ${COMMERCIAL_CHANNEL_TRAININGS} que el proyecto terminó (no hace falta esperar la encuesta) y marca la casilla.`,
+        due: addBusinessDays(lastDate, 1),
+        complete: trainingField("cierre_comercial"),
+      });
     }
 
     // Seguimientos día 20 y 30 (aparecen 3 días antes de vencer), con el

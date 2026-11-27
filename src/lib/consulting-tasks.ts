@@ -1,5 +1,5 @@
 import { addBusinessDays, addDays, todayISO } from "./format";
-import { COMMERCIAL_OWNER, CONSULTING_DEFAULT_OWNER } from "./constants";
+import { COMMERCIAL_CHANNEL_CONSULTING, CONSULTING_DEFAULT_OWNER, LOGISTICS_OWNER } from "./constants";
 import type { ComputedTask } from "./tasks";
 import type {
   Client,
@@ -229,29 +229,25 @@ export function computeConsultingTasks(projects: ConsultingProjectFull[]): Compu
       if (p.seguimiento_20 === "Pendiente" && today >= addDays(segDue, -3)) {
         push("seguimiento", "Seguimiento posproyecto y cierre definitivo", p.leader, segDue, field("seguimiento_20"));
       }
+    }
 
-      // ---- Avisos a Comercial (migración 018) ----
-      const comercial = p.comercial || COMMERCIAL_OWNER;
-      if (p.cierre_comercial === "Pendiente") {
-        push(
-          "cierre_comercial",
-          "Cierre del proyecto: confirmar entregables enviados",
-          comercial,
-          addBusinessDays(d, 2),
-          field("cierre_comercial")
-        );
-      }
-      // El día que se cumplen los 20 días de seguimiento posproyecto,
-      // Comercial se entera de que ya terminó el acompañamiento.
-      if (p.postventa_comercial === "Pendiente" && today >= segDue) {
-        push(
-          "postventa_comercial",
-          "Terminó el seguimiento posproyecto (20 días): retomar al cliente",
-          comercial,
-          segDue,
-          field("postventa_comercial")
-        );
-      }
+    // ---- Notificación a comercial del cierre (Ari, 26-nov-2026) ----
+    // En cuanto el consultor envió el reporte de cierre (entregables
+    // finales enviados), Logística (Pao) avisa en Slack que el proyecto
+    // terminó, sin esperar la encuesta. Va fuera del bloque de entrega
+    // porque muchos proyectos no tienen fecha de reunión de entrega.
+    // Ya no hay "Fin de postventa".
+    if (p.entregables_enviados === "Listo" && p.cierre_comercial === "Pendiente") {
+      const since = p.delivery_date && p.delivery_date <= today ? p.delivery_date : today;
+      tasks.push({
+        ...base,
+        key: `cons-${p.id}-aviso_comercial`,
+        title: `Notificar a comercial el cierre en ${COMMERCIAL_CHANNEL_CONSULTING} · ${p.name}`,
+        details: `El consultor ya envió el reporte de cierre: avisa en ${COMMERCIAL_CHANNEL_CONSULTING} que el proyecto terminó (no hace falta esperar la encuesta) y marca la casilla.`,
+        assignee: LOGISTICS_OWNER,
+        due: addBusinessDays(since, 1),
+        complete: field("cierre_comercial"),
+      });
     }
   }
 

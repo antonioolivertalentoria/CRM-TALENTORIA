@@ -42,9 +42,13 @@ export function SessionsTable({
 
   // El CRM ya no manda el correo solo: cuando un cambio amerita avisarle al
   // equipo aparece esta barra preguntando, y `notice` cuenta cómo terminó.
-  const [ask, setAsk] = useState<{ id: string; number: number; mode: "request" | "cancel" } | null>(
-    null
-  );
+  const [ask, setAsk] = useState<{
+    id: string;
+    number: number;
+    mode: "request" | "cancel";
+    /** A Oli (contenido) ya le llegó solo por este mismo cambio. */
+    ownerSent: boolean;
+  } | null>(null);
   const [notice, setNotice] = useState<InviteNotice | null>(null);
   const [sending, setSending] = useState(false);
 
@@ -57,16 +61,21 @@ export function SessionsTable({
     }
     if (res && "askInvite" in res) {
       setNotice(null);
-      setAsk({ id: session.id, number: session.session_number, mode: res.askInvite });
+      setAsk({
+        id: session.id,
+        number: session.session_number,
+        mode: res.askInvite,
+        ownerSent: !!res.contentOwnerSent,
+      });
     }
     return res;
   };
 
-  const sendInvite = (id: string, mode: "request" | "cancel") => {
+  const sendInvite = (id: string, mode: "request" | "cancel", skipContentOwner = false) => {
     setSending(true);
     setAsk(null);
     startTransition(async () => {
-      const res = await sendSessionInviteAction(id, mode);
+      const res = await sendSessionInviteAction(id, mode, skipContentOwner);
       setSending(false);
       setNotice(inviteNotice(res, mode));
     });
@@ -103,12 +112,13 @@ export function SessionsTable({
       {ask && (
         <InviteAskBar
           text={
-            ask.mode === "cancel"
+            (ask.mode === "cancel"
               ? `Cancelaste la sesión ${ask.number}. ¿Le aviso al equipo por correo para que se le quite de sus calendarios?`
-              : `Cambiaste la sesión ${ask.number}. ¿Le mando el aviso por correo al equipo (invitación de calendario)?`
+              : `Cambiaste la sesión ${ask.number}. ¿Le mando el aviso por correo al equipo (invitación de calendario)?`) +
+            (ask.ownerSent ? " A Oli ya le llegó: siempre recibe las sesiones porque hace el contenido." : "")
           }
           sending={sending}
-          onSend={() => sendInvite(ask.id, ask.mode)}
+          onSend={() => sendInvite(ask.id, ask.mode, ask.ownerSent)}
           onDismiss={() => setAsk(null)}
         />
       )}

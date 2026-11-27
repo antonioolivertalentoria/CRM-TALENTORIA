@@ -84,7 +84,8 @@ export function ReminderSettings({ prefs }: { prefs: ReminderPrefs }) {
                 <strong className="text-slate-700">📅 Invitaciones de calendario:</strong>{" "}solo cuando
                 alguien le da &quot;Sí, mandar aviso&quot; o el sobre ✉️ en una sesión o reunión. Nunca
                 por sesiones que ya pasaron. Siempre les llega a Antonio, Arianna y Paola, además de
-                quien la manda, el responsable y quien facilita.
+                quien la manda, el responsable y quien facilita. Excepción: en capacitaciones, a Antonio
+                le llegan solas (al crear, mover, cancelar o borrar una sesión) porque hace el contenido.
               </li>
               <li>
                 <strong className="text-slate-700">✅ Tarea terminada:</strong>{" "}solo si quien la pidió

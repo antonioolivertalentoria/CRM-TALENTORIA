@@ -23,8 +23,9 @@ import { syncTaskLedger } from "@/lib/task-ledger";
  * Envía a cada persona un solo correo con sus tareas vencidas y para hoy,
  * respetando sus preferencias (activado/desactivado y tipos de tarea).
  *
- * Excepción: el/la comercial (COMMERCIAL_OWNER) solo recibe las tareas de
- * cierre y postventa que son suyas (15-sep-2026). Antes le caían todos los
+ * Excepción: el/la comercial (COMMERCIAL_OWNER) solo recibía las tareas de
+ * cierre y postventa que eran suyas (15-sep-2026; desde el 26-nov-2026 ya
+ * no tiene ninguna, Logística le avisa por Slack). Antes le caían todos los
  * hitos del proceso —los propios y, peor, todos los pendientes sin dueño de
  * los cuatro módulos— y pidió enterarse únicamente de cuándo se cerró el
  * proyecto. Ver también withoutCommercial en src/lib/calendar.ts.
@@ -59,14 +60,8 @@ function taskLine(
   </li>`;
 }
 
-/**
- * Las dos únicas tareas que el comercial recibe por correo: el cierre del
- * proyecto y el fin de la postventa (claves `<id>-cierre_comercial` y
- * `<id>-postventa_comercial`, tanto de capacitaciones como de consultoría).
- */
-function isCommercialCloseTask(key: string): boolean {
-  return key.endsWith("-cierre_comercial") || key.endsWith("-postventa_comercial");
-}
+// Desde el 26-nov-2026 el comercial ya no tiene tareas de cierre ni de
+// postventa: Logística le avisa por Slack (ver tasks.ts, aviso_comercial).
 
 export async function GET(request: Request) {
   // Solo el cron de Vercel (o quien tenga el secreto) puede ejecutarlo
@@ -236,8 +231,8 @@ export async function GET(request: Request) {
       continue;
     }
     const kinds = prefs.kinds ?? [];
-    // El comercial solo se entera del cierre: ni hitos a media obra ni
-    // pendientes sin dueño de otros módulos.
+    // El comercial no recibe hitos a media obra ni pendientes sin dueño de
+    // otros módulos (del cierre se entera por Slack).
     const commercialOnlyClose = p.full_name === COMMERCIAL_OWNER;
     // Solo tareas vencidas o que vencen hoy, del tipo elegido,
     // asignadas a la persona o sin asignar
@@ -246,7 +241,7 @@ export async function GET(request: Request) {
         (commercialOnlyClose
           ? t.assignee === p.full_name &&
             // En psicometría lo suyo (confirmar la información) frena el envío de pruebas
-            (isCommercialCloseTask(t.key) || t.kind === "Marketing" || t.kind === "Psicometría")
+            (t.kind === "Marketing" || t.kind === "Psicometría")
           : t.assignee === p.full_name || !t.assignee) &&
         kinds.includes(t.kind) &&
         // Consultoría en estreno: sus tareas solo a quien ve el módulo

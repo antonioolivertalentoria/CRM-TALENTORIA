@@ -441,9 +441,12 @@ export async function createTrainingAction(
     `creó ${isTeamBuilding ? "el team building" : "la capacitación"} "${shortName}"`
   );
   // Invitaciones de Google Calendar por correo para las sesiones ya fechadas.
-  // Solo si se marcó la casilla: nunca se manda correo sin que alguien lo pida.
+  // Al equipo solo si se marcó la casilla; a quien hace el contenido de las
+  // capacitaciones (Oli) le llegan siempre (ver CONTENT_OWNER_EMAIL).
   if (str(formData, "notify_calendar") === "on") {
     await syncTrainingEvents(supabase, data.id, "request");
+  } else if (!isTeamBuilding) {
+    await syncTrainingEvents(supabase, data.id, "request", { to: "content_owner" });
   }
   if (isTeamBuilding) revalidatePath("/teambuildings");
   revalidatePath("/");
@@ -493,7 +496,6 @@ const TRAINING_FIELDS = new Set([
   "seguimiento_20",
   "seguimiento_30",
   "cierre_comercial",
-  "postventa_comercial",
   "notes",
   "internal_notes",
   "questions",
@@ -678,8 +680,10 @@ export async function deleteTrainingAction(id: string, clientId: string, notify 
   const { data: tr } = await supabase.from("trainings").select("short_name").eq("id", id).maybeSingle();
 
   // Quita de los calendarios los eventos de sus sesiones por venir, solo si
-  // quien borra dijo que sí: puede que nunca se hayan mandado.
+  // quien borra dijo que sí: puede que nunca se hayan mandado. A quien hace
+  // el contenido sí se le avisa siempre (a él le llegaron solas).
   if (notify) await syncTrainingEvents(supabase, id, "cancel");
+  else await syncTrainingEvents(supabase, id, "cancel", { to: "content_owner" });
 
   // Los archivos del bucket no se borran solos con la fila (team buildings y cotizaciones)
   try {
@@ -778,7 +782,10 @@ const SESSION_FIELDS = new Set([
  * pregunte al usuario si quiere mandar el aviso por correo: el CRM ya no
  * lo manda solo (antes se iba sin avisar y, si fallaba, nadie se enteraba).
  */
-export type SessionUpdateResult = { error: string } | { askInvite: "request" | "cancel" } | null;
+export type SessionUpdateResult =
+  | { error: string }
+  | { askInvite: "request" | "cancel"; contentOwnerSent?: boolean }
+  | null;
 
 export async function updateSessionField(
   id: string,
@@ -840,9 +847,14 @@ export async function updateSessionField(
   revalidatePath("/");
 
   // Calendario: mover fecha/horario/zona/facilitador o cancelar la sesión son
-  // los cambios que le importan al equipo. NO se manda nada aquí: se le avisa a
-  // la pantalla para que pregunte si se quiere mandar el correo.
-  return inviteQuestion(supabase, "sessions", id, field, value, ["session_date", "start_time", "end_time", "timezone", "facilitator"]);
+  // los cambios que le importan al equipo. Al equipo NO se le manda nada
+  // aquí: se le avisa a la pantalla para que pregunte si se quiere mandar el
+  // correo. A quien hace el contenido de las capacitaciones sí le llega ya
+  // (en team buildings syncSessionEvent no lo manda).
+  const ask = await inviteQuestion(supabase, "sessions", id, field, value, ["session_date", "start_time", "end_time", "timezone", "facilitator"]);
+  if (!ask) return null;
+  const owner = await syncSessionEvent(supabase, id, ask.askInvite, { to: "content_owner" });
+  return { ...ask, contentOwnerSent: owner.sent };
 }
 
 /**
@@ -880,10 +892,12 @@ async function inviteQuestion(
  */
 export async function sendSessionInviteAction(
   sessionId: string,
-  mode: "request" | "cancel"
+  mode: "request" | "cancel",
+  /** true cuando a quien hace el contenido ya le llegó el mismo cambio. */
+  skipContentOwner = false
 ): Promise<InviteResult> {
   const supabase = await createSupabase();
-  return syncSessionEvent(supabase, sessionId, mode);
+  return syncSessionEvent(supabase, sessionId, mode, { skipContentOwner });
 }
 
 export async function deleteSessionAction(id: string, trainingId: string, notify = false) {
@@ -891,8 +905,9 @@ export async function deleteSessionAction(id: string, trainingId: string, notify
   const { data: s } = await supabase.from("sessions").select("session_number").eq("id", id).maybeSingle();
   // El aviso de cancelación (que quita el evento de los calendarios) solo
   // sale si se pidió: borrar una sesión que nadie tenía agendada no amerita
-  // llenarle el correo al equipo.
+  // llenarle el correo al equipo. A quien hace el contenido sí, siempre.
   if (notify) await syncSessionEvent(supabase, id, "cancel");
+  else await syncSessionEvent(supabase, id, "cancel", { to: "content_owner" });
   await supabase.from("sessions").delete().eq("id", id);
   await logActivity(supabase, "eliminó", "sesión", trainingId, `eliminó la sesión ${s?.session_number ?? ""}`);
   revalidatePath(`/capacitaciones/${trainingId}`);
@@ -2277,7 +2292,6 @@ const CONSULTING_FIELDS = new Set([
   "cierre_interno",
   "seguimiento_20",
   "cierre_comercial",
-  "postventa_comercial",
   "notes",
   "internal_notes",
 ]);
